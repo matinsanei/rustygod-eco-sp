@@ -1,0 +1,18 @@
+[package]
+name = "rustygod-db"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+sea-orm = { workspace = true }
+serde_json = { workspace = true }
+chrono = { workspace = true }
+uuid = { workspace = true }
+rust_decimal = { workspace = true }
+thiserror = { workspace = true }
+rand = { workspace = true }
+rustygod-core = { path = "../core" }
+
+[dev-dependencies]
+tokio = { workspace = true }
+fs2 = { workspace = true }

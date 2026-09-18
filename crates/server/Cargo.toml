@@ -1,0 +1,28 @@
+[package]
+name = "rustygod-server"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "rustygod-server"
+path = "src/main.rs"
+
+[dependencies]
+tokio = { workspace = true }
+tonic = { workspace = true }
+rust_decimal = { workspace = true }
+uuid = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+rustygod-proto = { path = "../proto" }
+rustygod-core = { path = "../core" }
+rustygod-db = { path = "../db" }
+rustygod-ai = { path = "../ai" }
+sea-orm = { workspace = true }
+tokio-stream = { workspace = true }
+reqwest = { workspace = true }
+serde_json = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true }
+tonic = { workspace = true }

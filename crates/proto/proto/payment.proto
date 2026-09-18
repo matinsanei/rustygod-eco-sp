@@ -1,0 +1,56 @@
+syntax = "proto3";
+
+package rustygod.payment;
+
+import "common.proto";
+
+// Mirrors saleor/payment TransactionItem + manual gateway actions.
+message TransactionInfo {
+  string id = 1;
+  string token = 2;
+  string currency = 3;
+  string authorized_amount = 4;
+  string charged_amount = 5;
+  string refunded_amount = 6;
+  string canceled_amount = 7;
+  repeated string available_actions = 8;
+  string psp_reference = 9;
+}
+
+message CreateTransactionRequest {
+  string checkout_id = 1;
+  string order_id = 2;
+  string currency = 3;
+  string name = 4;
+  string app_identifier = 5;
+  string idempotency_key = 6;
+}
+message CreateTransactionResponse {
+  TransactionInfo transaction = 1;
+  repeated rustygod.common.Error errors = 2;
+}
+
+message GetTransactionRequest { string id = 1; }
+message GetTransactionResponse {
+  TransactionInfo transaction = 1;
+  repeated rustygod.common.Error errors = 2;
+}
+
+message GatewayActionRequest {
+  string transaction_id = 1;
+  string amount = 2;
+  string idempotency_key = 3;
+}
+message GatewayActionResponse {
+  TransactionInfo transaction = 1;
+  repeated rustygod.common.Error errors = 2;
+}
+
+service PaymentService {
+  rpc CreateTransaction(CreateTransactionRequest) returns (CreateTransactionResponse);
+  rpc GetTransaction(GetTransactionRequest) returns (GetTransactionResponse);
+  rpc Authorize(GatewayActionRequest) returns (GatewayActionResponse);
+  rpc Charge(GatewayActionRequest) returns (GatewayActionResponse);
+  rpc Refund(GatewayActionRequest) returns (GatewayActionResponse);
+  rpc Cancel(GatewayActionRequest) returns (GatewayActionResponse);
+}

@@ -1,0 +1,78 @@
+syntax = "proto3";
+
+package rustygod.checkout;
+
+import "common.proto";
+
+// Mirrors saleor/checkout models: Checkout + CheckoutLine.
+message CheckoutLine {
+  string variant_id = 1;
+  int32 quantity = 2;
+  rustygod.common.Money unit_price = 3;
+  rustygod.common.Money total_price = 4;
+}
+
+message Checkout {
+  string id = 1;
+  string channel = 2;
+  string email = 3;
+  repeated CheckoutLine lines = 4;
+  rustygod.common.Money total = 5;
+  string currency = 6;
+}
+
+message CreateCheckoutRequest {
+  string channel = 1;
+  string email = 2;
+}
+message CreateCheckoutResponse {
+  Checkout checkout = 1;
+  repeated rustygod.common.Error errors = 2;
+}
+
+message GetCheckoutRequest { string id = 1; }
+message GetCheckoutResponse {
+  Checkout checkout = 1;
+  repeated rustygod.common.Error errors = 2;
+}
+
+message AddLinesRequest {
+  string checkout_id = 1;
+  repeated CheckoutLine lines = 2;
+}
+message AddLinesResponse {
+  Checkout checkout = 1;
+  repeated rustygod.common.Error errors = 2;
+}
+
+// Completes the checkout -> creates an order (saleor checkout_complete).
+message CompleteCheckoutRequest { string checkout_id = 1; }
+message CompleteCheckoutResponse {
+  string order_id = 1;
+  repeated rustygod.common.Error errors = 2;
+}
+
+service CheckoutService {
+  rpc CreateCheckout(CreateCheckoutRequest) returns (CreateCheckoutResponse);
+  rpc GetCheckout(GetCheckoutRequest) returns (GetCheckoutResponse);
+  rpc AddLines(AddLinesRequest) returns (AddLinesResponse);
+  rpc CompleteCheckout(CompleteCheckoutRequest) returns (CompleteCheckoutResponse);
+  rpc ApplyVoucher(ApplyVoucherRequest) returns (ApplyVoucherResponse);
+}
+
+// Applies a voucher code (entire_order / specific_product), mirroring
+// saleor's checkout voucher flow: validates, stamps voucher_code, writes
+// discount rows, refreshes totals.
+message ApplyVoucherRequest {
+  string checkout_id = 1;
+  string code = 2;
+}
+message ApplyVoucherResponse {
+  Checkout checkout = 1;
+  string voucher_type = 2;
+  string value_type = 3;
+  string value = 4;
+  string currency = 5;
+  string amount = 6;
+  repeated rustygod.common.Error errors = 7;
+}

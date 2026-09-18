@@ -1,0 +1,48 @@
+syntax = "proto3";
+
+package rustygod.auth;
+
+import "common.proto";
+
+// Django-compatible auth: PBKDF2/bcrypt verification (no password resets)
+// and RS256 JWTs from the same RSA_PRIVATE_KEY.
+message LoginRequest {
+  string email = 1;
+  string password = 2;
+}
+message LoginResponse {
+  string access_token = 1;
+  string refresh_token = 2;
+  string user_id = 3;
+  bool is_staff = 4;
+  repeated rustygod.common.Error errors = 5;
+}
+
+message RefreshTokenRequest { string refresh_token = 1; }
+message RefreshTokenResponse {
+  string access_token = 1;
+  repeated rustygod.common.Error errors = 2;
+}
+
+message VerifyTokenRequest { string token = 1; }
+message VerifyTokenResponse {
+  bool valid = 1;
+  string user_id = 2;
+  string email = 3;
+  string token_type = 4;
+  bool is_staff = 5;
+  repeated rustygod.common.Error errors = 6;
+}
+
+message CheckPermissionRequest {
+  string user_id = 1;
+  string codename = 2;
+}
+message CheckPermissionResponse { bool allowed = 1; }
+
+service AuthService {
+  rpc Login(LoginRequest) returns (LoginResponse);
+  rpc RefreshToken(RefreshTokenRequest) returns (RefreshTokenResponse);
+  rpc VerifyToken(VerifyTokenRequest) returns (VerifyTokenResponse);
+  rpc CheckPermission(CheckPermissionRequest) returns (CheckPermissionResponse);
+}

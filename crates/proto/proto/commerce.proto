@@ -1,0 +1,253 @@
+syntax = "proto3";
+
+package rustygod.commerce;
+
+import "common.proto";
+
+// ---- Discount (mirrors saleor/discount: voucher + promotion) ----
+
+message VoucherInfo {
+  string code = 1;
+  string type = 2;
+  string discount_value_type = 3;
+  string currency = 4;
+  string discount_value = 5;
+  string min_spent_amount = 6;
+  int32 usage_limit = 7;
+  int32 used = 8;
+}
+
+message ValidateVoucherRequest {
+  string code = 1;
+  string channel = 2;
+}
+message ValidateVoucherResponse {
+  VoucherInfo voucher = 1;
+  repeated rustygod.common.Error errors = 2;
+}
+
+message PromotionRuleInfo {
+  string id = 1;
+  string name = 2;
+  string reward_type = 3;
+  string reward_value_type = 4;
+  string reward_value = 5;
+}
+
+message PromotionInfo {
+  string id = 1;
+  string name = 2;
+  string type = 3;
+  repeated PromotionRuleInfo rules = 4;
+}
+
+message ListPromotionsRequest { string channel = 1; }
+message ListPromotionsResponse { repeated PromotionInfo promotions = 1; }
+
+service DiscountService {
+  rpc ValidateVoucher(ValidateVoucherRequest) returns (ValidateVoucherResponse);
+  rpc ListPromotions(ListPromotionsRequest) returns (ListPromotionsResponse);
+}
+
+// ---- Shipping (mirrors saleor/shipping) ----
+
+message ShippingMethodInfo {
+  string id = 1;
+  string name = 2;
+  string type = 3;
+  string currency = 4;
+  string price_amount = 5;
+  string minimum_order_price_amount = 6;
+}
+
+message ListShippingMethodsRequest { string channel = 1; }
+message ListShippingMethodsResponse { repeated ShippingMethodInfo methods = 1; }
+
+service ShippingService {
+  rpc ListShippingMethods(ListShippingMethodsRequest) returns (ListShippingMethodsResponse);
+}
+
+// ---- GiftCard (mirrors saleor/giftcard) ----
+
+message GiftCardInfo {
+  string code = 1;
+  string currency = 2;
+  string current_balance_amount = 3;
+  string initial_balance_amount = 4;
+  bool is_active = 5;
+}
+
+message GetGiftCardRequest { string code = 1; }
+message GetGiftCardResponse {
+  GiftCardInfo gift_card = 1;
+  repeated rustygod.common.Error errors = 2;
+}
+
+service GiftCardService {
+  rpc GetGiftCard(GetGiftCardRequest) returns (GetGiftCardResponse);
+}
+
+// ---- Menu (mirrors saleor/menu, MPTT tree) ----
+
+message MenuItemInfo {
+  string id = 1;
+  string name = 2;
+  string url = 3;
+  int32 level = 4;
+  repeated MenuItemInfo children = 5;
+}
+
+message MenuInfo {
+  string id = 1;
+  string name = 2;
+  string slug = 3;
+  repeated MenuItemInfo items = 4;
+}
+
+message GetMenuRequest { string slug = 1; }
+message GetMenuResponse {
+  MenuInfo menu = 1;
+  repeated rustygod.common.Error errors = 2;
+}
+
+service MenuService {
+  rpc GetMenu(GetMenuRequest) returns (GetMenuResponse);
+}
+
+// ---- Page/CMS (mirrors saleor/page) ----
+
+message PageInfo {
+  string id = 1;
+  string slug = 2;
+  string title = 3;
+  bool is_published = 4;
+}
+
+message GetPageRequest { string slug = 1; }
+message GetPageResponse {
+  PageInfo page = 1;
+  repeated rustygod.common.Error errors = 2;
+}
+
+message ListPagesRequest {}
+message ListPagesResponse { repeated PageInfo pages = 1; }
+
+service PageService {
+  rpc GetPage(GetPageRequest) returns (GetPageResponse);
+  rpc ListPages(ListPagesRequest) returns (ListPagesResponse);
+}
+
+// ---- Account (mirrors saleor/account; never exposes password hashes) ----
+
+message CustomerInfo {
+  string id = 1;
+  string email = 2;
+  string first_name = 3;
+  string last_name = 4;
+  bool is_active = 5;
+}
+
+message GetCustomerRequest { string email = 1; }
+message GetCustomerResponse {
+  CustomerInfo customer = 1;
+  repeated rustygod.common.Error errors = 2;
+}
+
+message AddressInput {
+  string first_name = 1;
+  string last_name = 2;
+  string street_address_1 = 3;
+  string city = 4;
+  string postal_code = 5;
+  string country = 6;
+  string phone = 7;
+}
+
+message CreateAddressResponse {
+  string id = 1;
+  repeated rustygod.common.Error errors = 2;
+}
+
+service AccountService {
+  rpc GetCustomer(GetCustomerRequest) returns (GetCustomerResponse);
+  rpc CreateAddress(AddressInput) returns (CreateAddressResponse);
+}
+
+// ---- Channel (mirrors saleor/channel) ----
+
+message ChannelInfo {
+  string id = 1;
+  string slug = 2;
+  string currency_code = 3;
+  bool is_active = 4;
+}
+
+message ListChannelsRequest {}
+message ListChannelsResponse { repeated ChannelInfo channels = 1; }
+message GetChannelRequest { string slug = 1; }
+message GetChannelResponse {
+  ChannelInfo channel = 1;
+  repeated rustygod.common.Error errors = 2;
+}
+
+service ChannelService {
+  rpc ListChannels(ListChannelsRequest) returns (ListChannelsResponse);
+  rpc GetChannel(GetChannelRequest) returns (GetChannelResponse);
+}
+
+// ---- Tax (mirrors saleor/tax: classes; rates resolve via plugins) ----
+
+message TaxClassInfo {
+  string id = 1;
+  string name = 2;
+}
+
+message ListTaxClassesRequest {}
+message ListTaxClassesResponse { repeated TaxClassInfo classes = 1; }
+
+service TaxService {
+  rpc ListTaxClasses(ListTaxClassesRequest) returns (ListTaxClassesResponse);
+}
+
+// ---- Warehouse (mirrors saleor/warehouse) ----
+
+message WarehouseInfo {
+  string id = 1;
+  string name = 2;
+  string slug = 3;
+  string email = 4;
+}
+
+message ListWarehousesRequest { string channel = 1; }
+message ListWarehousesResponse { repeated WarehouseInfo warehouses = 1; }
+
+message StockInfo {
+  string warehouse_id = 1;
+  int32 quantity = 2;
+  int32 quantity_allocated = 3;
+}
+
+message ListStocksRequest { string variant_id = 1; }
+message ListStocksResponse { repeated StockInfo stocks = 1; }
+
+message ReserveStockRequest {
+  string variant_id = 1;
+  string warehouse_id = 2;
+  int32 quantity = 3;
+  string checkout_line_id = 4;
+  int64 expires_in_seconds = 5;
+}
+message ReserveStockResponse {
+  bool ok = 1;
+  repeated rustygod.common.Error errors = 2;
+}
+
+message ReleaseReservationRequest { string checkout_line_id = 1; }
+message ReleaseReservationResponse { bool ok = 1; }
+
+service WarehouseService {
+  rpc ListWarehouses(ListWarehousesRequest) returns (ListWarehousesResponse);
+  rpc ListStocks(ListStocksRequest) returns (ListStocksResponse);
+  rpc ReserveStock(ReserveStockRequest) returns (ReserveStockResponse);
+  rpc ReleaseReservation(ReleaseReservationRequest) returns (ReleaseReservationResponse);
+}

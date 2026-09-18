@@ -1,0 +1,60 @@
+syntax = "proto3";
+
+package rustygod.ai;
+
+import "common.proto";
+
+message ProductHit {
+  string id = 1;
+  string name = 2;
+  string slug = 3;
+  string currency = 4;
+  string price_amount = 5;
+  double score = 6;
+}
+
+// Lexical tier today (pg_trgm over Saleor's own gin indexes), vector tier
+// next (pgvector/Qdrant) — same RPC, stronger backend.
+message SearchProductsRequest {
+  string query = 1;
+  string channel = 2;
+  int32 first = 3;
+}
+message SearchProductsResponse { repeated ProductHit results = 1; }
+
+service SemanticSearch {
+  rpc SearchProducts(SearchProductsRequest) returns (SearchProductsResponse);
+}
+
+// Collaborative signal from Django's order_orderline co-occurrence.
+message RecommendProductsRequest {
+  string variant_id = 1;
+  string channel = 2;
+  int32 first = 3;
+}
+message RecommendProductsResponse { repeated ProductHit results = 1; }
+
+service Recommender {
+  rpc RecommendProducts(RecommendProductsRequest) returns (RecommendProductsResponse);
+}
+
+// Retrieval-grounded shopping assistant (deterministic v1; LLM backend
+// milestone plugs into the same stream).
+message ChatMessage {
+  string role = 1;
+  string text = 2;
+}
+message ChatRequest {
+  string message = 1;
+  string channel = 2;
+  repeated ChatMessage history = 3;
+}
+message ChatChunk {
+  string text = 1;
+  repeated ProductHit products = 2;
+  bool done = 3;
+}
+
+service ChatAgent {
+  rpc Chat(ChatRequest) returns (stream ChatChunk);
+}

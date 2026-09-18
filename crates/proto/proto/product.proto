@@ -1,0 +1,164 @@
+syntax = "proto3";
+
+package rustygod.product;
+
+import "common.proto";
+
+// Mirrors saleor/product models: Product, ProductVariant, Category, Collection.
+message Product {
+  string id = 1;
+  string name = 2;
+  string slug = 3;
+  string description = 4;
+  string product_type_id = 5;
+  string category_id = 6;
+  bool is_published = 7;
+  rustygod.common.Money price = 8;
+  repeated ProductVariant variants = 9;
+}
+
+message ProductVariant {
+  string id = 1;
+  string product_id = 2;
+  string name = 3;
+  string sku = 4;
+  rustygod.common.Money price = 5;
+  int32 quantity_available = 6;
+}
+
+message Category {
+  string id = 1;
+  string name = 2;
+  string slug = 3;
+  string parent_id = 4;
+}
+
+message GetProductRequest { string id = 1; }
+message GetProductResponse {
+  Product product = 1;
+  repeated rustygod.common.Error errors = 2;
+}
+
+message ListProductsRequest {
+  string channel = 1;
+  int32 first = 2;
+  string after = 3;
+  string category_id = 4;
+}
+message ListProductsResponse {
+  repeated Product products = 1;
+  rustygod.common.PageInfo page_info = 2;
+}
+
+message CreateProductRequest {
+  string name = 1;
+  string slug = 2;
+  string product_type_id = 3;
+  string category_id = 4;
+  rustygod.common.Money price = 5;
+}
+message CreateProductResponse {
+  Product product = 1;
+  repeated rustygod.common.Error errors = 2;
+}
+
+service ProductService {
+  rpc GetProduct(GetProductRequest) returns (GetProductResponse);
+  rpc ListProducts(ListProductsRequest) returns (ListProductsResponse);
+  rpc CreateProduct(CreateProductRequest) returns (CreateProductResponse);
+  rpc GetCategory(GetCategoryRequest) returns (GetCategoryResponse);
+  rpc ListCategories(ListCategoriesRequest) returns (ListCategoriesResponse);
+  rpc GetCollection(GetCollectionRequest) returns (GetCollectionResponse);
+  rpc ListCollections(ListCollectionsRequest) returns (ListCollectionsResponse);
+  rpc GetProductType(GetProductTypeRequest) returns (GetProductTypeResponse);
+  rpc GetProductAttributes(GetProductAttributesRequest) returns (GetProductAttributesResponse);
+  rpc ListProductMedia(ListProductMediaRequest) returns (ListProductMediaResponse);
+}
+
+// Category tree node. Django stores both the `parent` FK and MPTT
+// (lft/rght/tree_id/level); we serve tree order (tree_id, lft) like
+// saleor's category resolvers.
+message CategoryDetail {
+  string id = 1;
+  string name = 2;
+  string slug = 3;
+  string parent_id = 4;
+  int32 level = 5;
+  repeated string children_ids = 6;
+  int64 product_count = 7;
+}
+
+message GetCategoryRequest { string id = 1; }
+message GetCategoryResponse {
+  CategoryDetail category = 1;
+  repeated rustygod.common.Error errors = 2;
+}
+
+message ListCategoriesRequest {}
+message ListCategoriesResponse { repeated CategoryDetail categories = 1; }
+
+// Collection with channel-aware visibility, mirroring
+// product_collectionchannellisting.is_published.
+message Collection {
+  string id = 1;
+  string name = 2;
+  string slug = 3;
+  bool is_published = 4;
+  repeated string product_ids = 5;
+}
+
+message GetCollectionRequest {
+  string id = 1;
+  string channel = 2;
+}
+message GetCollectionResponse {
+  Collection collection = 1;
+  repeated rustygod.common.Error errors = 2;
+}
+
+message ListCollectionsRequest { string channel = 1; }
+message ListCollectionsResponse { repeated Collection collections = 1; }
+
+message ProductType {
+  string id = 1;
+  string name = 2;
+  string slug = 3;
+  bool has_variants = 4;
+  bool is_shipping_required = 5;
+  bool is_digital = 6;
+  string kind = 7;
+}
+
+message GetProductTypeRequest { string id = 1; }
+message GetProductTypeResponse {
+  ProductType product_type = 1;
+  repeated rustygod.common.Error errors = 2;
+}
+
+// Assigned product attributes, mirroring
+// attribute_assignedproductattributevalue -> attributevalue -> attribute.
+message ProductAttributeValue {
+  string slug = 1;
+  string name = 2;
+}
+
+message ProductAttribute {
+  string slug = 1;
+  string name = 2;
+  string input_type = 3;
+  repeated ProductAttributeValue values = 4;
+}
+
+message GetProductAttributesRequest { string product_id = 1; }
+message GetProductAttributesResponse { repeated ProductAttribute attributes = 1; }
+
+message ProductMedia {
+  string id = 1;
+  string type = 2;
+  string image = 3;
+  string alt = 4;
+  int32 sort_order = 5;
+}
+
+message ListProductMediaRequest { string product_id = 1; }
+message ListProductMediaResponse { repeated ProductMedia media = 1; }

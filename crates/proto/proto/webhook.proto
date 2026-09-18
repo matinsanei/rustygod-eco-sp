@@ -1,0 +1,62 @@
+syntax = "proto3";
+
+package rustygod.webhook;
+
+import "common.proto";
+
+// Mirrors saleor/webhook delivery lifecycle (pending → success/failed)
+// with HMAC-signed HTTP delivery and exponential-backoff retries.
+message TriggerEventRequest {
+  string event_type = 1;
+  string channel = 2;
+  string payload_json = 3;
+}
+message TriggerEventResponse {
+  repeated string delivery_ids = 1;
+  repeated rustygod.common.Error errors = 2;
+}
+
+message DeliveryInfo {
+  string id = 1;
+  string status = 2;
+  string event_type = 3;
+  string webhook_id = 4;
+  string target_url = 5;
+  string payload = 6;
+  uint64 attempts = 7;
+}
+
+message GetDeliveryRequest { string id = 1; }
+message GetDeliveryResponse {
+  DeliveryInfo delivery = 1;
+  repeated rustygod.common.Error errors = 2;
+}
+
+message AttemptInfo {
+  string id = 1;
+  string status = 2;
+  int32 response_status_code = 3;
+  double duration_secs = 4;
+}
+
+message ListAttemptsRequest { string delivery_id = 1; }
+message ListAttemptsResponse { repeated AttemptInfo attempts = 1; }
+
+// Sends one delivery now over HTTP (records the attempt like Django's
+// transport). Retry scheduling itself is queried via DueDeliveries.
+message SendDeliveryRequest { string delivery_id = 1; }
+message SendDeliveryResponse {
+  DeliveryInfo delivery = 1;
+  repeated rustygod.common.Error errors = 2;
+}
+
+message DueDeliveriesRequest { int32 first = 1; }
+message DueDeliveriesResponse { repeated string delivery_ids = 1; }
+
+service WebhookService {
+  rpc TriggerEvent(TriggerEventRequest) returns (TriggerEventResponse);
+  rpc GetDelivery(GetDeliveryRequest) returns (GetDeliveryResponse);
+  rpc ListAttempts(ListAttemptsRequest) returns (ListAttemptsResponse);
+  rpc SendDelivery(SendDeliveryRequest) returns (SendDeliveryResponse);
+  rpc DueDeliveries(DueDeliveriesRequest) returns (DueDeliveriesResponse);
+}

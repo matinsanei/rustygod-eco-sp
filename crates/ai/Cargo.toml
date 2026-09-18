@@ -1,0 +1,18 @@
+[package]
+name = "rustygod-ai"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+sea-orm = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+rust_decimal = { workspace = true }
+thiserror = { workspace = true }
+async-trait = { workspace = true }
+rustygod-db = { path = "../db" }
+rustygod-core = { path = "../core" }
+
+[dev-dependencies]
+tokio = { workspace = true }

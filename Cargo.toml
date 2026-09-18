@@ -1,0 +1,35 @@
+[workspace]
+members = ["crates/proto", "crates/core", "crates/db", "crates/ai", "crates/server"]
+resolver = "2"
+
+[workspace.dependencies]
+tokio = { version = "1", features = ["full"] }
+tonic = { version = "0.12" }
+prost = { version = "0.13" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+uuid = { version = "1", features = ["v4", "serde"] }
+rust_decimal = { version = "1", features = ["serde"] }
+chrono = { version = "0.4", features = ["serde"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+async-trait = "0.1"
+base64 = "0.22"
+hmac = "0.12"
+sha2 = "0.10"
+pbkdf2 = "0.12"
+bcrypt = "0.17"
+jsonwebtoken = "9"
+sha1 = "0.10"
+digest = "0.10"
+rsa = { version = "0.9", features = ["pem"] }
+rand = "0.8"
+fs2 = "0.4"
+sea-orm = { version = "~1.1", features = [
+    "sqlx-postgres",
+    "runtime-tokio-rustls",
+    "macros",
+] }
+tokio-stream = "0.1"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls-manual-roots"] }

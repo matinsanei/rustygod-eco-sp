@@ -1,0 +1,96 @@
+syntax = "proto3";
+
+package rustygod.order;
+
+import "common.proto";
+
+// Mirrors saleor/order models: Order + OrderLine + Fulfillment.
+message OrderLine {
+  string variant_id = 1;
+  string product_name = 2;
+  int32 quantity = 3;
+  rustygod.common.Money unit_price = 4;
+  rustygod.common.Money total_price = 5;
+}
+
+message Order {
+  string id = 1;
+  string number = 2;
+  string channel = 3;
+  string email = 4;
+  string status = 5;
+  repeated OrderLine lines = 6;
+  rustygod.common.Money total = 7;
+  string currency = 8;
+  string created_at = 9;
+}
+
+message GetOrderRequest { string id = 1; }
+message GetOrderResponse {
+  Order order = 1;
+  repeated rustygod.common.Error errors = 2;
+}
+
+message ListOrdersRequest {
+  int32 first = 1;
+  string after = 2;
+  string status = 3;
+}
+message ListOrdersResponse {
+  repeated Order orders = 1;
+  rustygod.common.PageInfo page_info = 2;
+}
+
+service OrderService {
+  rpc GetOrder(GetOrderRequest) returns (GetOrderResponse);
+  rpc ListOrders(ListOrdersRequest) returns (ListOrdersResponse);
+  rpc CreateFulfillment(CreateFulfillmentRequest) returns (FulfillmentResponse);
+  rpc CancelFulfillment(CancelFulfillmentRequest) returns (FulfillmentResponse);
+  rpc RefundFulfillment(RefundFulfillmentRequest) returns (FulfillmentResponse);
+  rpc ListFulfillments(ListFulfillmentsRequest) returns (ListFulfillmentsResponse);
+}
+
+// Mirrors saleor/order fulfillments: fulfillment_order auto-increments,
+// lines cap at the unfulfilled remainder, stock moves with the lines.
+message FulfillLineInput {
+  string order_line_id = 1;
+  int32 quantity = 2;
+  string stock_id = 3;
+}
+
+message FulfillmentLineInfo {
+  string order_line_id = 1;
+  int32 quantity = 2;
+  string stock_id = 3;
+}
+
+message FulfillmentInfo {
+  string id = 1;
+  string order_id = 2;
+  int32 fulfillment_order = 3;
+  string status = 4;
+  string tracking_number = 5;
+  repeated FulfillmentLineInfo lines = 6;
+}
+
+message CreateFulfillmentRequest {
+  string order_id = 1;
+  repeated FulfillLineInput lines = 2;
+  string tracking_number = 3;
+}
+
+message CancelFulfillmentRequest { string fulfillment_id = 1; }
+
+message RefundFulfillmentRequest {
+  string order_id = 1;
+  repeated FulfillLineInput lines = 2;
+  string reason = 3;
+}
+
+message FulfillmentResponse {
+  FulfillmentInfo fulfillment = 1;
+  repeated rustygod.common.Error errors = 2;
+}
+
+message ListFulfillmentsRequest { string order_id = 1; }
+message ListFulfillmentsResponse { repeated FulfillmentInfo fulfillments = 1; }
