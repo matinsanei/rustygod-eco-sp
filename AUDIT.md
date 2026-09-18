@@ -1,15 +1,15 @@
 # 📋 Audit Report — rustygod-saleor vs the E-Commerce Engine Checklist
 
-Date: 2026-09-18 · Commit scope: atomic complete + allocation + reconcile.
+Date: 2026-09-18 · Last update: reviewer round (outbox, sweeper, cancel).
 Method: every item verified against code + green tests (no vibes).
 Score: ✅ = 1, ⚠️ = 0.5, ❌ = 0.
 
-## Overall: 65% (47 / 72)
+## Overall: 67% (48.5 / 72)
 
 | Section | Score | Before this session |
 |---|---|---|
-| §1 Features (37) | **64%** (20 ✅ · 7 ⚠️ · 10 ❌) | ~49% |
-| §2 Risks (10) | **75%** (5 ✅ · 5 ⚠️) | ~25% |
+| §1 Features (37) | **65%** (20 ✅ · 9 ⚠️ · 8 ❌) | ~49% |
+| §2 Risks (10) | **85%** (7 ✅ · 3 ⚠️) | ~25% |
 | §3 Edge cases (15) | **50%** (6 ✅ · 3 ⚠️ · 6 ❌) | ~13% |
 | §4 Reconciliation (10) | **85%** (7 ✅ · 3 ⚠️) | ~10% |
 
@@ -24,12 +24,19 @@ Score: ✅ = 1, ⚠️ = 0.5, ❌ = 0.
 | 16 | Gift redeem in checkout | ✅ was ❌ | `redeem_for_order_tx` inside TXN |
 | 18 | Events | ⚠️ was ❌ | PLACED + draft/invoice/giftcard events; not every transition |
 
-Still ❌ (10): GraphQL gateway (by design), order cancel, payment orchestration,
-granted refunds, translations, CSV, thumbnails, site settings, preorder, schedulers.
-Still ⚠️ (7): full fulfillment (no approve/replace), tax (flat-rate only),
-attributes/product-writes/customer-accounts (reads > writes), click-and-collect (flag only).
+Still ❌ (9): GraphQL gateway (by design), payment orchestration,
+granted refunds, translations, CSV, thumbnails, site settings, preorder,
+schedulers.
+Still ⚠️ (8): order cancel (unpaid only — paid needs the refund flow),
+full fulfillment (no approve/replace), tax (flat-rate only),
+attributes/product-writes/customer-accounts (reads > writes),
+click-and-collect (flag only).
 
 ## §2 Risks
+
+R8 → ✅ (outbox in-transaction + post-commit fast send + sweeper pickup
+with single-flight claim). R9 → ✅ (expiry honored in allocate +
+sweeper deletes + indexes). 7 ✅ · 3 ⚠️ (R2, R3, R10) = **85%**.
 
 | ID | Risk | Status | Evidence |
 |---|---|---|---|
