@@ -185,8 +185,47 @@ message TaxClassInfo {
 message ListTaxClassesRequest {}
 message ListTaxClassesResponse { repeated TaxClassInfo classes = 1; }
 
+message GetTaxRateRequest {
+  string variant_id = 1; // integer id as string; empty = default rate
+  string country = 2;    // ISO code, e.g. DE
+  string channel = 3;
+}
+message GetTaxRateResponse {
+  string rate = 1; // percent, e.g. "19"
+  bool charge_taxes = 2;
+  repeated rustygod.common.Error errors = 3;
+}
+
+message TaxLineInput {
+  string variant_id = 1;
+  string unit_price = 2; // decimal string (channel direction)
+  int32 quantity = 3;
+}
+message TaxedLineInfo {
+  string variant_id = 1;
+  int32 quantity = 2;
+  string unit_net = 3;
+  string unit_gross = 4;
+  string total_net = 5;
+  string total_gross = 6;
+  string tax_rate = 7;
+}
+message CalculateTaxesRequest {
+  string channel = 1;
+  string country = 2;
+  repeated TaxLineInput lines = 3;
+}
+message CalculateTaxesResponse {
+  repeated TaxedLineInfo lines = 1;
+  string total_net = 2;
+  string total_gross = 3;
+  repeated rustygod.common.Error errors = 4;
+}
+
 service TaxService {
   rpc ListTaxClasses(ListTaxClassesRequest) returns (ListTaxClassesResponse);
+  rpc GetTaxRate(GetTaxRateRequest) returns (GetTaxRateResponse);
+  rpc CalculateTaxes(CalculateTaxesRequest) returns (CalculateTaxesResponse);
 }
 
 // ---- Warehouse (mirrors saleor/warehouse) ----

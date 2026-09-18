@@ -8,6 +8,7 @@ pub mod discount;
 pub mod draft;
 pub mod giftcard;
 pub mod invoice;
+pub mod tax;
 pub mod money;
 pub mod order;
 pub mod payments;

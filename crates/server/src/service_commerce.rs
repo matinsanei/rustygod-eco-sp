@@ -339,6 +339,81 @@ impl TaxService for TaxServiceImpl {
                 .collect(),
         }))
     }
+
+    async fn get_tax_rate(
+        &self,
+        request: Request<GetTaxRateRequest>,
+    ) -> Result<Response<GetTaxRateResponse>, Status> {
+        let db = self.db()?;
+        let r = request.into_inner();
+        let channel = channel_of(&r.channel);
+        let cfg = rustygod_db::taxes::channel_config(db, channel)
+            .await
+            .map_err(|e| Status::internal(e.to_string()))?;
+        let class = if r.variant_id.is_empty() {
+            None
+        } else {
+            let vid: i32 = r.variant_id.parse().map_err(|_| Status::invalid_argument("variant_id must be an integer"))?;
+            Some(
+                rustygod_db::taxes::class_for_variant(db, vid)
+                    .await
+                    .map_err(|e| Status::internal(e.to_string()))?,
+            )
+        };
+        let rate = rustygod_db::taxes::rate_for_class(db, class.flatten(), &r.country)
+            .await
+            .map_err(|e| Status::internal(e.to_string()))?;
+        Ok(Response::new(GetTaxRateResponse {
+            rate: rate.normalize().to_string(),
+            charge_taxes: cfg.charge_taxes,
+            errors: vec![],
+        }))
+    }
+
+    async fn calculate_taxes(
+        &self,
+        request: Request<CalculateTaxesRequest>,
+    ) -> Result<Response<CalculateTaxesResponse>, Status> {
+        let db = self.db()?;
+        let r = request.into_inner();
+        let channel = channel_of(&r.channel).to_string();
+        let mut lines = Vec::with_capacity(r.lines.len());
+        for l in &r.lines {
+            let vid: i32 = l.variant_id.parse().map_err(|_| Status::invalid_argument("variant_id must be an integer"))?;
+            let unit: rust_decimal::Decimal = l.unit_price.parse().map_err(|_| Status::invalid_argument("unit_price must be a decimal string"))?;
+            if l.quantity < 0 {
+                return Err(Status::invalid_argument("quantity cannot be negative"));
+            }
+            lines.push((vid, unit, l.quantity));
+        }
+        let taxed = rustygod_db::taxes::calculate_lines(db, &channel, &r.country, &lines)
+            .await
+            .map_err(|e| Status::internal(e.to_string()))?;
+        let (mut total_net, mut total_gross) =
+            (rust_decimal::Decimal::ZERO, rust_decimal::Decimal::ZERO);
+        let infos = taxed
+            .into_iter()
+            .map(|t| {
+                total_net += t.total_net;
+                total_gross += t.total_gross;
+                TaxedLineInfo {
+                    variant_id: t.variant_id.to_string(),
+                    quantity: t.quantity,
+                    unit_net: t.unit_net.to_string(),
+                    unit_gross: t.unit_gross.to_string(),
+                    total_net: t.total_net.to_string(),
+                    total_gross: t.total_gross.to_string(),
+                    tax_rate: t.tax_rate.normalize().to_string(),
+                }
+            })
+            .collect();
+        Ok(Response::new(CalculateTaxesResponse {
+            lines: infos,
+            total_net: total_net.to_string(),
+            total_gross: total_gross.to_string(),
+            errors: vec![],
+        }))
+    }
 }
 
 #[tonic::async_trait]

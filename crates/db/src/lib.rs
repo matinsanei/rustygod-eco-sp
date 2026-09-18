@@ -17,6 +17,7 @@ pub mod invoices;
 pub mod order_store;
 pub mod payments;
 pub mod plugin_store;
+pub mod taxes;
 pub mod promotions;
 pub mod relations;
 pub mod webhooks;
