@@ -11,6 +11,40 @@ use rustygod_proto::giftcard::{
 use rustygod_server::service_giftcard::GiftCardServiceImpl;
 use tonic::Request;
 
+fn test_key() -> String {
+    std::fs::read_to_string(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../db/tests/testdata/test_rsa.pem"
+    ))
+    .expect("test RSA key must exist")
+}
+
+/// Staff request: populatedb admin JWT in metadata (staff RPCs demand
+/// MANAGE_GIFT_CARD since access control landed).
+async fn staff_req<T>(msg: T) -> Request<T> {
+    std::env::set_var("RSA_PRIVATE_KEY", test_key());
+    let db = rustygod_db::connect(&database_url()).await.unwrap();
+    let (user, _) = rustygod_db::auth::find_for_login(&db, "admin@example.com")
+        .await
+        .unwrap()
+        .unwrap();
+    let pair = rustygod_core::auth::mint_tokens_with_key(
+        &test_key(),
+        "test",
+        &user.email,
+        user.id,
+        user.is_staff,
+        &user.jwt_token_key,
+    )
+    .unwrap();
+    let mut req = Request::new(msg);
+    req.metadata_mut().insert(
+        "authorization",
+        format!("Bearer {}", pair.access).parse().unwrap(),
+    );
+    req
+}
+
 async fn svc() -> GiftCardServiceImpl {
     let db = rustygod_db::connect(&database_url()).await.unwrap();
     GiftCardServiceImpl::new(Some(db))
@@ -32,12 +66,13 @@ async fn grpc_giftcard_lifecycle() {
 
     // Issue.
     let card = svc
-        .issue(Request::new(IssueGiftCardRequest {
+        .issue(staff_req(IssueGiftCardRequest {
             initial_balance: "75.50".into(),
             currency: "USD".into(),
             created_by_email: "staff@example.com".into(),
             expiry_date: String::new(),
-        }))
+        })
+        .await)
         .await
         .unwrap()
         .into_inner()
@@ -122,7 +157,7 @@ async fn grpc_giftcard_lifecycle() {
 
     // Deactivate blocks redeem.
     let off = svc
-        .set_active(Request::new(SetActiveRequest { code: card.code.clone(), active: false }))
+        .set_active(staff_req(SetActiveRequest { code: card.code.clone(), active: false }).await)
         .await
         .unwrap()
         .into_inner();

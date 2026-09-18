@@ -80,6 +80,7 @@ impl GiftCardService for GiftCardServiceImpl {
         req: Request<IssueGiftCardRequest>,
     ) -> Result<Response<IssueGiftCardResponse>, Status> {
         let db = self.db()?;
+        crate::access::authorize(db, req.metadata(), crate::access::MANAGE_GIFT_CARD).await?;
         let r = req.into_inner();
         let balance = Self::dec(&r.initial_balance)?;
         let expiry = if r.expiry_date.is_empty() {
@@ -245,6 +246,7 @@ impl GiftCardService for GiftCardServiceImpl {
         req: Request<BalanceMutationRequest>,
     ) -> Result<Response<BalanceMutationResponse>, Status> {
         let db = self.db()?;
+        crate::access::authorize(db, req.metadata(), crate::access::MANAGE_GIFT_CARD).await?;
         let r = req.into_inner();
         let balance = Self::dec(&r.amount)?;
         match giftcards::adjust_balance(db, &r.code, balance, None).await {
@@ -292,6 +294,7 @@ impl GiftCardService for GiftCardServiceImpl {
         req: Request<SetActiveRequest>,
     ) -> Result<Response<SetActiveResponse>, Status> {
         let db = self.db()?;
+        crate::access::authorize(db, req.metadata(), crate::access::MANAGE_GIFT_CARD).await?;
         let r = req.into_inner();
         match giftcards::set_active(db, &r.code, r.active, None).await {
             Ok(c) => Ok(Response::new(SetActiveResponse {

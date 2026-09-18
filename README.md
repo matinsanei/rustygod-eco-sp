@@ -156,12 +156,27 @@ service Recommender     { RecommendProducts } # co-occurrence from Django order 
 service ChatAgent       { Chat (server-streaming) } # retrieval-grounded assistant
 service PaymentService  { CreateTransaction · GetTransaction · Authorize · Charge · Refund · Cancel }
 service WebhookService  { TriggerEvent · GetDelivery · ListAttempts · SendDelivery · DueDeliveries }
-service AuthService     { Login · RefreshToken · VerifyToken · CheckPermission }
+service AuthService     { Login · RefreshToken · VerifyToken · CheckPermission · CreateAppToken · VerifyAppToken · RevokeAppToken }
 ```
 
 Money is `{ currency, amount<string> }` — decimals cross the wire as strings, exactly like
 Saleor's serializers. IDs are strings carrying Django's integer PKs, so existing tooling
 keeps working during the transition.
+
+## Access control
+
+Staff-only RPCs demand a permission codename, carried by a staff JWT or an
+app token (`Authorization: Bearer …`):
+
+- GiftCard `Issue`/`AdjustBalance`/`SetActive` → `manage_gift_card`
+- All `DraftOrderService` / `InvoiceService` RPCs → `manage_orders`
+- `CreateAppToken`/`RevokeAppToken` → `manage_apps`
+
+Checkout-flow verbs (attach/detach/redeem, checkout complete) stay open —
+exactly the mutations Django leaves permission-free. App tokens are stored
+hashed (PBKDF2, shown once) and verified `last-4 + check_password`, byte for
+byte like `AppTokenVerify`. Superusers bypass checks; rotated JWTs and
+inactive apps never authorize.
 
 ## Roadmap
 

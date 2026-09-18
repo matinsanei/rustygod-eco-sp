@@ -3,11 +3,12 @@
 //! jwt_token_key revocation checks, staff permission resolution.
 
 use rustygod_core::auth::{self, PasswordCheck};
-use rustygod_db::auth as db_auth;
+use rustygod_db::{apps, auth as db_auth};
 use rustygod_proto::auth::{
     auth_service_server::AuthService, CheckPermissionRequest, CheckPermissionResponse,
-    LoginRequest, LoginResponse, RefreshTokenRequest, RefreshTokenResponse, VerifyTokenRequest,
-    VerifyTokenResponse,
+    CreateAppTokenRequest, CreateAppTokenResponse, LoginRequest, LoginResponse,
+    RefreshTokenRequest, RefreshTokenResponse, RevokeAppTokenRequest, RevokeAppTokenResponse,
+    VerifyAppTokenRequest, VerifyAppTokenResponse, VerifyTokenRequest, VerifyTokenResponse,
 };
 use sea_orm::DatabaseConnection;
 use tonic::{Request, Response, Status};
@@ -176,5 +177,67 @@ impl AuthService for AuthServiceImpl {
             .await
             .map_err(|e| Status::internal(e.to_string()))?;
         Ok(Response::new(CheckPermissionResponse { allowed }))
+    }
+
+    async fn create_app_token(
+        &self,
+        request: Request<CreateAppTokenRequest>,
+    ) -> Result<Response<CreateAppTokenResponse>, Status> {
+        let db = self.db()?;
+        crate::access::authorize(db, request.metadata(), crate::access::MANAGE_APPS).await?;
+        let req = request.into_inner();
+        let name = if req.name.is_empty() { "api-token".to_string() } else { req.name };
+        match apps::create_app_token(db, req.app_id, &name).await {
+            Ok((token_id, token)) => Ok(Response::new(CreateAppTokenResponse {
+                token_id,
+                token,
+                errors: vec![],
+            })),
+            Err(e) => Ok(Response::new(CreateAppTokenResponse {
+                token_id: 0,
+                token: String::new(),
+                errors: vec![Self::err("REJECTED", e.to_string())],
+            })),
+        }
+    }
+
+    async fn verify_app_token(
+        &self,
+        request: Request<VerifyAppTokenRequest>,
+    ) -> Result<Response<VerifyAppTokenResponse>, Status> {
+        let db = self.db()?;
+        match apps::verify_app_token(db, &request.into_inner().token)
+            .await
+            .map_err(|e| Status::internal(e.to_string()))?
+        {
+            Some(v) => Ok(Response::new(VerifyAppTokenResponse {
+                valid: true,
+                app_id: v.app_id,
+                app_name: v.app_name,
+            })),
+            None => Ok(Response::new(VerifyAppTokenResponse {
+                valid: false,
+                app_id: 0,
+                app_name: String::new(),
+            })),
+        }
+    }
+
+    async fn revoke_app_token(
+        &self,
+        request: Request<RevokeAppTokenRequest>,
+    ) -> Result<Response<RevokeAppTokenResponse>, Status> {
+        let db = self.db()?;
+        crate::access::authorize(db, request.metadata(), crate::access::MANAGE_APPS).await?;
+        match apps::revoke_app_token(db, request.into_inner().token_id)
+            .await
+            .map_err(|e| Status::internal(e.to_string()))?
+        {
+            true => Ok(Response::new(RevokeAppTokenResponse { revoked: true, errors: vec![] })),
+            false => Ok(Response::new(RevokeAppTokenResponse {
+                revoked: false,
+                errors: vec![Self::err("NOT_FOUND", "app token not found".into())],
+            })),
+        }
     }
 }

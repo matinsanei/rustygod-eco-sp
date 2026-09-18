@@ -78,6 +78,27 @@ fn verify_bcrypt(raw: &str, rest: &str) -> PasswordCheck {
     }
 }
 
+/// Hash a raw token/password in Django's `pbkdf2_sha256` format
+/// (`pbkdf2_sha256$<iters>$<salt>$<base64>`), readable by both Django's
+/// `make_password`/`check_password` and our `verify_password`.
+/// Mirrors `AppToken.set_auth_token` in `saleor/app/models.py`.
+pub fn hash_password(raw: &str) -> String {
+    use base64::Engine;
+    use rand::Rng;
+    const ITERS: u32 = 600_000;
+    const ALPHABET: &[u8] = b"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+    let mut rng = rand::thread_rng();
+    let salt: String = (0..12)
+        .map(|_| ALPHABET[rng.gen_range(0..ALPHABET.len())] as char)
+        .collect();
+    let mut out = vec![0u8; 32];
+    pbkdf2::pbkdf2_hmac::<sha2::Sha256>(raw.as_bytes(), salt.as_bytes(), ITERS, &mut out);
+    format!(
+        "pbkdf2_sha256${ITERS}${salt}${}",
+        base64::engine::general_purpose::STANDARD.encode(&out)
+    )
+}
+
 fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
     if a.len() != b.len() {
         return false;
@@ -247,5 +268,15 @@ mod tests {
             verify_password("x", "nonsense"),
             PasswordCheck::UnsupportedHasher(_)
         ));
+    }
+
+    #[test]
+    fn hash_roundtrips_through_verify() {
+        let h = hash_password("s3cret-token-value");
+        assert!(h.starts_with("pbkdf2_sha256$600000$"));
+        assert!(matches!(verify_password("s3cret-token-value", &h), PasswordCheck::Ok));
+        assert!(matches!(verify_password("wrong", &h), PasswordCheck::Wrong));
+        // Salts differ per call.
+        assert_ne!(h, hash_password("s3cret-token-value"));
     }
 }

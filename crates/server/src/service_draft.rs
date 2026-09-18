@@ -102,6 +102,7 @@ impl DraftOrderService for DraftOrderServiceImpl {
         req: Request<CreateDraftOrderRequest>,
     ) -> Result<Response<CreateDraftOrderResponse>, Status> {
         let db = self.db()?;
+        crate::access::authorize(db, req.metadata(), crate::access::MANAGE_ORDERS).await?;
         let r = req.into_inner();
         match drafts::create_draft(db, channel_of(&r.channel), &r.email, None, Self::lines(r.lines)?, None).await
         {
@@ -121,6 +122,7 @@ impl DraftOrderService for DraftOrderServiceImpl {
         req: Request<DraftOrderLinesRequest>,
     ) -> Result<Response<DraftOrderLinesResponse>, Status> {
         let db = self.db()?;
+        crate::access::authorize(db, req.metadata(), crate::access::MANAGE_ORDERS).await?;
         let r = req.into_inner();
         let id = Self::id(&r.order_id, "order_id")?;
         match drafts::add_lines(db, id, channel_of(&r.channel), Self::lines(r.lines)?, None).await {
@@ -140,6 +142,7 @@ impl DraftOrderService for DraftOrderServiceImpl {
         req: Request<SetDraftLineQuantityRequest>,
     ) -> Result<Response<SetDraftLineQuantityResponse>, Status> {
         let db = self.db()?;
+        crate::access::authorize(db, req.metadata(), crate::access::MANAGE_ORDERS).await?;
         let r = req.into_inner();
         let id = Self::id(&r.order_id, "order_id")?;
         let line = Self::id(&r.line_id, "line_id")?;
@@ -160,6 +163,7 @@ impl DraftOrderService for DraftOrderServiceImpl {
         req: Request<RemoveDraftLineRequest>,
     ) -> Result<Response<RemoveDraftLineResponse>, Status> {
         let db = self.db()?;
+        crate::access::authorize(db, req.metadata(), crate::access::MANAGE_ORDERS).await?;
         let r = req.into_inner();
         let id = Self::id(&r.order_id, "order_id")?;
         let line = Self::id(&r.line_id, "line_id")?;
@@ -180,6 +184,7 @@ impl DraftOrderService for DraftOrderServiceImpl {
         req: Request<DraftOrderIdRequest>,
     ) -> Result<Response<CompleteDraftOrderResponse>, Status> {
         let db = self.db()?;
+        crate::access::authorize(db, req.metadata(), crate::access::MANAGE_ORDERS).await?;
         let id = Self::id(&req.into_inner().order_id, "order_id")?;
         match drafts::complete_draft(db, id, None).await {
             Ok(h) => Ok(Response::new(CompleteDraftOrderResponse {
@@ -207,6 +212,7 @@ impl DraftOrderService for DraftOrderServiceImpl {
         req: Request<DraftOrderIdRequest>,
     ) -> Result<Response<DeleteDraftOrderResponse>, Status> {
         let db = self.db()?;
+        crate::access::authorize(db, req.metadata(), crate::access::MANAGE_ORDERS).await?;
         let id = Self::id(&req.into_inner().order_id, "order_id")?;
         match drafts::delete_draft(db, id).await {
             Ok(()) => Ok(Response::new(DeleteDraftOrderResponse { errors: vec![] })),

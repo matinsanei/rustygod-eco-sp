@@ -71,6 +71,7 @@ impl InvoiceService for InvoiceServiceImpl {
         req: Request<RequestInvoiceRequest>,
     ) -> Result<Response<RequestInvoiceResponse>, Status> {
         let db = self.db()?;
+        crate::access::authorize(db, req.metadata(), crate::access::MANAGE_ORDERS).await?;
         let r = req.into_inner();
         let oid = Self::oid(&r.order_id)?;
         let number = (!r.number.is_empty()).then_some(r.number);
@@ -91,6 +92,7 @@ impl InvoiceService for InvoiceServiceImpl {
         req: Request<FulfillInvoiceRequest>,
     ) -> Result<Response<FulfillInvoiceResponse>, Status> {
         let db = self.db()?;
+        crate::access::authorize(db, req.metadata(), crate::access::MANAGE_ORDERS).await?;
         let r = req.into_inner();
         match invoices::fulfill_invoice(db, r.id, &r.number, &r.url, None).await {
             Ok(row) => Ok(Response::new(FulfillInvoiceResponse {
@@ -109,6 +111,7 @@ impl InvoiceService for InvoiceServiceImpl {
         req: Request<SendInvoiceRequest>,
     ) -> Result<Response<SendInvoiceResponse>, Status> {
         let db = self.db()?;
+        crate::access::authorize(db, req.metadata(), crate::access::MANAGE_ORDERS).await?;
         let r = req.into_inner();
         match invoices::send_invoice(db, r.id, &r.email, None).await {
             Ok(row) => Ok(Response::new(SendInvoiceResponse {
@@ -127,6 +130,7 @@ impl InvoiceService for InvoiceServiceImpl {
         req: Request<InvoiceIdRequest>,
     ) -> Result<Response<InvoiceResponse>, Status> {
         let db = self.db()?;
+        crate::access::authorize(db, req.metadata(), crate::access::MANAGE_ORDERS).await?;
         match invoices::request_deletion(db, req.into_inner().id, None).await {
             Ok(row) => Ok(Response::new(InvoiceResponse {
                 invoice: Some(Self::info(&row)),
@@ -144,6 +148,7 @@ impl InvoiceService for InvoiceServiceImpl {
         req: Request<InvoiceIdRequest>,
     ) -> Result<Response<InvoiceResponse>, Status> {
         let db = self.db()?;
+        crate::access::authorize(db, req.metadata(), crate::access::MANAGE_ORDERS).await?;
         match invoices::delete_invoice(db, req.into_inner().id, None).await {
             Ok(row) => Ok(Response::new(InvoiceResponse {
                 invoice: Some(Self::info(&row)),
@@ -161,6 +166,7 @@ impl InvoiceService for InvoiceServiceImpl {
         req: Request<ListReadyInvoicesRequest>,
     ) -> Result<Response<ListReadyInvoicesResponse>, Status> {
         let db = self.db()?;
+        crate::access::authorize(db, req.metadata(), crate::access::MANAGE_ORDERS).await?;
         let oid = Self::oid(&req.into_inner().order_id)?;
         match invoices::ready_invoices(db, oid).await {
             Ok(rows) => Ok(Response::new(ListReadyInvoicesResponse {

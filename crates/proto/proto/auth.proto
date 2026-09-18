@@ -40,9 +40,35 @@ message CheckPermissionRequest {
 }
 message CheckPermissionResponse { bool allowed = 1; }
 
+message CreateAppTokenRequest {
+  int32 app_id = 1;
+  string name = 2;
+}
+message CreateAppTokenResponse {
+  int32 token_id = 1;
+  string token = 2; // shown once — only the hash is stored
+  repeated rustygod.common.Error errors = 3;
+}
+
+message VerifyAppTokenRequest { string token = 1; }
+message VerifyAppTokenResponse {
+  bool valid = 1;
+  int32 app_id = 2;
+  string app_name = 3;
+}
+
+message RevokeAppTokenRequest { int32 token_id = 1; }
+message RevokeAppTokenResponse {
+  bool revoked = 1;
+  repeated rustygod.common.Error errors = 2;
+}
+
 service AuthService {
   rpc Login(LoginRequest) returns (LoginResponse);
   rpc RefreshToken(RefreshTokenRequest) returns (RefreshTokenResponse);
   rpc VerifyToken(VerifyTokenRequest) returns (VerifyTokenResponse);
   rpc CheckPermission(CheckPermissionRequest) returns (CheckPermissionResponse);
+  rpc CreateAppToken(CreateAppTokenRequest) returns (CreateAppTokenResponse);
+  rpc VerifyAppToken(VerifyAppTokenRequest) returns (VerifyAppTokenResponse);
+  rpc RevokeAppToken(RevokeAppTokenRequest) returns (RevokeAppTokenResponse);
 }

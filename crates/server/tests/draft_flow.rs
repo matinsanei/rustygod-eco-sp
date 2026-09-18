@@ -28,6 +28,40 @@ async fn stocked_variant() -> String {
         .clone()
 }
 
+
+fn test_key() -> String {
+    std::fs::read_to_string(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../db/tests/testdata/test_rsa.pem"
+    ))
+    .expect("test RSA key must exist")
+}
+
+/// Staff request: populatedb admin JWT in metadata.
+async fn staff_req<T>(msg: T) -> Request<T> {
+    std::env::set_var("RSA_PRIVATE_KEY", test_key());
+    let db = rustygod_db::connect(&rustygod_db::database_url()).await.unwrap();
+    let (user, _) = rustygod_db::auth::find_for_login(&db, "admin@example.com")
+        .await
+        .unwrap()
+        .unwrap();
+    let pair = rustygod_core::auth::mint_tokens_with_key(
+        &test_key(),
+        "test",
+        &user.email,
+        user.id,
+        user.is_staff,
+        &user.jwt_token_key,
+    )
+    .unwrap();
+    let mut req = Request::new(msg);
+    req.metadata_mut().insert(
+        "authorization",
+        format!("Bearer {}", pair.access).parse().unwrap(),
+    );
+    req
+}
+
 #[tokio::test]
 async fn grpc_draft_lifecycle() {
     use fs2::FileExt;
@@ -42,7 +76,7 @@ async fn grpc_draft_lifecycle() {
     let vid = stocked_variant().await;
 
     let order = svc
-        .create_draft_order(Request::new(CreateDraftOrderRequest {
+        .create_draft_order(staff_req(CreateDraftOrderRequest {
             channel: "default-channel".into(),
             email: "staff@example.com".into(),
             lines: vec![DraftLineInput {
@@ -51,7 +85,7 @@ async fn grpc_draft_lifecycle() {
                 custom_price: String::new(),
                 force_new_line: false,
             }],
-        }))
+        }).await)
         .await
         .unwrap()
         .into_inner()
@@ -62,7 +96,7 @@ async fn grpc_draft_lifecycle() {
 
     // Add same variant → merged.
     let order = svc
-        .add_draft_lines(Request::new(DraftOrderLinesRequest {
+        .add_draft_lines(staff_req(DraftOrderLinesRequest {
             order_id: order.id.clone(),
             channel: "default-channel".into(),
             lines: vec![DraftLineInput {
@@ -71,7 +105,7 @@ async fn grpc_draft_lifecycle() {
                 custom_price: String::new(),
                 force_new_line: false,
             }],
-        }))
+        }).await)
         .await
         .unwrap()
         .into_inner()
@@ -81,7 +115,7 @@ async fn grpc_draft_lifecycle() {
 
     // Complete → unfulfilled/unconfirmed, never draft.
     let done = svc
-        .complete_draft_order(Request::new(DraftOrderIdRequest { order_id: order.id.clone() }))
+        .complete_draft_order(staff_req(DraftOrderIdRequest { order_id: order.id.clone() }).await)
         .await
         .unwrap()
         .into_inner();
@@ -90,7 +124,7 @@ async fn grpc_draft_lifecycle() {
 
     // Completed draft rejects edits with NOT_APPLICABLE.
     let denied = svc
-        .add_draft_lines(Request::new(DraftOrderLinesRequest {
+        .add_draft_lines(staff_req(DraftOrderLinesRequest {
             order_id: order.id.clone(),
             channel: "default-channel".into(),
             lines: vec![DraftLineInput {
@@ -99,7 +133,7 @@ async fn grpc_draft_lifecycle() {
                 custom_price: String::new(),
                 force_new_line: false,
             }],
-        }))
+        }).await)
         .await
         .unwrap()
         .into_inner();
@@ -108,7 +142,7 @@ async fn grpc_draft_lifecycle() {
 
     // Completed draft cannot be deleted either.
     let denied = svc
-        .delete_draft_order(Request::new(DraftOrderIdRequest { order_id: order.id.clone() }))
+        .delete_draft_order(staff_req(DraftOrderIdRequest { order_id: order.id.clone() }).await)
         .await
         .unwrap()
         .into_inner();

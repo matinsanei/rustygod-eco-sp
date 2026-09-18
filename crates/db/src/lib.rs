@@ -4,6 +4,7 @@
 //! (`sea-orm-cli generate entity`), so Django and Rust can share one database
 //! under the Expand-Contract pattern: same tables, same constraints, zero data migration.
 
+pub mod apps;
 pub mod auth;
 pub mod catalog;
 pub mod checkout_store;
@@ -37,6 +38,8 @@ pub enum DbError {
     Draft(String),
     #[error("invoice error: {0}")]
     Invoice(String),
+    #[error("app error: {0}")]
+    App(String),
     #[error("lock poisoned: {0}")]
     Lock(String),
 }

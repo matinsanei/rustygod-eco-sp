@@ -32,16 +32,50 @@ async fn billable_order() -> String {
         .to_string()
 }
 
+
+fn test_key() -> String {
+    std::fs::read_to_string(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../db/tests/testdata/test_rsa.pem"
+    ))
+    .expect("test RSA key must exist")
+}
+
+/// Staff request: populatedb admin JWT in metadata.
+async fn staff_req<T>(msg: T) -> Request<T> {
+    std::env::set_var("RSA_PRIVATE_KEY", test_key());
+    let db = rustygod_db::connect(&rustygod_db::database_url()).await.unwrap();
+    let (user, _) = rustygod_db::auth::find_for_login(&db, "admin@example.com")
+        .await
+        .unwrap()
+        .unwrap();
+    let pair = rustygod_core::auth::mint_tokens_with_key(
+        &test_key(),
+        "test",
+        &user.email,
+        user.id,
+        user.is_staff,
+        &user.jwt_token_key,
+    )
+    .unwrap();
+    let mut req = Request::new(msg);
+    req.metadata_mut().insert(
+        "authorization",
+        format!("Bearer {}", pair.access).parse().unwrap(),
+    );
+    req
+}
+
 #[tokio::test]
 async fn grpc_invoice_lifecycle() {
     let svc = svc().await;
     let order_id = billable_order().await;
 
     let inv = svc
-        .request_invoice(Request::new(RequestInvoiceRequest {
+        .request_invoice(staff_req(RequestInvoiceRequest {
             order_id: order_id.clone(),
             number: "FV/9/2026".into(),
-        }))
+        }).await)
         .await
         .unwrap()
         .into_inner()
@@ -52,10 +86,10 @@ async fn grpc_invoice_lifecycle() {
 
     // Draft order is rejected over the wire too.
     let denied = svc
-        .request_invoice(Request::new(RequestInvoiceRequest {
+        .request_invoice(staff_req(RequestInvoiceRequest {
             order_id: Uuid::new_v4().to_string(),
             number: String::new(),
-        }))
+        }).await)
         .await
         .unwrap()
         .into_inner();
@@ -63,11 +97,11 @@ async fn grpc_invoice_lifecycle() {
     assert!(!denied.errors.is_empty());
 
     let inv = svc
-        .fulfill_invoice(Request::new(FulfillInvoiceRequest {
+        .fulfill_invoice(staff_req(FulfillInvoiceRequest {
             id: inv.id,
             number: "FV/9/2026".into(),
             url: "https://cdn.example/fv9.pdf".into(),
-        }))
+        }).await)
         .await
         .unwrap()
         .into_inner()
@@ -77,7 +111,7 @@ async fn grpc_invoice_lifecycle() {
     assert_eq!(inv.url, "https://cdn.example/fv9.pdf");
 
     let ready = svc
-        .list_ready(Request::new(ListReadyInvoicesRequest { order_id }))
+        .list_ready(staff_req(ListReadyInvoicesRequest { order_id }).await)
         .await
         .unwrap()
         .into_inner();
@@ -85,10 +119,10 @@ async fn grpc_invoice_lifecycle() {
     assert!(ready.invoices.iter().any(|i| i.id == inv.id));
 
     let sent = svc
-        .send_invoice(Request::new(SendInvoiceRequest {
+        .send_invoice(staff_req(SendInvoiceRequest {
             id: inv.id,
             email: "buyer@example.com".into(),
-        }))
+        }).await)
         .await
         .unwrap()
         .into_inner();
@@ -97,7 +131,7 @@ async fn grpc_invoice_lifecycle() {
 
     // Deletion roundtrip.
     let pending = svc
-        .request_deletion(Request::new(InvoiceIdRequest { id: inv.id }))
+        .request_deletion(staff_req(InvoiceIdRequest { id: inv.id }).await)
         .await
         .unwrap()
         .into_inner()
@@ -105,7 +139,7 @@ async fn grpc_invoice_lifecycle() {
         .unwrap();
     assert_eq!(pending.status, "pending");
     let gone = svc
-        .delete_invoice(Request::new(InvoiceIdRequest { id: inv.id }))
+        .delete_invoice(staff_req(InvoiceIdRequest { id: inv.id }).await)
         .await
         .unwrap()
         .into_inner()
