@@ -28,6 +28,9 @@ pub mod draft {
 pub mod invoice {
     tonic::include_proto!("rustygod.invoice");
 }
+pub mod plugin {
+    tonic::include_proto!("rustygod.plugin");
+}
 pub mod webhook {
     tonic::include_proto!("rustygod.webhook");
 }

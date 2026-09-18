@@ -1,0 +1,58 @@
+syntax = "proto3";
+
+package rustygod.plugin;
+
+import "common.proto";
+
+// Out-of-process WASM extensions. Register a compiled module once, call its
+// extension-point functions with JSON. Money crosses as integer minor units.
+message PluginManifestInfo {
+  string name = 1;
+  string version = 2;
+  repeated string extension_points = 3;
+  repeated string capabilities = 4;
+}
+
+message RegisterPluginRequest {
+  PluginManifestInfo manifest = 1;
+  bytes wasm = 2;
+  map<string, string> config = 3;
+}
+message RegisterPluginResponse {
+  bool registered = 1;
+  repeated rustygod.common.Error errors = 2;
+}
+
+message CallPluginRequest {
+  string name = 1;
+  string function = 2;
+  string payload_json = 3;
+}
+message CallPluginResponse {
+  string output_json = 1;
+  repeated string events = 2;
+  repeated rustygod.common.Error errors = 3;
+}
+
+message ListPluginsRequest {}
+message ListPluginsResponse {
+  repeated PluginManifestInfo plugins = 1;
+}
+
+message CalculateTaxRequest {
+  int64 subtotal_cents = 1;
+  int64 rate_bps = 2;
+}
+message CalculateTaxResponse {
+  int64 tax_cents = 1;
+  int64 total_cents = 2;
+  repeated rustygod.common.Error errors = 3;
+}
+
+service PluginService {
+  rpc RegisterPlugin(RegisterPluginRequest) returns (RegisterPluginResponse);
+  rpc CallPlugin(CallPluginRequest) returns (CallPluginResponse);
+  rpc ListPlugins(ListPluginsRequest) returns (ListPluginsResponse);
+  // Convenience over the flat-rate-tax reference plugin.
+  rpc CalculateTax(CalculateTaxRequest) returns (CalculateTaxResponse);
+}

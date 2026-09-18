@@ -18,6 +18,7 @@ rustygod-proto = { path = "../proto" }
 rustygod-core = { path = "../core" }
 rustygod-db = { path = "../db" }
 rustygod-ai = { path = "../ai" }
+rustygod-plugins = { path = "../plugins" }
 sea-orm = { workspace = true }
 tokio-stream = { workspace = true }
 tower-http = { workspace = true }

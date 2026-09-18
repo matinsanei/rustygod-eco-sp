@@ -145,6 +145,7 @@ service ShippingService { ListShippingMethods }
 service GiftCardService { Issue · GetByCode · AttachToCheckout · DetachFromCheckout · CheckoutBalance · Redeem · AdjustBalance · Refund · SetActive }
 service DraftOrderService { CreateDraftOrder · AddDraftLines · SetDraftLineQuantity · RemoveDraftLine · CompleteDraftOrder · DeleteDraftOrder }
 service InvoiceService { RequestInvoice · FulfillInvoice · SendInvoice · RequestDeletion · DeleteInvoice · ListReady }
+service PluginService { RegisterPlugin · CallPlugin · ListPlugins · CalculateTax }
 service MenuService     { GetMenu }
 service PageService     { GetPage · ListPages }
 service AccountService  { GetCustomer · CreateAddress }
@@ -177,6 +178,15 @@ exactly the mutations Django leaves permission-free. App tokens are stored
 hashed (PBKDF2, shown once) and verified `last-4 + check_password`, byte for
 byte like `AppTokenVerify`. Superusers bypass checks; rotated JWTs and
 inactive apps never authorize.
+
+## Plugins (WASM extensions)
+
+Saleor plugins were Python-only and in-process. Ours are sandboxed WASM
+with declared capabilities (`log`, `events`) and extension points —
+`crates/plugins/reference/tax_flat_rate.wat` is a hand-written,
+toolchain-free flat-rate tax plugin (integer cents, HALF_UP) you can audit
+to the byte. `PluginService` registers/calls modules (staff: `manage_apps`);
+`sdk/plugin.mjs` is the JS client sketch.
 
 ## Roadmap
 

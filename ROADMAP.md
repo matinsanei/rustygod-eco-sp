@@ -80,11 +80,13 @@ GraphQL monster.
 - [x] Reproducible benchmark report in BENCHMARK.md (incl. missed targets, honestly)
 - [ ] Follow-ups → Phase 3: OTLP export, 20k rps (read replicas/caching), pool autosizing
 
-### Phase 3 — Plugin platform
-- [ ] extism WASM runtime + JS SDK (`@rustygod/plugin`)
-- [ ] 3 reference plugins in TypeScript: flat-rate tax, min-order validator,
-      Slack order notifier (webhook)
-- [ ] Capability-based permission checks on every mutating RPC
+### Phase 3 — Plugin platform (IN PROGRESS)
+- [x] extism WASM runtime (`crates/plugins`: closed-world capabilities + extension points)
+- [x] Reference plugin #1: flat-rate tax in hand-written WAT (no toolchain, HALF_UP cents)
+- [x] `PluginService` gRPC (register/call/list/tax, `manage_apps`) + `sdk/plugin.mjs` sketch
+- [x] Capability-based permission checks on every mutating RPC (Phase 2.5 access layer)
+- [ ] Reference plugins #2–3 (min-order validator, Slack notifier via webhooks)
+- [ ] Plugin persistence (registry is in-memory today) + per-point storefront access
 - [ ] **Exit:** a JS dev ships a plugin without touching Rust
 
 ### Phase 4 — Frontend that beats Saleor
