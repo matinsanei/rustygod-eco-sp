@@ -28,6 +28,83 @@ impl WarehouseServiceImpl {
     }
 }
 
+impl ChannelServiceImpl {
+    fn ch_err(e: rustygod_db::DbError) -> rustygod_proto::common::Error {
+        err("CHANNEL_ERROR", e.to_string())
+    }
+}
+
+impl AccountServiceImpl {
+    fn group_info(g: &rustygod_db::groups::GroupView) -> GroupInfo {
+        GroupInfo {
+            id: g.id.to_string(),
+            name: g.name.clone(),
+            permissions: g.permissions.clone(),
+            member_ids: g.member_ids.iter().map(|i| i.to_string()).collect(),
+        }
+    }
+
+    fn group_err(e: rustygod_db::DbError) -> rustygod_proto::common::Error {
+        err("GROUP_ERROR", e.to_string())
+    }
+
+    async fn group_members(
+        &self,
+        request: Request<GroupMembersRequest>,
+        add: bool,
+    ) -> Result<Response<GroupResponse>, Status> {
+        let db = self.db()?;
+        crate::access::authorize(db, request.metadata(), crate::access::MANAGE_STAFF).await?;
+        let r = request.into_inner();
+        let id: i32 = r.id.parse().map_err(|_| Status::invalid_argument("id must be an integer"))?;
+        let mut uids = Vec::with_capacity(r.user_ids.len());
+        for u in &r.user_ids {
+            uids.push(u.parse::<i32>().map_err(|_| Status::invalid_argument("user_ids must be integers"))?);
+        }
+        let out = if add {
+            rustygod_db::groups::add_members(db, id, &uids).await
+        } else {
+            rustygod_db::groups::remove_members(db, id, &uids).await
+        };
+        match out {
+            Ok(g) => Ok(Response::new(GroupResponse {
+                group: Some(Self::group_info(&g)),
+                errors: vec![],
+            })),
+            Err(e) => Ok(Response::new(GroupResponse {
+                group: None,
+                errors: vec![Self::group_err(e)],
+            })),
+        }
+    }
+
+    async fn group_permissions(
+        &self,
+        request: Request<GroupPermissionsRequest>,
+        grant: bool,
+    ) -> Result<Response<GroupResponse>, Status> {
+        let db = self.db()?;
+        crate::access::authorize(db, request.metadata(), crate::access::MANAGE_STAFF).await?;
+        let r = request.into_inner();
+        let id: i32 = r.id.parse().map_err(|_| Status::invalid_argument("id must be an integer"))?;
+        let out = if grant {
+            rustygod_db::groups::grant_permissions(db, id, &r.codenames).await
+        } else {
+            rustygod_db::groups::revoke_permissions(db, id, &r.codenames).await
+        };
+        match out {
+            Ok(g) => Ok(Response::new(GroupResponse {
+                group: Some(Self::group_info(&g)),
+                errors: vec![],
+            })),
+            Err(e) => Ok(Response::new(GroupResponse {
+                group: None,
+                errors: vec![Self::group_err(e)],
+            })),
+        }
+    }
+}
+
 fn err(code: &str, message: String) -> rustygod_proto::common::Error {
     rustygod_proto::common::Error {
         code: code.into(),
@@ -288,6 +365,104 @@ impl AccountService for AccountServiceImpl {
             errors: vec![],
         }))
     }
+
+    async fn create_group(
+        &self,
+        request: Request<CreateGroupRequest>,
+    ) -> Result<Response<GroupResponse>, Status> {
+        let db = self.db()?;
+        crate::access::authorize(db, request.metadata(), crate::access::MANAGE_STAFF).await?;
+        let r = request.into_inner();
+        match rustygod_db::groups::create_group(db, &r.name, &r.permissions).await {
+            Ok(g) => Ok(Response::new(GroupResponse {
+                group: Some(Self::group_info(&g)),
+                errors: vec![],
+            })),
+            Err(e) => Ok(Response::new(GroupResponse {
+                group: None,
+                errors: vec![Self::group_err(e)],
+            })),
+        }
+    }
+
+    async fn list_groups(
+        &self,
+        request: Request<ListGroupsRequest>,
+    ) -> Result<Response<ListGroupsResponse>, Status> {
+        let db = self.db()?;
+        crate::access::authorize(db, request.metadata(), crate::access::MANAGE_STAFF).await?;
+        let _ = request;
+        match rustygod_db::groups::list_groups(db).await {
+            Ok(gs) => Ok(Response::new(ListGroupsResponse {
+                groups: gs.iter().map(Self::group_info).collect(),
+            })),
+            Err(e) => Err(Status::internal(e.to_string())),
+        }
+    }
+
+    async fn rename_group(
+        &self,
+        request: Request<RenameGroupRequest>,
+    ) -> Result<Response<GroupResponse>, Status> {
+        let db = self.db()?;
+        crate::access::authorize(db, request.metadata(), crate::access::MANAGE_STAFF).await?;
+        let r = request.into_inner();
+        let id: i32 = r.id.parse().map_err(|_| Status::invalid_argument("id must be an integer"))?;
+        match rustygod_db::groups::rename_group(db, id, &r.name).await {
+            Ok(g) => Ok(Response::new(GroupResponse {
+                group: Some(Self::group_info(&g)),
+                errors: vec![],
+            })),
+            Err(e) => Ok(Response::new(GroupResponse {
+                group: None,
+                errors: vec![Self::group_err(e)],
+            })),
+        }
+    }
+
+    async fn delete_group(
+        &self,
+        request: Request<DeleteGroupRequest>,
+    ) -> Result<Response<DeleteGroupResponse>, Status> {
+        let db = self.db()?;
+        crate::access::authorize(db, request.metadata(), crate::access::MANAGE_STAFF).await?;
+        let id: i32 = request.into_inner().id.parse().map_err(|_| Status::invalid_argument("id must be an integer"))?;
+        match rustygod_db::groups::delete_group(db, id).await {
+            Ok(()) => Ok(Response::new(DeleteGroupResponse { ok: true, errors: vec![] })),
+            Err(e) => Ok(Response::new(DeleteGroupResponse {
+                ok: false,
+                errors: vec![Self::group_err(e)],
+            })),
+        }
+    }
+
+    async fn add_group_members(
+        &self,
+        request: Request<GroupMembersRequest>,
+    ) -> Result<Response<GroupResponse>, Status> {
+        self.group_members(request, true).await
+    }
+
+    async fn remove_group_members(
+        &self,
+        request: Request<GroupMembersRequest>,
+    ) -> Result<Response<GroupResponse>, Status> {
+        self.group_members(request, false).await
+    }
+
+    async fn grant_group_permissions(
+        &self,
+        request: Request<GroupPermissionsRequest>,
+    ) -> Result<Response<GroupResponse>, Status> {
+        self.group_permissions(request, true).await
+    }
+
+    async fn revoke_group_permissions(
+        &self,
+        request: Request<GroupPermissionsRequest>,
+    ) -> Result<Response<GroupResponse>, Status> {
+        self.group_permissions(request, false).await
+    }
 }
 
 fn channel_to_proto(c: &commerce::ChannelView) -> ChannelInfo {
@@ -329,6 +504,145 @@ impl ChannelService for ChannelServiceImpl {
             None => Ok(Response::new(GetChannelResponse {
                 channel: None,
                 errors: vec![err("NOT_FOUND", "channel not found".into())],
+            })),
+        }
+    }
+
+    async fn create_channel(
+        &self,
+        request: Request<CreateChannelRequest>,
+    ) -> Result<Response<ChannelResponse>, Status> {
+        let db = self.db()?;
+        crate::access::authorize(db, request.metadata(), crate::access::MANAGE_CHANNELS).await?;
+        let r = request.into_inner();
+        match rustygod_db::channels::create_channel(
+            db,
+            rustygod_db::channels::NewChannel {
+                name: r.name,
+                slug: r.slug,
+                currency_code: r.currency_code,
+                default_country: r.default_country,
+                allocation_strategy: r.allocation_strategy,
+            },
+        )
+        .await
+        {
+            Ok(c) => Ok(Response::new(ChannelResponse {
+                channel: Some(ChannelInfo {
+                    id: c.id.to_string(),
+                    slug: c.slug,
+                    currency_code: c.currency_code,
+                    is_active: c.is_active,
+                }),
+                errors: vec![],
+            })),
+            Err(e) => Ok(Response::new(ChannelResponse {
+                channel: None,
+                errors: vec![Self::ch_err(e)],
+            })),
+        }
+    }
+
+    async fn update_channel(
+        &self,
+        request: Request<UpdateChannelRequest>,
+    ) -> Result<Response<ChannelResponse>, Status> {
+        let db = self.db()?;
+        crate::access::authorize(db, request.metadata(), crate::access::MANAGE_CHANNELS).await?;
+        let r = request.into_inner();
+        match rustygod_db::channels::update_channel(
+            db,
+            &r.slug,
+            rustygod_db::channels::ChannelPatch {
+                name: (!r.name.is_empty()).then_some(r.name),
+                is_active: r.set_active.then_some(r.is_active),
+                default_country: (!r.default_country.is_empty()).then_some(r.default_country),
+                allocation_strategy: (!r.allocation_strategy.is_empty())
+                    .then_some(r.allocation_strategy),
+                auto_confirm: r.set_auto_confirm.then_some(r.auto_confirm),
+            },
+        )
+        .await
+        {
+            Ok(c) => Ok(Response::new(ChannelResponse {
+                channel: Some(ChannelInfo {
+                    id: c.id.to_string(),
+                    slug: c.slug,
+                    currency_code: c.currency_code,
+                    is_active: c.is_active,
+                }),
+                errors: vec![],
+            })),
+            Err(e) => Ok(Response::new(ChannelResponse {
+                channel: None,
+                errors: vec![Self::ch_err(e)],
+            })),
+        }
+    }
+
+    async fn delete_channel(
+        &self,
+        request: Request<DeleteChannelRequest>,
+    ) -> Result<Response<DeleteChannelResponse>, Status> {
+        let db = self.db()?;
+        crate::access::authorize(db, request.metadata(), crate::access::MANAGE_CHANNELS).await?;
+        match rustygod_db::channels::delete_channel(db, &request.into_inner().slug).await {
+            Ok(()) => Ok(Response::new(DeleteChannelResponse { ok: true, errors: vec![] })),
+            Err(e) => Ok(Response::new(DeleteChannelResponse {
+                ok: false,
+                errors: vec![Self::ch_err(e)],
+            })),
+        }
+    }
+
+    async fn set_product_listing(
+        &self,
+        request: Request<SetProductListingRequest>,
+    ) -> Result<Response<SetProductListingResponse>, Status> {
+        let db = self.db()?;
+        crate::access::authorize(db, request.metadata(), crate::access::MANAGE_CHANNELS).await?;
+        let r = request.into_inner();
+        let pid: i32 = r.product_id.parse().map_err(|_| Status::invalid_argument("product_id must be an integer"))?;
+        let channel = channel_of(&r.channel).to_string();
+        match rustygod_db::channels::set_product_listing(
+            db,
+            &channel,
+            pid,
+            r.is_published,
+            r.visible_in_listings,
+        )
+        .await
+        {
+            Ok(()) => Ok(Response::new(SetProductListingResponse { errors: vec![] })),
+            Err(e) => Ok(Response::new(SetProductListingResponse {
+                errors: vec![Self::ch_err(e)],
+            })),
+        }
+    }
+
+    async fn set_variant_price(
+        &self,
+        request: Request<SetVariantPriceRequest>,
+    ) -> Result<Response<SetVariantPriceResponse>, Status> {
+        let db = self.db()?;
+        crate::access::authorize(db, request.metadata(), crate::access::MANAGE_CHANNELS).await?;
+        let r = request.into_inner();
+        let vid: i32 = r.variant_id.parse().map_err(|_| Status::invalid_argument("variant_id must be an integer"))?;
+        let price = if r.price.is_empty() {
+            None
+        } else {
+            Some(r.price.parse::<rust_decimal::Decimal>().map_err(|_| Status::invalid_argument("price must be a decimal string"))?)
+        };
+        let cost = if r.cost_price.is_empty() {
+            None
+        } else {
+            Some(r.cost_price.parse::<rust_decimal::Decimal>().map_err(|_| Status::invalid_argument("cost_price must be a decimal string"))?)
+        };
+        let channel = channel_of(&r.channel).to_string();
+        match rustygod_db::channels::set_variant_price(db, &channel, vid, price, cost).await {
+            Ok(()) => Ok(Response::new(SetVariantPriceResponse { errors: vec![] })),
+            Err(e) => Ok(Response::new(SetVariantPriceResponse {
+                errors: vec![Self::ch_err(e)],
             })),
         }
     }

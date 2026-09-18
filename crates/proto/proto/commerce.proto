@@ -148,9 +148,55 @@ message CreateAddressResponse {
   repeated rustygod.common.Error errors = 2;
 }
 
+message GroupInfo {
+  string id = 1;
+  string name = 2;
+  repeated string permissions = 3;
+  repeated string member_ids = 4;
+}
+
+message CreateGroupRequest {
+  string name = 1;
+  repeated string permissions = 2;
+}
+message GroupResponse {
+  GroupInfo group = 1;
+  repeated rustygod.common.Error errors = 2;
+}
+
+message ListGroupsRequest {}
+message ListGroupsResponse { repeated GroupInfo groups = 1; }
+
+message RenameGroupRequest {
+  string id = 1;
+  string name = 2;
+}
+message DeleteGroupRequest { string id = 1; }
+message DeleteGroupResponse {
+  bool ok = 1;
+  repeated rustygod.common.Error errors = 2;
+}
+
+message GroupMembersRequest {
+  string id = 1;
+  repeated string user_ids = 2;
+}
+message GroupPermissionsRequest {
+  string id = 1;
+  repeated string codenames = 2;
+}
+
 service AccountService {
   rpc GetCustomer(GetCustomerRequest) returns (GetCustomerResponse);
   rpc CreateAddress(AddressInput) returns (CreateAddressResponse);
+  rpc CreateGroup(CreateGroupRequest) returns (GroupResponse);
+  rpc ListGroups(ListGroupsRequest) returns (ListGroupsResponse);
+  rpc RenameGroup(RenameGroupRequest) returns (GroupResponse);
+  rpc DeleteGroup(DeleteGroupRequest) returns (DeleteGroupResponse);
+  rpc AddGroupMembers(GroupMembersRequest) returns (GroupResponse);
+  rpc RemoveGroupMembers(GroupMembersRequest) returns (GroupResponse);
+  rpc GrantGroupPermissions(GroupPermissionsRequest) returns (GroupResponse);
+  rpc RevokeGroupPermissions(GroupPermissionsRequest) returns (GroupResponse);
 }
 
 // ---- Channel (mirrors saleor/channel) ----
@@ -170,9 +216,62 @@ message GetChannelResponse {
   repeated rustygod.common.Error errors = 2;
 }
 
+message CreateChannelRequest {
+  string name = 1;
+  string slug = 2;
+  string currency_code = 3;
+  string default_country = 4;
+  string allocation_strategy = 5; // empty = Django default
+}
+message ChannelResponse {
+  ChannelInfo channel = 1;
+  repeated rustygod.common.Error errors = 2;
+}
+
+message UpdateChannelRequest {
+  string slug = 1;
+  string name = 2;                // empty = unchanged
+  bool is_active = 3;
+  bool set_active = 4;            // gate for is_active
+  string default_country = 5;     // empty = unchanged
+  string allocation_strategy = 6; // empty = unchanged
+  bool auto_confirm = 7;
+  bool set_auto_confirm = 8;      // gate for auto_confirm
+}
+message DeleteChannelRequest { string slug = 1; }
+message DeleteChannelResponse {
+  bool ok = 1;
+  repeated rustygod.common.Error errors = 2;
+}
+
+message SetProductListingRequest {
+  string channel = 1;
+  string product_id = 2;
+  bool is_published = 3;
+  bool visible_in_listings = 4;
+}
+message SetProductListingResponse {
+  repeated rustygod.common.Error errors = 1;
+}
+
+message SetVariantPriceRequest {
+  string channel = 1;
+  string variant_id = 2;
+  string price = 3;      // decimal string, empty = unchanged
+  string cost_price = 4; // decimal string, empty = unchanged
+}
+message SetVariantPriceResponse {
+  repeated rustygod.common.Error errors = 1;
+}
+
 service ChannelService {
   rpc ListChannels(ListChannelsRequest) returns (ListChannelsResponse);
   rpc GetChannel(GetChannelRequest) returns (GetChannelResponse);
+  rpc CreateChannel(CreateChannelRequest) returns (ChannelResponse);
+  rpc UpdateChannel(UpdateChannelRequest) returns (ChannelResponse);
+  rpc DeleteChannel(DeleteChannelRequest) returns (DeleteChannelResponse);
+  rpc SetProductListing(SetProductListingRequest) returns (SetProductListingResponse);
+  rpc SetVariantPrice(SetVariantPriceRequest) returns (SetVariantPriceResponse);
 }
 
 // ---- Tax (mirrors saleor/tax: classes; rates resolve via plugins) ----

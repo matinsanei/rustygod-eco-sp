@@ -7,12 +7,14 @@
 pub mod apps;
 pub mod auth;
 pub mod catalog;
+pub mod channels;
 pub mod checkout_store;
 pub mod commerce;
 pub mod drafts;
 pub mod entities;
 pub mod fulfillment;
 pub mod giftcards;
+pub mod groups;
 pub mod invoices;
 pub mod order_store;
 pub mod payments;
@@ -47,6 +49,10 @@ pub enum DbError {
     PluginStore(String),
     #[error("warehouse error: {0}")]
     Warehouse(String),
+    #[error("channel error: {0}")]
+    Channel(String),
+    #[error("group error: {0}")]
+    Group(String),
     #[error("lock poisoned: {0}")]
     Lock(String),
 }
