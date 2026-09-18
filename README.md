@@ -145,13 +145,13 @@ service ShippingService { ListShippingMethods }
 service GiftCardService { Issue · GetByCode · AttachToCheckout · DetachFromCheckout · CheckoutBalance · Redeem · AdjustBalance · Refund · SetActive }
 service DraftOrderService { CreateDraftOrder · AddDraftLines · SetDraftLineQuantity · RemoveDraftLine · CompleteDraftOrder · DeleteDraftOrder }
 service InvoiceService { RequestInvoice · FulfillInvoice · SendInvoice · RequestDeletion · DeleteInvoice · ListReady }
-service PluginService { RegisterPlugin · CallPlugin · ListPlugins · CalculateTax }
+service PluginService { RegisterPlugin · UnregisterPlugin · CallPlugin · ListPlugins · CalculateTax }
 service MenuService     { GetMenu }
 service PageService     { GetPage · ListPages }
-service AccountService  { GetCustomer · CreateAddress }
-service ChannelService  { ListChannels · GetChannel }
-service TaxService      { ListTaxClasses }
-service WarehouseService{ ListWarehouses · ListStocks · ReserveStock · ReleaseReservation }
+service AccountService  { GetCustomer · CreateAddress · CreateGroup · ListGroups · RenameGroup · DeleteGroup · Add/RemoveGroupMembers · Grant/RevokeGroupPermissions }
+service ChannelService  { ListChannels · GetChannel · CreateChannel · UpdateChannel · DeleteChannel · SetProductListing · SetVariantPrice }
+service TaxService      { ListTaxClasses · GetTaxRate · CalculateTaxes }
+service WarehouseService{ ListWarehouses · ListStocks · ReserveStock · ReleaseReservation · CreateWarehouse · UpdateWarehouse · DeleteWarehouse · UpsertStock · ListZones · Assign/UnassignZone }
 service SemanticSearch  { SearchProducts }   # pg_trgm today, vectors next — same RPC
 service Recommender     { RecommendProducts } # co-occurrence from Django order lines
 service ChatAgent       { Chat (server-streaming) } # retrieval-grounded assistant
