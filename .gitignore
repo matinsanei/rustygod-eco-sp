@@ -3,3 +3,5 @@ target/
 .env
 /tmp/
 *.tmp
+backups/
+*.dump

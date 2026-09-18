@@ -1,0 +1,46 @@
+# One-command demo (Phase 2): Postgres + rustygod-saleor.
+#
+#   docker compose up --build
+#
+# gRPC on :50051, Prometheus metrics on :9000. The database starts EMPTY —
+# point it at Saleor data one of two ways:
+#   1. restore a Saleor dump:  ./scripts/restore.sh dumpfile.dump
+#   2. fresh schema + demo data from saleor-core:
+#        (cd ../saleor/saleor-core && uv run poe migrate && uv run poe populatedb)
+#      with the db container's connection string.
+#
+# The server needs a Saleor database (same tables Django uses); without one
+# it serves the in-memory demo catalog and logs a warning.
+
+services:
+  db:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: saleor
+      POSTGRES_PASSWORD: saleor
+      POSTGRES_DB: saleor
+    volumes:
+      - saleor-pg:/var/lib/postgresql/data
+    ports:
+      - "5434:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U saleor"]
+      interval: 3s
+      timeout: 2s
+      retries: 20
+
+  server:
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      RUSTYGOD_DATABASE_URL: postgres://saleor:saleor@db:5432/saleor
+      RUSTYGOD_ADDR: 0.0.0.0:50051
+      RUSTYGOD_METRICS_ADDR: 0.0.0.0:9000
+    ports:
+      - "50051:50051"
+      - "9000:9000"
+
+volumes:
+  saleor-pg:

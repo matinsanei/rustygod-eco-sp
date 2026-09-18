@@ -33,4 +33,9 @@ sea-orm = { version = "~1.1", features = [
     "macros",
 ] }
 tokio-stream = "0.1"
+tower-http = { version = "0.6", features = ["trace"] }
+metrics = "0.24"
+metrics-exporter-prometheus = "0.17"
+http = "1"
+tower = "0.4"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls-manual-roots"] }

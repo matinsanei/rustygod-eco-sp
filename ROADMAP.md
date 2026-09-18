@@ -72,13 +72,13 @@ GraphQL monster.
 - [ ] Promotion gifts + order promotions on checkout totals
 - [ ] **Exit:** 120+ contract tests green ✓, smoke covers full buy flow
 
-### Phase 2 — Production hardening
-- [ ] OpenTelemetry tracing + metrics on every RPC
-- [ ] k6 load suite with published numbers (target: p99 < 50ms catalog reads,
-      <1GB RSS at 1k rps on one node)
-- [ ] Docker image (<100MB) + compose for one-command demo
-- [ ] Backup/restore story (learned the hard way: DB containers die)
-- [ ] **Exit:** reproducible benchmark report in README
+### Phase 2 — Production hardening (DONE 2026-09-18)
+- [x] Tracing spans + Prometheus metrics on every RPC (`telemetry.rs`, `:9000`)
+- [x] k6 load suite (`bench/k6-grpc.js`): 200VU/100% + 1000VU spike/100%, numbers in BENCHMARK.md
+- [x] Docker image **23.6MB** (<100MB ✅) + compose one-command demo
+- [x] Backup/restore story (`scripts/db.sh`, scratch-DB validated)
+- [x] Reproducible benchmark report in BENCHMARK.md (incl. missed targets, honestly)
+- [ ] Follow-ups → Phase 3: OTLP export, 20k rps (read replicas/caching), pool autosizing
 
 ### Phase 3 — Plugin platform
 - [ ] extism WASM runtime + JS SDK (`@rustygod/plugin`)

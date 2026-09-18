@@ -78,7 +78,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     tracing::info!("rustygod-saleor gRPC listening on {addr}");
 
+    // Prometheus scrape endpoint (Phase 2 observability). Serves
+    // grpc_requests_total + grpc_request_duration_seconds.
+    let metrics_addr: std::net::SocketAddr = std::env::var("RUSTYGOD_METRICS_ADDR")
+        .unwrap_or_else(|_| "127.0.0.1:9000".to_string())
+        .parse()?;
+    metrics_exporter_prometheus::PrometheusBuilder::new()
+        .with_http_listener(metrics_addr)
+        .install()
+        .map_err(|e| format!("metrics listener: {e}"))?;
+    tracing::info!("prometheus metrics on {metrics_addr}");
+
     tonic::transport::Server::builder()
+        .layer(tower_http::trace::TraceLayer::new_for_grpc())
+        .layer(rustygod_server::telemetry::MetricsLayer::default())
         .add_service(ProductServiceServer::new(ProductServiceImpl::new(
             store.clone(),
             db.clone(),
