@@ -39,6 +39,12 @@ message ListPluginsResponse {
   repeated PluginManifestInfo plugins = 1;
 }
 
+message UnregisterPluginRequest { string name = 1; }
+message UnregisterPluginResponse {
+  bool unregistered = 1;
+  repeated rustygod.common.Error errors = 2;
+}
+
 message CalculateTaxRequest {
   int64 subtotal_cents = 1;
   int64 rate_bps = 2;
@@ -51,6 +57,7 @@ message CalculateTaxResponse {
 
 service PluginService {
   rpc RegisterPlugin(RegisterPluginRequest) returns (RegisterPluginResponse);
+  rpc UnregisterPlugin(UnregisterPluginRequest) returns (UnregisterPluginResponse);
   rpc CallPlugin(CallPluginRequest) returns (CallPluginResponse);
   rpc ListPlugins(ListPluginsRequest) returns (ListPluginsResponse);
   // Convenience over the flat-rate-tax reference plugin.

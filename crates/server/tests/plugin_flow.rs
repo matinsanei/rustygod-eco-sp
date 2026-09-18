@@ -4,7 +4,7 @@
 use rustygod_db::database_url;
 use rustygod_proto::plugin::{
     plugin_service_server::PluginService, CalculateTaxRequest, CallPluginRequest,
-    ListPluginsRequest, PluginManifestInfo, RegisterPluginRequest,
+    ListPluginsRequest, PluginManifestInfo, RegisterPluginRequest, UnregisterPluginRequest,
 };
 use rustygod_server::service_plugin::PluginServiceImpl;
 use tonic::Request;
@@ -124,4 +124,94 @@ async fn grpc_plugin_lifecycle() {
         .unwrap()
         .into_inner();
     assert!(!list.plugins.iter().any(|p| p.name == "junk"));
+}
+
+#[tokio::test]
+async fn grpc_plugin_persistence_and_public_points() {
+    std::env::set_var("RSA_PRIVATE_KEY", test_key());
+    let db = rustygod_db::connect(&database_url()).await.unwrap();
+    let svc = PluginServiceImpl::new(Some(db.clone()));
+
+    // Register a validator copy under a new name (persisted to postgres).
+    let v = rustygod_plugins::reference_validator_plugin().unwrap();
+    let reg = svc
+        .register_plugin(
+            staff_req(RegisterPluginRequest {
+                manifest: Some(PluginManifestInfo {
+                    name: "ci-validator".into(),
+                    version: v.manifest.version.clone(),
+                    extension_points: v.manifest.extension_points.clone(),
+                    capabilities: v.manifest.capabilities.clone(),
+                }),
+                wasm: v.wasm.clone(),
+                config: Default::default(),
+            })
+            .await,
+        )
+        .await
+        .unwrap()
+        .into_inner();
+    assert!(reg.registered, "{:?}", reg.errors);
+
+    // A FRESH service (empty memory) serves it from the database.
+    let svc2 = PluginServiceImpl::new(Some(db.clone()));
+    let out = svc2
+        .call_plugin(
+            staff_req(CallPluginRequest {
+                name: "ci-validator".into(),
+                function: "checkout.validate".into(),
+                payload_json: r#"{"total_cents":100,"min_cents":500}"#.into(),
+            })
+            .await,
+        )
+        .await
+        .unwrap()
+        .into_inner();
+    assert!(out.errors.is_empty());
+    assert!(out.output_json.contains("\"MIN_ORDER\""), "{}", out.output_json);
+
+    // Builtins can't be unregistered; customs can (memory + row).
+    let denied = svc
+        .unregister_plugin(
+            staff_req(UnregisterPluginRequest { name: "flat-rate-tax".into() }).await,
+        )
+        .await
+        .unwrap()
+        .into_inner();
+    assert!(!denied.unregistered);
+
+    let gone = svc
+        .unregister_plugin(
+            staff_req(UnregisterPluginRequest { name: "ci-validator".into() }).await,
+        )
+        .await
+        .unwrap()
+        .into_inner();
+    assert!(gone.unregistered);
+
+    // Public points: storefront calls without auth when env-listed.
+    std::env::set_var("RUSTYGOD_PUBLIC_POINTS", "calculate_tax");
+    let svc3 = PluginServiceImpl::new(Some(db));
+    let open = svc3
+        .calculate_tax(Request::new(CalculateTaxRequest {
+            subtotal_cents: 2000,
+            rate_bps: 1000,
+        }))
+        .await
+        .unwrap()
+        .into_inner();
+    assert!(open.errors.is_empty());
+    assert_eq!((open.tax_cents, open.total_cents), (200, 2200));
+
+    // ...but unlisted points still demand staff.
+    let err = svc3
+        .call_plugin(Request::new(CallPluginRequest {
+            name: "min-order-validator".into(),
+            function: "checkout.validate".into(),
+            payload_json: "{}".into(),
+        }))
+        .await
+        .unwrap_err();
+    assert_eq!(err.code(), tonic::Code::Unauthenticated);
+    std::env::remove_var("RUSTYGOD_PUBLIC_POINTS");
 }

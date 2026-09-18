@@ -57,8 +57,7 @@ fn flat_rate_tax_computes_half_up() {
 }
 
 #[test]
-fn undeclared_function_is_rejected_before_wasm() {
-    let pkg = tax_pkg(&[]);
+fn undeclared_function_is_rejected_before_wasm() {    let pkg = tax_pkg(&[]);
     let err = call(&pkg, "refund_money", &serde_json::json!({})).unwrap_err();
     assert!(err.to_string().contains("not one of the plugin's extension points"), "{err}");
 }
@@ -80,7 +79,7 @@ fn emitter_wasm() -> Vec<u8> {
       (import "extism:host/env" "alloc" (func $alloc (param i64) (result i64)))
       (import "extism:host/env" "output_set" (func $oset (param i64 i64)))
       (import "extism:host/env" "store_u8" (func $store (param i64 i32)))
-      (import "extism:host/user" "emit_event" (func $emit (param i64) (result i64)))
+      (import "extism:host/user" "emit_event" (func $emit (param i64 i64) (result i64)))
       (memory (export "memory") 1)
       (func $emit_bytes (param $o i64) (param $b0 i32) (param $b1 i32)
              (param $b2 i32) (param $b3 i32) (param $b4 i32) (result i64)
@@ -98,7 +97,7 @@ fn emitter_wasm() -> Vec<u8> {
           (i32.const 111) (i32.const 114) (i32.const 100) (i32.const 101) (i32.const 114)))
         (local.set $o (call $emit_bytes (local.get $o)
           (i32.const 46) (i32.const 112) (i32.const 97) (i32.const 105) (i32.const 100)))
-        (call $emit (i64.sub (local.get $o) (i64.const 10))) (drop)
+        (call $emit (i64.sub (local.get $o) (i64.const 10)) (i64.const 10)) (drop)
         ;; answer {"ok":true}
         (local.set $start (call $alloc (i64.const 11)))
         (local.set $o (call $emit_bytes (local.get $start)
@@ -134,4 +133,42 @@ fn events_capability_gates_host_access() {
     let (out, events) = call(&mk(vec!["events"]), "on_order_paid", &serde_json::json!({})).unwrap();
     assert_eq!(out["ok"], true);
     assert_eq!(events, vec!["order.paid"]);
+}
+
+#[test]
+fn min_order_validator_passes_and_rejects() {
+    let pkg = rustygod_plugins::reference_validator_plugin().unwrap();
+    let (out, _) = call(
+        &pkg,
+        "checkout.validate",
+        &serde_json::json!({"total_cents": 500, "min_cents": 1000}),
+    )
+    .unwrap();
+    assert_eq!(out["valid"], false);
+    assert_eq!(out["code"], "MIN_ORDER");
+
+    let (out, _) = call(
+        &pkg,
+        "checkout.validate",
+        &serde_json::json!({"total_cents": 1000, "min_cents": 1000}),
+    )
+    .unwrap();
+    assert_eq!(out["valid"], true);
+    assert_eq!(out["code"], "OK");
+}
+
+#[test]
+fn order_notifier_emits_slack_message() {
+    let pkg = rustygod_plugins::reference_notifier_plugin().unwrap();
+    let (out, events) = call(
+        &pkg,
+        "order.paid",
+        &serde_json::json!({"order_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"}),
+    )
+    .unwrap();
+    assert_eq!(out["notified"], true);
+    assert_eq!(
+        events,
+        vec!["{\"channel\":\"#orders\",\"text\":\"Order 3fa85f64-5717-4562-b3fc-2c963f66afa6 paid\"}"]
+    );
 }

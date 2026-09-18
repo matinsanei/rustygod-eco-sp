@@ -80,14 +80,14 @@ GraphQL monster.
 - [x] Reproducible benchmark report in BENCHMARK.md (incl. missed targets, honestly)
 - [ ] Follow-ups → Phase 3: OTLP export, 20k rps (read replicas/caching), pool autosizing
 
-### Phase 3 — Plugin platform (IN PROGRESS)
+### Phase 3 — Plugin platform (DONE 2026-09-18)
 - [x] extism WASM runtime (`crates/plugins`: closed-world capabilities + extension points)
-- [x] Reference plugin #1: flat-rate tax in hand-written WAT (no toolchain, HALF_UP cents)
-- [x] `PluginService` gRPC (register/call/list/tax, `manage_apps`) + `sdk/plugin.mjs` sketch
+- [x] 3 reference plugins in hand-written WAT: flat-rate tax, min-order validator, order notifier
+- [x] `PluginService` gRPC (register/unregister/call/list/tax, `manage_apps`) + `sdk/plugin.mjs`
 - [x] Capability-based permission checks on every mutating RPC (Phase 2.5 access layer)
-- [ ] Reference plugins #2–3 (min-order validator, Slack notifier via webhooks)
-- [ ] Plugin persistence (registry is in-memory today) + per-point storefront access
-- [ ] **Exit:** a JS dev ships a plugin without touching Rust
+- [x] Plugin persistence (`rustygod_plugin` table — Django ignores it)
+- [x] Public extension points via `RUSTYGOD_PUBLIC_POINTS` (storefront path, default closed)
+- [ ] Follow-ups → Phase 4: OTLP export, per-point storefront gateway, generated TS clients
 
 ### Phase 4 — Frontend that beats Saleor
 - [ ] Generated TS clients from protos (single source of truth)

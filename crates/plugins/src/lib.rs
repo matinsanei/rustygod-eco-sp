@@ -98,22 +98,60 @@ fn emit_fn(
     outputs: &mut [Val],
     user_data: UserData<Emitted>,
 ) -> std::result::Result<(), extism::Error> {
-    let [Val::I64(off)] = inputs else {
-        return Err(extism::Error::msg("emit_event takes one offset"));
+    let [Val::I64(off), Val::I64(len)] = inputs else {
+        return Err(extism::Error::msg("emit_event takes (offset, length)"));
     };
     let Some(handle) = plugin.memory_handle(*off as u64) else {
         return Err(extism::Error::msg("bad event offset"));
     };
-    let evt = plugin.memory_str(handle)?.to_string();
+    let bytes = plugin.memory_bytes(handle)?;
+    let len = (*len as usize).min(bytes.len());
+    let evt = std::str::from_utf8(&bytes[..len])
+        .map_err(|_| extism::Error::msg("event is not UTF-8"))?
+        .to_string();
     plugin.memory_free(handle)?;
     user_data.get()?.lock().unwrap().push(evt);
     outputs[0] = Val::I64(0);
     Ok(())
 }
 
+/// The second reference plugin: min-order validator in hand-written WAT.
+pub fn reference_validator_plugin() -> Result<PluginPackage> {
+    const WAT: &str = include_str!("../reference/min_order_validate.wat");
+    let wasm = wat::parse_str(WAT).map_err(|e| PluginError::Payload(format!("reference WAT: {e}")))?;
+    Ok(PluginPackage {
+        manifest: PluginManifest {
+            name: "min-order-validator".into(),
+            version: "1.0.0".into(),
+            extension_points: vec!["checkout.validate".into()],
+            capabilities: vec![],
+            config: HashMap::new(),
+        },
+        wasm,
+    })
+}
+
+/// The third reference plugin: order notifier in hand-written WAT.
+/// Needs the `events` capability; the host delivers emitted messages
+/// through the webhook system.
+pub fn reference_notifier_plugin() -> Result<PluginPackage> {
+    const WAT: &str = include_str!("../reference/order_notifier.wat");
+    let wasm = wat::parse_str(WAT).map_err(|e| PluginError::Payload(format!("reference WAT: {e}")))?;
+    Ok(PluginPackage {
+        manifest: PluginManifest {
+            name: "order-notifier".into(),
+            version: "1.0.0".into(),
+            extension_points: vec!["order.paid".into()],
+            capabilities: vec![CAP_EVENTS.to_string()],
+            config: HashMap::new(),
+        },
+        wasm,
+    })
+}
+
 /// The auditable reference plugin: flat-rate tax in hand-written WAT.
-/// Compiled from `reference/tax_flat_rate.wat` at startup — no toolchain,
-/// no registry download, byte-for-byte reviewable.
+/// Compiled at startup — no toolchain, no registry download,
+/// byte-for-byte reviewable.
 pub fn reference_tax_plugin() -> Result<PluginPackage> {
     const WAT: &str = include_str!("../reference/tax_flat_rate.wat");
     let wasm = wat::parse_str(WAT).map_err(|e| PluginError::Payload(format!("reference WAT: {e}")))?;
@@ -146,7 +184,7 @@ fn instantiate(pkg: &PluginPackage, sink: UserData<Emitted>) -> Result<Plugin> {
     if pkg.manifest.capabilities.iter().any(|c| c == CAP_EVENTS) {
         fns.push(Function::new(
             "emit_event",
-            [ValType::I64],
+            [ValType::I64, ValType::I64],
             [ValType::I64],
             sink,
             emit_fn,

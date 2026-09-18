@@ -16,6 +16,7 @@ pub mod giftcards;
 pub mod invoices;
 pub mod order_store;
 pub mod payments;
+pub mod plugin_store;
 pub mod promotions;
 pub mod relations;
 pub mod webhooks;
@@ -40,6 +41,8 @@ pub enum DbError {
     Invoice(String),
     #[error("app error: {0}")]
     App(String),
+    #[error("plugin store error: {0}")]
+    PluginStore(String),
     #[error("lock poisoned: {0}")]
     Lock(String),
 }

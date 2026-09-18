@@ -182,10 +182,14 @@ inactive apps never authorize.
 ## Plugins (WASM extensions)
 
 Saleor plugins were Python-only and in-process. Ours are sandboxed WASM
-with declared capabilities (`log`, `events`) and extension points —
-`crates/plugins/reference/tax_flat_rate.wat` is a hand-written,
-toolchain-free flat-rate tax plugin (integer cents, HALF_UP) you can audit
-to the byte. `PluginService` registers/calls modules (staff: `manage_apps`);
+with declared capabilities (`log`, `events`) and extension points — three
+hand-written, toolchain-free reference plugins (integer math, auditable to
+the byte): **flat-rate-tax** (`calculate_tax`), **min-order-validator**
+(`checkout.validate`), **order-notifier** (`order.paid`, emits through the
+webhook path). `PluginService` registers/calls/lists/unregisters modules
+(staff: `manage_apps`; builtins pinned); the registry persists in the
+`rustygod_plugin` table (ours — Django ignores it). Extension points named
+in `RUSTYGOD_PUBLIC_POINTS` are callable without auth (the storefront path).
 `sdk/plugin.mjs` is the JS client sketch.
 
 ## Roadmap
