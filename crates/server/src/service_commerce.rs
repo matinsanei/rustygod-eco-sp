@@ -13,6 +13,21 @@ use rustygod_proto::commerce::{
 use sea_orm::DatabaseConnection;
 use tonic::{Request, Response, Status};
 
+impl WarehouseServiceImpl {
+    fn wh_info(w: &rustygod_db::entities::warehouse_warehouse::Model) -> WarehouseInfo {
+        WarehouseInfo {
+            id: w.id.to_string(),
+            name: w.name.clone(),
+            slug: w.slug.clone(),
+            email: w.email.clone(),
+        }
+    }
+
+    fn wh_err(e: rustygod_db::DbError) -> rustygod_proto::common::Error {
+        err("WAREHOUSE_ERROR", e.to_string())
+    }
+}
+
 fn err(code: &str, message: String) -> rustygod_proto::common::Error {
     rustygod_proto::common::Error {
         code: code.into(),
@@ -143,8 +158,7 @@ impl ShippingService for ShippingServiceImpl {
     }
 }
 
-fn menu_item_to_proto(m: &commerce::MenuItemView) -> MenuItemInfo {
-    MenuItemInfo {
+fn menu_item_to_proto(m: &commerce::MenuItemView) -> MenuItemInfo {    MenuItemInfo {
         id: m.id.to_string(),
         name: m.name.clone(),
         url: m.url.clone(),
@@ -499,6 +513,168 @@ impl WarehouseService for WarehouseServiceImpl {
             .await
             .map_err(|e| Status::internal(e.to_string()))?;
         Ok(Response::new(ReleaseReservationResponse { ok: true }))
+    }
+
+    async fn create_warehouse(
+        &self,
+        request: Request<CreateWarehouseRequest>,
+    ) -> Result<Response<WarehouseResponse>, Status> {
+        let db = self.db()?;
+        crate::access::authorize(db, request.metadata(), crate::access::MANAGE_PRODUCTS).await?;
+        let r = request.into_inner();
+        match rustygod_db::warehouses::create_warehouse(
+            db,
+            rustygod_db::warehouses::NewWarehouse {
+                name: r.name,
+                slug: r.slug,
+                email: r.email,
+                street: r.street,
+                city: r.city,
+                postal_code: r.postal_code,
+                country: r.country,
+                is_private: r.is_private,
+                cc_option: if r.cc_option.is_empty() { "disabled".into() } else { r.cc_option },
+            },
+        )
+        .await
+        {
+            Ok(w) => Ok(Response::new(WarehouseResponse {
+                warehouse: Some(Self::wh_info(&w)),
+                errors: vec![],
+            })),
+            Err(e) => Ok(Response::new(WarehouseResponse {
+                warehouse: None,
+                errors: vec![Self::wh_err(e)],
+            })),
+        }
+    }
+
+    async fn update_warehouse(
+        &self,
+        request: Request<UpdateWarehouseRequest>,
+    ) -> Result<Response<WarehouseResponse>, Status> {
+        let db = self.db()?;
+        crate::access::authorize(db, request.metadata(), crate::access::MANAGE_PRODUCTS).await?;
+        let r = request.into_inner();
+        let id: uuid::Uuid = r.id.parse().map_err(|_| Status::invalid_argument("id must be a UUID"))?;
+        match rustygod_db::warehouses::update_warehouse(
+            db,
+            id,
+            rustygod_db::warehouses::WarehousePatch {
+                name: (!r.name.is_empty()).then_some(r.name),
+                email: (!r.email.is_empty()).then_some(r.email),
+                cc_option: (!r.cc_option.is_empty()).then_some(r.cc_option),
+                is_private: r.set_private.then_some(r.is_private),
+            },
+        )
+        .await
+        {
+            Ok(w) => Ok(Response::new(WarehouseResponse {
+                warehouse: Some(Self::wh_info(&w)),
+                errors: vec![],
+            })),
+            Err(e) => Ok(Response::new(WarehouseResponse {
+                warehouse: None,
+                errors: vec![Self::wh_err(e)],
+            })),
+        }
+    }
+
+    async fn delete_warehouse(
+        &self,
+        request: Request<DeleteWarehouseRequest>,
+    ) -> Result<Response<DeleteWarehouseResponse>, Status> {
+        let db = self.db()?;
+        crate::access::authorize(db, request.metadata(), crate::access::MANAGE_PRODUCTS).await?;
+        let id: uuid::Uuid = request.into_inner().id.parse().map_err(|_| Status::invalid_argument("id must be a UUID"))?;
+        match rustygod_db::warehouses::delete_warehouse(db, id).await {
+            Ok(()) => Ok(Response::new(DeleteWarehouseResponse { ok: true, errors: vec![] })),
+            Err(e) => Ok(Response::new(DeleteWarehouseResponse {
+                ok: false,
+                errors: vec![Self::wh_err(e)],
+            })),
+        }
+    }
+
+    async fn upsert_stock(
+        &self,
+        request: Request<UpsertStockRequest>,
+    ) -> Result<Response<UpsertStockResponse>, Status> {
+        let db = self.db()?;
+        crate::access::authorize(db, request.metadata(), crate::access::MANAGE_PRODUCTS).await?;
+        let r = request.into_inner();
+        let wh: uuid::Uuid = r.warehouse_id.parse().map_err(|_| Status::invalid_argument("warehouse_id must be a UUID"))?;
+        let vid: i32 = r.variant_id.parse().map_err(|_| Status::invalid_argument("variant_id must be an integer"))?;
+        match rustygod_db::warehouses::upsert_stock(db, wh, vid, r.quantity).await {
+            Ok(s) => Ok(Response::new(UpsertStockResponse {
+                stock: Some(StockInfo {
+                    warehouse_id: s.warehouse_id.to_string(),
+                    quantity: s.quantity,
+                    quantity_allocated: s.quantity_allocated,
+                }),
+                errors: vec![],
+            })),
+            Err(e) => Ok(Response::new(UpsertStockResponse {
+                stock: None,
+                errors: vec![Self::wh_err(e)],
+            })),
+        }
+    }
+
+    async fn list_zones(
+        &self,
+        _request: Request<ListZonesRequest>,
+    ) -> Result<Response<ListZonesResponse>, Status> {
+        let zones = rustygod_db::warehouses::list_zones(self.db()?)
+            .await
+            .map_err(|e| Status::internal(e.to_string()))?;
+        Ok(Response::new(ListZonesResponse {
+            zones: zones
+                .into_iter()
+                .map(|z| ZoneInfo {
+                    id: z.id.to_string(),
+                    name: z.name,
+                    countries: z.countries,
+                    is_default: z.is_default,
+                })
+                .collect(),
+        }))
+    }
+
+    async fn assign_zone(
+        &self,
+        request: Request<ZoneLinkRequest>,
+    ) -> Result<Response<ZoneLinkResponse>, Status> {
+        let db = self.db()?;
+        crate::access::authorize(db, request.metadata(), crate::access::MANAGE_PRODUCTS).await?;
+        let r = request.into_inner();
+        let wh: uuid::Uuid = r.warehouse_id.parse().map_err(|_| Status::invalid_argument("warehouse_id must be a UUID"))?;
+        let zid: i32 = r.zone_id.parse().map_err(|_| Status::invalid_argument("zone_id must be an integer"))?;
+        match rustygod_db::warehouses::assign_zone(db, wh, zid).await {
+            Ok(()) => Ok(Response::new(ZoneLinkResponse { ok: true, errors: vec![] })),
+            Err(e) => Ok(Response::new(ZoneLinkResponse {
+                ok: false,
+                errors: vec![Self::wh_err(e)],
+            })),
+        }
+    }
+
+    async fn unassign_zone(
+        &self,
+        request: Request<ZoneLinkRequest>,
+    ) -> Result<Response<ZoneLinkResponse>, Status> {
+        let db = self.db()?;
+        crate::access::authorize(db, request.metadata(), crate::access::MANAGE_PRODUCTS).await?;
+        let r = request.into_inner();
+        let wh: uuid::Uuid = r.warehouse_id.parse().map_err(|_| Status::invalid_argument("warehouse_id must be a UUID"))?;
+        let zid: i32 = r.zone_id.parse().map_err(|_| Status::invalid_argument("zone_id must be an integer"))?;
+        match rustygod_db::warehouses::unassign_zone(db, wh, zid).await {
+            Ok(ok) => Ok(Response::new(ZoneLinkResponse { ok, errors: vec![] })),
+            Err(e) => Ok(Response::new(ZoneLinkResponse {
+                ok: false,
+                errors: vec![Self::wh_err(e)],
+            })),
+        }
     }
 }
 

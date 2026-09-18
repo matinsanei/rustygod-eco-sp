@@ -264,9 +264,74 @@ message ReserveStockResponse {
 message ReleaseReservationRequest { string checkout_line_id = 1; }
 message ReleaseReservationResponse { bool ok = 1; }
 
+message CreateWarehouseRequest {
+  string name = 1;
+  string slug = 2;
+  string email = 3;
+  string street = 4;
+  string city = 5;
+  string postal_code = 6;
+  string country = 7;
+  bool is_private = 8;
+  string cc_option = 9; // disabled | local | all
+}
+message WarehouseResponse {
+  WarehouseInfo warehouse = 1;
+  repeated rustygod.common.Error errors = 2;
+}
+
+message UpdateWarehouseRequest {
+  string id = 1;
+  string name = 2;      // empty = unchanged
+  string email = 3;     // empty = unchanged
+  string cc_option = 4; // empty = unchanged
+  bool is_private = 5;
+  bool set_private = 6; // gate for is_private
+}
+message DeleteWarehouseRequest { string id = 1; }
+message DeleteWarehouseResponse {
+  bool ok = 1;
+  repeated rustygod.common.Error errors = 2;
+}
+
+message UpsertStockRequest {
+  string warehouse_id = 1;
+  string variant_id = 2;
+  int32 quantity = 3;
+}
+message UpsertStockResponse {
+  StockInfo stock = 1;
+  repeated rustygod.common.Error errors = 2;
+}
+
+message ZoneInfo {
+  string id = 1;
+  string name = 2;
+  string countries = 3;
+  bool is_default = 4;
+}
+message ListZonesRequest {}
+message ListZonesResponse { repeated ZoneInfo zones = 1; }
+
+message ZoneLinkRequest {
+  string warehouse_id = 1;
+  string zone_id = 2;
+}
+message ZoneLinkResponse {
+  bool ok = 1;
+  repeated rustygod.common.Error errors = 2;
+}
+
 service WarehouseService {
   rpc ListWarehouses(ListWarehousesRequest) returns (ListWarehousesResponse);
   rpc ListStocks(ListStocksRequest) returns (ListStocksResponse);
   rpc ReserveStock(ReserveStockRequest) returns (ReserveStockResponse);
   rpc ReleaseReservation(ReleaseReservationRequest) returns (ReleaseReservationResponse);
+  rpc CreateWarehouse(CreateWarehouseRequest) returns (WarehouseResponse);
+  rpc UpdateWarehouse(UpdateWarehouseRequest) returns (WarehouseResponse);
+  rpc DeleteWarehouse(DeleteWarehouseRequest) returns (DeleteWarehouseResponse);
+  rpc UpsertStock(UpsertStockRequest) returns (UpsertStockResponse);
+  rpc ListZones(ListZonesRequest) returns (ListZonesResponse);
+  rpc AssignZone(ZoneLinkRequest) returns (ZoneLinkResponse);
+  rpc UnassignZone(ZoneLinkRequest) returns (ZoneLinkResponse);
 }

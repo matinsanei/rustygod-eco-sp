@@ -18,6 +18,7 @@ pub mod order_store;
 pub mod payments;
 pub mod plugin_store;
 pub mod taxes;
+pub mod warehouses;
 pub mod promotions;
 pub mod relations;
 pub mod webhooks;
@@ -44,6 +45,8 @@ pub enum DbError {
     App(String),
     #[error("plugin store error: {0}")]
     PluginStore(String),
+    #[error("warehouse error: {0}")]
+    Warehouse(String),
     #[error("lock poisoned: {0}")]
     Lock(String),
 }

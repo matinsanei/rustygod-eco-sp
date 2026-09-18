@@ -19,6 +19,7 @@ use tonic::{metadata::MetadataMap, Status};
 pub const MANAGE_GIFT_CARD: &str = "manage_gift_card";
 pub const MANAGE_ORDERS: &str = "manage_orders";
 pub const MANAGE_APPS: &str = "manage_apps";
+pub const MANAGE_PRODUCTS: &str = "manage_products";
 
 #[derive(Debug)]
 pub enum Requestor {
