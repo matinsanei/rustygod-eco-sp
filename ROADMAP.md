@@ -67,10 +67,10 @@ GraphQL monster.
 
 ### Phase 1 — Core parity (NOW, ~50% → 80%)
 - [x] Catalog, checkout, orders, promotions, payments, webhooks, auth, fulfillment, AI-v1
-- [ ] Giftcard issue/redeem, draft orders, invoice records
-- [ ] Allocation-table stock model (Django parity on pre-allocation)
+- [x] Giftcard issue/redeem, draft orders, invoice records (123 tests green)
+- [x] Allocation-table stock model (draft complete writes `warehouse_allocation`)
 - [ ] Promotion gifts + order promotions on checkout totals
-- [ ] **Exit:** 120+ contract tests green, smoke covers full buy flow
+- [ ] **Exit:** 120+ contract tests green ✓, smoke covers full buy flow
 
 ### Phase 2 — Production hardening
 - [ ] OpenTelemetry tracing + metrics on every RPC

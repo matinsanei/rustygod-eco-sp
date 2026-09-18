@@ -124,6 +124,7 @@ Saleor's **1,219 test files** are the spec. We don't reimplement vibes — we po
 | `db/tests/contract_commerce.rs` (8) | discount/shipping/giftcard/menu/page/account/channel/tax/warehouse tests | voucher/promotion rules; shipping listings; giftcard rows; menu tree; address round-trip; stock reserve/release |
 | `server/tests/flow.rs` (4) | `checkout/tests/test_checkout_complete.py`, `test_order_from_checkout.py` | complete mints matching order; checkout consumed exactly once; bad variant rejected; order numbering |
 | `core/tests/payment_calc.rs` (8) + `db/tests/contract_payments.rs` (3) | `payment/transaction_item_calculations.py`, manual gateway | event-group recalc (pending/success/adjust/back/reverse), idempotent create/events, guard rails, order full/partial/none refresh |
+| `core giftcard/draft/invoice` (7+3+3) + `db/tests/contract_giftcards.rs` (9) + `contract_drafts.rs` (7) + `contract_invoices.rs` (4) | `giftcard/tests/`, `graphql/order/mutations/draft_order_*`, `graphql/invoice/tests/` | dashed codes + active(date) + restrictions; draft merge/split/allocate-on-complete; invoice pending→success→sent + deletion flow |
 | `core/tests/discount_math.rs` (7) + `db/tests/contract_promotions.rs` (3) | `discount/utils/promotion.py`, `prices/discount.py`, voucher/checkout flows | HALF_UP percentage, floor-zero fixed, best-rule, predicate AND/OR + base64 GIDs; live 30% rule → 40.00→28.00; DISCOUNT voucher → totals + usage increment |
 | `ai` unit + `ai/tests/ai_contract.rs` (4+4) | `product/tests/test_product_search.py` | trigram ranking + empty-gibberish; co-purchase scores sorted; chat grounded; embedder determinism + vector-store top-k |
 
@@ -141,7 +142,9 @@ service CheckoutService { CreateCheckout · GetCheckout · AddLines · CompleteC
 service OrderService    { GetOrder · ListOrders · CreateFulfillment · CancelFulfillment · RefundFulfillment · ListFulfillments }
 service DiscountService { ValidateVoucher · ListPromotions }
 service ShippingService { ListShippingMethods }
-service GiftCardService { GetGiftCard }
+service GiftCardService { Issue · GetByCode · AttachToCheckout · DetachFromCheckout · CheckoutBalance · Redeem · AdjustBalance · Refund · SetActive }
+service DraftOrderService { CreateDraftOrder · AddDraftLines · SetDraftLineQuantity · RemoveDraftLine · CompleteDraftOrder · DeleteDraftOrder }
+service InvoiceService { RequestInvoice · FulfillInvoice · SendInvoice · RequestDeletion · DeleteInvoice · ListReady }
 service MenuService     { GetMenu }
 service PageService     { GetPage · ListPages }
 service AccountService  { GetCustomer · CreateAddress }
