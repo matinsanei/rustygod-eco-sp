@@ -13,8 +13,8 @@
 
 use chrono::Utc;
 use sea_orm::{
-    ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, PaginatorTrait, QueryFilter,
-    QueryOrder, QuerySelect, SelectorTrait, Set,
+    ActiveModelTrait, ColumnTrait, ConnectionTrait, DatabaseConnection, EntityTrait,
+    PaginatorTrait, QueryFilter, QueryOrder, QuerySelect, SelectorTrait, Set,
 };
 
 use crate::{
@@ -51,29 +51,45 @@ pub async fn trigger_event(
     payload_json: &str,
 ) -> Result<Vec<i32>> {
     use sea_orm::TransactionTrait;
+    let txn = db.begin().await?;
+    let out = trigger_event_tx(&txn, event_type, channel_slug, payload_json).await?;
+    txn.commit().await?;
+    Ok(out)
+}
+
+/// Transactional core of [`trigger_event`]: the OUTBOX write. Call this
+/// INSIDE the business transaction (checkout complete does) so deliveries
+/// are atomic with money: crash before commit → nothing; crash after →
+/// rows stay `pending` for the sweeper / retry worker (R8). Never send
+/// HTTP inside the transaction.
+pub async fn trigger_event_tx(
+    txn: &impl ConnectionTrait,
+    event_type: &str,
+    channel_slug: Option<&str>,
+    payload_json: &str,
+) -> Result<Vec<i32>> {
     if event_type.is_empty() {
         return Err(DbError::SeaOrm(sea_orm::DbErr::Custom(
             "event_type is required".into(),
         )));
     }
-    let txn = db.begin().await?;
     let webhook_ids: Vec<i32> = webhook_webhookevent::Entity::find()
         .select_only()
         .column(webhook_webhookevent::Column::WebhookId)
         .filter(webhook_webhookevent::Column::EventType.eq(event_type))
         .into_tuple::<i32>()
-        .all(&txn)
+        .all(txn)
         .await?;
     let payload = core_eventpayload::ActiveModel {
         payload: Set(payload_json.to_string()),
         created_at: Set(Utc::now().into()),
         ..Default::default()
     }
-    .insert(&txn)
+    .insert(txn)
     .await?;
     let mut out = Vec::new();
     for wid in webhook_ids {
-        let Some(wh) = webhook_webhook::Entity::find_by_id(wid).one(&txn).await? else {
+        let Some(wh) = webhook_webhook::Entity::find_by_id(wid).one(txn).await? else {
             continue;
         };
         if !wh.is_active {
@@ -98,14 +114,32 @@ pub async fn trigger_event(
             webhook_id: Set(wid),
             ..Default::default()
         }
-        .insert(&txn)
+        .insert(txn)
         .await?;
         out.push(d.id);
     }
-    txn.commit().await?;
     Ok(out)
 }
 
+/// Claim one pending delivery for sending: flips `pending` → `sending`
+/// atomically and returns true only to the winner. Multi-instance sweepers
+/// race here; `FOR UPDATE SKIP LOCKED` semantics via the status predicate —
+/// exactly one sender proceeds, the rest see false and move on.
+pub async fn claim_delivery(
+    db: &DatabaseConnection,
+    delivery_id: i32,
+) -> Result<bool> {
+    let res = db
+        .execute(sea_orm::Statement::from_sql_and_values(
+            sea_orm::DatabaseBackend::Postgres,
+            "UPDATE core_eventdelivery SET status = 'sending' \
+             WHERE id = $1 AND status = 'pending'"
+                .to_string(),
+            [delivery_id.into()],
+        ))
+        .await?;
+    Ok(res.rows_affected() == 1)
+}
 /// Record an attempt and roll the delivery status forward, mirroring
 /// Django's transport outcome handling:
 ///

@@ -119,6 +119,16 @@ async fn complete_mints_allocates_events_and_replays() {
     assert!(again.replayed);
     assert_eq!(again.order_id, out.order_id);
 
+    // Q5: replay writes NO second PLACED — the trail has exactly one.
+    let placed_count = order_orderevent::Entity::find()
+        .filter(order_orderevent::Column::OrderId.eq(out.order_id))
+        .filter(order_orderevent::Column::Type.eq("placed"))
+        .all(&db)
+        .await
+        .unwrap()
+        .len();
+    assert_eq!(placed_count, 1, "replay must not duplicate PLACED");
+
     // Reconciliation: a fresh atomic completion is fully consistent.
     let checks = rustygod_db::reconcile::reconcile_order(&db, out.order_id)
         .await

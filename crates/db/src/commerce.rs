@@ -557,3 +557,16 @@ pub async fn release_reservations(
         .await?;
     Ok(())
 }
+
+/// Sweeper: delete expired reservations. Idempotent and multi-instance
+/// safe (deletes commute — two sweepers deleting the same row is a no-op
+/// for the second). Keeps the `free = qty − allocated − reservations`
+/// math from rotting (reviewer R9).
+pub async fn sweep_expired_reservations(db: &DatabaseConnection) -> Result<u64> {
+    let now: sea_orm::prelude::DateTimeWithTimeZone = Utc::now().into();
+    let res = warehouse_reservation::Entity::delete_many()
+        .filter(warehouse_reservation::Column::ReservedUntil.lte(now))
+        .exec(db)
+        .await?;
+    Ok(res.rows_affected)
+}

@@ -1,10 +1,11 @@
 use rustygod_core::order::Order;
 use rustygod_db::{fulfillment, order_store};
 use rustygod_proto::order::{
-    order_service_server::OrderService, CancelFulfillmentRequest, CreateFulfillmentRequest,
-    FulfillmentInfo, FulfillmentLineInfo, FulfillmentResponse, GetOrderRequest, GetOrderResponse,
-    ListFulfillmentsRequest, ListFulfillmentsResponse, ListOrdersRequest, ListOrdersResponse,
-    ReconCheck, ReconcileOrderRequest, ReconcileOrderResponse, RefundFulfillmentRequest,
+    order_service_server::OrderService, CancelFulfillmentRequest, CancelOrderRequest,
+    CancelOrderResponse, CreateFulfillmentRequest, FulfillmentInfo, FulfillmentLineInfo,
+    FulfillmentResponse, GetOrderRequest, GetOrderResponse, ListFulfillmentsRequest,
+    ListFulfillmentsResponse, ListOrdersRequest, ListOrdersResponse, ReconCheck,
+    ReconcileOrderRequest, ReconcileOrderResponse, RefundFulfillmentRequest,
 };
 use sea_orm::DatabaseConnection;
 use tonic::{Request, Response, Status};
@@ -289,6 +290,62 @@ impl OrderService for OrderServiceImpl {
                     field: String::new(),
                 }],
             })),
+        }
+    }
+
+    async fn cancel_order(
+        &self,
+        request: Request<CancelOrderRequest>,
+    ) -> Result<Response<CancelOrderResponse>, Status> {
+        let db = self.db()?;
+        crate::access::authorize(db, request.metadata(), crate::access::MANAGE_ORDERS).await?;
+        let Ok(order_id) = request.into_inner().id.parse::<Uuid>() else {
+            return Ok(Response::new(CancelOrderResponse {
+                status: String::new(),
+                errors: vec![rustygod_proto::common::Error {
+                    code: "INVALID".into(),
+                    message: "id must be a UUID".into(),
+                    field: String::new(),
+                }],
+            }));
+        };
+        match rustygod_db::cancel::cancel_order(db, order_id).await {
+            Ok(out) => {
+                // Post-commit fast path, same as complete (best-effort).
+                if !out.delivery_ids.is_empty() {
+                    let dbc = db.clone();
+                    let domain = std::env::var("RUSTYGOD_DOMAIN")
+                        .unwrap_or_else(|_| "localhost".into());
+                    let ids = out.delivery_ids.clone();
+                    tokio::spawn(async move {
+                        for id in ids {
+                            let _ = crate::service_webhook::deliver(&dbc, &domain, id).await;
+                        }
+                    });
+                }
+                Ok(Response::new(CancelOrderResponse {
+                    status: "canceled".into(),
+                    errors: vec![],
+                }))
+            }
+            Err(e) => {
+                let msg = e.to_string();
+                let code = if msg.contains("not found") {
+                    "NOT_FOUND"
+                } else if msg.contains("REQUIRES_REFUND") {
+                    "REQUIRES_REFUND"
+                } else {
+                    "NOT_APPLICABLE"
+                };
+                Ok(Response::new(CancelOrderResponse {
+                    status: String::new(),
+                    errors: vec![rustygod_proto::common::Error {
+                        code: code.into(),
+                        message: msg,
+                        field: String::new(),
+                    }],
+                }))
+            }
         }
     }
 }

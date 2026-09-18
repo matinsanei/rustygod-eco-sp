@@ -317,7 +317,13 @@ pub async fn delete_checkout_row(
         .await?;
     if !line_ids.is_empty() {
         discount_checkoutlinediscount::Entity::delete_many()
-            .filter(discount_checkoutlinediscount::Column::LineId.is_in(line_ids))
+            .filter(discount_checkoutlinediscount::Column::LineId.is_in(line_ids.clone()))
+            .exec(db)
+            .await?;
+        // Reservations reference lines (FK, no cascade): release them with
+        // the checkout, or they rot and pin stock math forever.
+        crate::entities::warehouse_reservation::Entity::delete_many()
+            .filter(crate::entities::warehouse_reservation::Column::CheckoutLineId.is_in(line_ids))
             .exec(db)
             .await?;
     }

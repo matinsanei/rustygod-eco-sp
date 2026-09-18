@@ -80,6 +80,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     tracing::info!("rustygod-saleor gRPC listening on {addr}");
 
+    // Background sweeper (reservations expiry + webhook outbox sender).
+    if let Some(pool) = db.clone() {
+        rustygod_server::sweeper::spawn(pool);
+    }
+
     // Prometheus scrape endpoint (Phase 2 observability). Serves
     // grpc_requests_total + grpc_request_duration_seconds.
     let metrics_addr: std::net::SocketAddr = std::env::var("RUSTYGOD_METRICS_ADDR")

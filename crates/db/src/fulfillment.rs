@@ -20,10 +20,33 @@ use uuid::Uuid;
 
 use crate::{
     entities::{
-        order_fulfillment, order_fulfillmentline, order_order, order_orderline, warehouse_stock,
+        order_fulfillment, order_fulfillmentline, order_order, order_orderline,
+        product_productvariant, warehouse_stock,
     },
     DbError, Result,
 };
+
+/// Track-inventory flag for the variants on these order lines (one query).
+/// Missing variants default to tracked (safe side: stock still moves).
+async fn tracked_map(
+    db: &impl sea_orm::ConnectionTrait,
+    variant_ids: &[i32],
+) -> Result<std::collections::HashMap<i32, bool>> {
+    use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QuerySelect, SelectorTrait};
+    if variant_ids.is_empty() {
+        return Ok(Default::default());
+    }
+    Ok(product_productvariant::Entity::find()
+        .select_only()
+        .column(product_productvariant::Column::Id)
+        .column(product_productvariant::Column::TrackInventory)
+        .filter(product_productvariant::Column::Id.is_in(variant_ids.to_vec()))
+        .into_tuple::<(i32, bool)>()
+        .all(db)
+        .await?
+        .into_iter()
+        .collect())
+}
 
 fn fail(msg: impl Into<String>) -> DbError {
     DbError::SeaOrm(sea_orm::DbErr::Custom(msg.into()))
@@ -150,6 +173,8 @@ pub async fn create_fulfillment(
     .insert(&txn)
     .await?;
 
+    // Pre-load lines + track flags (Q8: untracked variants move no stock).
+    let mut line_by_id = std::collections::HashMap::new();
     for item in items {
         if item.quantity < 1 {
             return Err(fail("fulfillment quantity must be positive"));
@@ -161,6 +186,17 @@ pub async fn create_fulfillment(
         if line.order_id != order_id {
             return Err(fail("order line does not belong to this order"));
         }
+        line_by_id.insert(item.order_line_id, line);
+    }
+    let vids: Vec<i32> = line_by_id.values().filter_map(|l| l.variant_id).collect();
+    let tracked = tracked_map(&txn, &vids).await?;
+
+    for item in items {
+        let line = line_by_id.remove(&item.order_line_id).expect("pre-loaded");
+        let is_tracked = line
+            .variant_id
+            .map(|v| tracked.get(&v).copied().unwrap_or(true))
+            .unwrap_or(false);
         let done = fulfilled_qty(&txn, item.order_line_id).await?;
         if done + item.quantity > line.quantity {
             return Err(fail(format!(
@@ -170,38 +206,46 @@ pub async fn create_fulfillment(
                 line.quantity
             )));
         }
-        // Resolve stock: explicit or auto-pick.
-        let stock_id = match item.stock_id {
-            Some(sid) => {
-                let s = warehouse_stock::Entity::find_by_id(sid)
-                    .one(&txn)
-                    .await?
-                    .ok_or_else(|| fail("stock not found"))?;
-                if s.quantity - s.quantity_allocated < item.quantity {
-                    return Err(fail("insufficient stock in warehouse"));
+        // Resolve stock: explicit or auto-pick. Untracked variants (digital
+        // goods) skip stock entirely — Q8, the classic Saleor bug.
+        let stock_id = if !is_tracked {
+            None
+        } else {
+            Some(match item.stock_id {
+                Some(sid) => {
+                    let s = warehouse_stock::Entity::find_by_id(sid)
+                        .one(&txn)
+                        .await?
+                        .ok_or_else(|| fail("stock not found"))?;
+                    if s.quantity - s.quantity_allocated < item.quantity {
+                        return Err(fail("insufficient stock in warehouse"));
+                    }
+                    sid
                 }
-                sid
-            }
-            None => {
-                let vid = line.variant_id.ok_or_else(|| fail("line has no variant"))?;
-                pick_stock(&txn, vid, item.quantity).await?
-            }
+                None => {
+                    let vid = line.variant_id.ok_or_else(|| fail("line has no variant"))?;
+                    pick_stock(&txn, vid, item.quantity).await?
+                }
+            })
         };
         order_fulfillmentline::ActiveModel {
             order_line_id: Set(item.order_line_id),
             fulfillment_id: Set(f.id),
             quantity: Set(item.quantity),
-            stock_id: Set(Some(stock_id)),
+            stock_id: Set(stock_id),
             reason: Set(String::new()),
             ..Default::default()
         }
         .insert(&txn)
         .await?;
-        // Bump fulfilled + decrease stock (Django decrease_stock semantics).
+        // Bump fulfilled; decrease stock only for tracked variants
+        // (Django decrease_stock semantics).
         let mut lam: order_orderline::ActiveModel = line.into();
         lam.quantity_fulfilled = Set(lam.quantity_fulfilled.clone().unwrap() + item.quantity);
         lam.update(&txn).await?;
-        decrease_stock_qty(&txn, stock_id, item.quantity).await?;
+        if let Some(sid) = stock_id {
+            decrease_stock_qty(&txn, sid, item.quantity).await?;
+        }
     }
     refresh_order_status(&txn, order_id).await?;
     txn.commit().await?;

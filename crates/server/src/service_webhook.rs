@@ -51,6 +51,53 @@ impl WebhookServiceImpl {
     }
 }
 
+/// Deliver one outbox row over HTTP and record the attempt. Shared by the
+/// SendDelivery RPC, the post-commit fast path, and the sweeper.
+/// Best-effort by design: failures stay `pending` (or land `failed` at the
+/// retry cap) for the next pass — R8.
+pub async fn deliver(
+    db: &DatabaseConnection,
+    domain: &str,
+    id: i32,
+) -> Result<webhooks::DeliveryView, String> {
+    let delivery = webhooks::view(db, id).await.map_err(|e| e.to_string())?;
+    if delivery.status == "success" {
+        return Ok(delivery); // idempotent: delivered stays delivered
+    }
+    let secret = webhooks::webhook_secret(db, delivery.webhook_id)
+        .await
+        .map_err(|e| e.to_string())?
+        .unwrap_or_default();
+    if secret.is_empty() {
+        return Err("webhook has no secret".into());
+    }
+    let headers = webhooks::signed_headers(domain, &delivery.event_type, &delivery.payload, &secret);
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(10))
+        .build()
+        .map_err(|e| e.to_string())?;
+    let mut req = client.post(&delivery.target_url).body(delivery.payload.clone());
+    for (k, v) in &headers {
+        req = req.header(k, v);
+    }
+    let start = std::time::Instant::now();
+    let resp = req.send().await;
+    let duration = start.elapsed().as_secs_f64();
+    let (code, body, resp_headers): (Option<i16>, String, String) = match resp {
+        Ok(r) => {
+            let code = r.status().as_u16() as i16;
+            let headers = format!("{:?}", r.headers());
+            let body: String = r.text().await.unwrap_or_default().chars().take(4000).collect();
+            (Some(code), body, headers)
+        }
+        Err(e) => (None, e.to_string().chars().take(4000).collect(), String::new()),
+    };
+    let req_headers = format!("{headers:?}");
+    webhooks::record_attempt(db, id, code, Some(duration), &req_headers, &body, &resp_headers)
+        .await
+        .map_err(|e| e.to_string())
+}
+
 #[tonic::async_trait]
 impl WebhookService for WebhookServiceImpl {
     async fn trigger_event(
@@ -126,60 +173,14 @@ impl WebhookService for WebhookServiceImpl {
     ) -> Result<Response<SendDeliveryResponse>, Status> {
         let db = self.db()?;
         let id: i32 = request.into_inner().delivery_id.parse().unwrap_or(-1);
-        let delivery = webhooks::view(db, id).await.map_err(|_| {
-            Status::not_found("delivery not found")
-        })?;
-        if delivery.status == "success" {
-            // Idempotent: delivered stays delivered, re-record nothing.
-            return Ok(Response::new(SendDeliveryResponse {
-                delivery: Some(Self::info(&delivery)),
+        match deliver(db, &self.domain, id).await {
+            Ok(updated) => Ok(Response::new(SendDeliveryResponse {
+                delivery: Some(Self::info(&updated)),
                 errors: vec![],
-            }));
+            })),
+            Err(e) if e.contains("RecordNotFound") => Err(Status::not_found("delivery not found")),
+            Err(e) => Err(Status::internal(e)),
         }
-        let secret = webhooks::webhook_secret(db, delivery.webhook_id)
-            .await
-            .map_err(|e| Status::internal(e.to_string()))?
-            .unwrap_or_default();
-        if secret.is_empty() {
-            return Err(Status::internal("webhook has no secret"));
-        }
-        let headers = webhooks::signed_headers(&self.domain, &delivery.event_type, &delivery.payload, &secret);
-        let client = reqwest::Client::builder()
-            .timeout(std::time::Duration::from_secs(10))
-            .build()
-            .map_err(|e| Status::internal(e.to_string()))?;
-        let mut req = client.post(&delivery.target_url).body(delivery.payload.clone());
-        for (k, v) in &headers {
-            req = req.header(k, v);
-        }
-        let start = std::time::Instant::now();
-        let resp = req.send().await;
-        let duration = start.elapsed().as_secs_f64();
-        let (code, body, resp_headers): (Option<i16>, String, String) = match resp {
-            Ok(r) => {
-                let code = r.status().as_u16() as i16;
-                let headers = format!("{:?}", r.headers());
-                let body: String = r.text().await.unwrap_or_default().chars().take(4000).collect();
-                (Some(code), body, headers)
-            }
-            Err(e) => (None, e.to_string().chars().take(4000).collect(), String::new()),
-        };
-        let req_headers = format!("{headers:?}");
-        let updated = webhooks::record_attempt(
-            db,
-            id,
-            code,
-            Some(duration),
-            &req_headers,
-            &body,
-            &resp_headers,
-        )
-        .await
-        .map_err(|e| Status::internal(e.to_string()))?;
-        Ok(Response::new(SendDeliveryResponse {
-            delivery: Some(Self::info(&updated)),
-            errors: vec![],
-        }))
     }
 
     async fn due_deliveries(

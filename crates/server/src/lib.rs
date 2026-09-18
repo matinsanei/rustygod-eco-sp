@@ -9,6 +9,7 @@ pub mod service_draft;
 pub mod service_giftcard;
 pub mod service_invoice;
 pub mod service_plugin;
+pub mod sweeper;
 pub mod service_order;
 pub mod service_payment;
 pub mod service_webhook;

@@ -9,6 +9,11 @@
 //!  3. voucher code row (`promotions::increase_usage` locks it)
 //!  4. gift-card rows (`FOR UPDATE` in `redeem_for_order_tx`)
 //!
+//! SHARED LOCK CONTRACT: `cancel_order` (cancel.rs) takes the SAME order —
+//! order row first, then stock rows ascending by id. Any future writer that
+//! touches (orders × stocks) must lock in this order or concurrent
+//! complete/cancel on one variant deadlocks. No exceptions.
+//!
 //! Idempotency (R3/R7): an order stamped with the checkout token is the
 //! completion record — replaying complete with the same token returns the
 //! existing order instead of minting a second one. Webhooks fire AFTER
@@ -42,6 +47,10 @@ pub struct CompleteOutcome {
     pub number: i32,
     pub status: String,
     pub replayed: bool,
+    /// Outbox delivery ids created atomically with the order. The service
+    /// sends them best-effort right after commit; anything left `pending`
+    /// (crash, 5xx) is picked up by the sweeper — R8.
+    pub delivery_ids: Vec<i32>,
 }
 
 /// Existing completion for a checkout token (idempotency record).
@@ -63,6 +72,7 @@ async fn existing_order(
         number,
         status,
         replayed: true,
+        delivery_ids: vec![],
     }))
 }
 
@@ -98,11 +108,21 @@ pub async fn complete_checkout(
 
     let txn = db.begin().await?;
     // 1. Lock the checkout row.
-    let co = checkout_checkout::Entity::find_by_id(token)
+    let co_opt = checkout_checkout::Entity::find_by_id(token)
         .lock(LockType::Update)
         .one(&txn)
-        .await?
-        .ok_or_else(|| fail("checkout not found"))?;
+        .await?;
+    let Some(co) = co_opt else {
+        // The row is gone: it never existed, or a concurrent completion
+        // committed between our replay read and our lock (R7 race window —
+        // in READ COMMITTED the locked read skips the deleted row).
+        // Re-check the completion record before 404ing.
+        if let Some(done) = existing_order(&txn, token).await? {
+            txn.commit().await?;
+            return Ok(done);
+        }
+        return Err(fail("checkout not found"));
+    };
     let lines = crate::entities::checkout_checkoutline::Entity::find()
         .filter(crate::entities::checkout_checkoutline::Column::CheckoutId.eq(token))
         .order_by_asc(crate::entities::checkout_checkoutline::Column::CreatedAt)
@@ -199,10 +219,9 @@ pub async fn complete_checkout(
     // 8. Delete the checkout (same end state as Django).
     checkout_store::delete_checkout_row(&txn, token).await?;
 
-    txn.commit().await?;
-
-    // 9. Webhooks AFTER commit (R8): fan-out failure leaves pending
-    // deliveries + backoff retry, never rolls back money.
+    // 9. OUTBOX writes inside the same transaction (R8): deliveries are
+    // atomic with money. HTTP sending happens after commit (service,
+    // best-effort) or via the sweeper — never inside this transaction.
     let payload = json!({
         "id": order_id.to_string(),
         "number": order.number,
@@ -210,13 +229,19 @@ pub async fn complete_checkout(
         "checkout_token": token.to_string(),
     })
     .to_string();
-    let _ = webhooks::trigger_event(db, "order_created", Some(&ch_slug), &payload).await;
-    let _ = webhooks::trigger_event(db, "checkout_completed", Some(&ch_slug), &payload).await;
+    let mut delivery_ids =
+        webhooks::trigger_event_tx(&txn, "order_created", Some(&ch_slug), &payload).await?;
+    delivery_ids.extend(
+        webhooks::trigger_event_tx(&txn, "checkout_completed", Some(&ch_slug), &payload).await?,
+    );
+
+    txn.commit().await?;
 
     Ok(CompleteOutcome {
         order_id,
         number: order.number.parse().unwrap_or(0),
         status: order.status.as_str().to_string(),
         replayed: false,
+        delivery_ids,
     })
 }

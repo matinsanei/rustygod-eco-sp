@@ -368,10 +368,26 @@ impl CheckoutService for CheckoutServiceImpl {
             // validation, mint, voucher, gift cards, allocation, events,
             // checkout delete — then webhooks after commit.
             return match rustygod_db::complete::complete_checkout(db, token).await {
-                Ok(out) => Ok(Response::new(CompleteCheckoutResponse {
-                    order_id: out.order_id.to_string(),
-                    errors: vec![],
-                })),
+                Ok(out) => {
+                    // Post-commit fast path (R8): fire outbox deliveries without
+                    // blocking the response; failures stay pending for the
+                    // sweeper. Never touches the committed transaction.
+                    if !out.delivery_ids.is_empty() {
+                        let dbc = db.clone();
+                        let domain = std::env::var("RUSTYGOD_DOMAIN")
+                            .unwrap_or_else(|_| "localhost".into());
+                        let ids = out.delivery_ids.clone();
+                        tokio::spawn(async move {
+                            for id in ids {
+                                let _ = crate::service_webhook::deliver(&dbc, &domain, id).await;
+                            }
+                        });
+                    }
+                    Ok(Response::new(CompleteCheckoutResponse {
+                        order_id: out.order_id.to_string(),
+                        errors: vec![],
+                    }))
+                }
                 Err(e) => {
                     let msg = e.to_string();
                     let code = if msg.contains("not found") {
