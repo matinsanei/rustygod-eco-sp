@@ -89,8 +89,11 @@ GraphQL monster.
 - [x] Public extension points via `RUSTYGOD_PUBLIC_POINTS` (storefront path, default closed)
 - [ ] Follow-ups → Phase 4: OTLP export, per-point storefront gateway, generated TS clients
 
-### Phase 4 — Frontend that beats Saleor
-- [ ] Generated TS clients from protos (single source of truth)
+### Phase 4 — Frontend that beats Saleor (STARTED)
+- [x] Generated TS clients from protos (`sdk/ts`, ts-proto + grpc-js, one command regen)
+- [x] Buy-flow demo over generated clients (live: order #522, unfulfilled)
+- [ ] Storefront app on the SDK (catalog + checkout pages)
+- [ ] Dashboard parity for staff flows (gift cards, drafts, invoices, plugins)
 - [ ] Edge-first storefront (ISR product pages, <100ms TTFB target)
 - [ ] Dashboard v2: generated CRUD from protos, custom views only where valuable
 - [ ] **Exit:** demo shop faster than storefront.saleor.io on every page

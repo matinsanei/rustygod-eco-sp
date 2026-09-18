@@ -192,6 +192,15 @@ webhook path). `PluginService` registers/calls/lists/unregisters modules
 in `RUSTYGOD_PUBLIC_POINTS` are callable without auth (the storefront path).
 `sdk/plugin.mjs` is the JS client sketch.
 
+## TypeScript SDK (generated, single source of truth)
+
+`sdk/ts` holds ts-proto clients generated from `crates/proto` — the same
+modules a storefront ships. Regenerate: `cd sdk/ts && npm run gen`.
+`npm run demo` runs the full buy flow over real gRPC (search → checkout →
+order #522 minted live during development). Known edge, documented in
+`generate.sh`: `getChannel` collides with grpc-js's built-in method, so
+`commerce.ts` carries `@ts-nocheck` (the wire contract is untouched).
+
 ## Roadmap
 
 - [x] Workspace + tonic skeleton (`axum`-ready; gRPC first, REST gateway later)

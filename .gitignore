@@ -5,3 +5,5 @@ target/
 *.tmp
 backups/
 *.dump
+node_modules/
+sdk/ts/dist/
