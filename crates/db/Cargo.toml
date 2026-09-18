@@ -16,3 +16,4 @@ rustygod-core = { path = "../core" }
 [dev-dependencies]
 tokio = { workspace = true }
 fs2 = { workspace = true }
+rust_decimal_macros = { workspace = true }

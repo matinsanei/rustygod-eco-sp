@@ -13,6 +13,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 "proto/commerce.proto",
                 "proto/ai.proto",
                 "proto/payment.proto",
+                "proto/giftcard.proto",
                 "proto/webhook.proto",
                 "proto/auth.proto",
             ],

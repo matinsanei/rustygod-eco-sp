@@ -1,0 +1,91 @@
+syntax = "proto3";
+
+package rustygod.giftcard;
+
+import "common.proto";
+
+// Mirrors saleor/giftcard GiftCard rows + event-sourced mutations.
+message GiftCardInfo {
+  string code = 1;
+  string currency = 2;
+  string initial_balance = 3;
+  string current_balance = 4;
+  bool is_active = 5;
+  string expiry_date = 6; // YYYY-MM-DD or empty
+  string created_by_email = 7;
+}
+
+message IssueGiftCardRequest {
+  string initial_balance = 1;
+  string currency = 2;
+  string created_by_email = 3;
+  string expiry_date = 4; // YYYY-MM-DD or empty
+}
+message IssueGiftCardResponse {
+  GiftCardInfo gift_card = 1;
+  repeated rustygod.common.Error errors = 2;
+}
+
+message GetGiftCardRequest { string code = 1; }
+message GetGiftCardResponse {
+  GiftCardInfo gift_card = 1;
+  repeated rustygod.common.Error errors = 2;
+}
+
+message CheckoutGiftCardRequest {
+  string checkout_id = 1; // checkout token (UUID)
+  string code = 2;
+}
+message CheckoutGiftCardResponse {
+  GiftCardInfo gift_card = 1;
+  repeated rustygod.common.Error errors = 2;
+}
+
+message CheckoutBalanceRequest { string checkout_id = 1; }
+message CheckoutBalanceResponse {
+  string currency = 1;
+  string balance = 2;
+  repeated rustygod.common.Error errors = 3;
+}
+
+message RedeemGiftCardRequest {
+  string code = 1;
+  string order_id = 2; // optional UUID
+  string amount = 3;
+}
+message RedeemGiftCardResponse {
+  string amount_taken = 1;
+  GiftCardInfo gift_card = 2;
+  repeated rustygod.common.Error errors = 3;
+}
+
+message BalanceMutationRequest {
+  string code = 1;
+  string amount = 2; // adjust: new balance; refund: amount to add back
+  string order_id = 3; // refund only, optional UUID
+}
+message BalanceMutationResponse {
+  GiftCardInfo gift_card = 1;
+  repeated rustygod.common.Error errors = 2;
+}
+
+message SetActiveRequest {
+  string code = 1;
+  bool active = 2;
+}
+message SetActiveResponse {
+  GiftCardInfo gift_card = 1;
+  repeated rustygod.common.Error errors = 2;
+}
+
+service GiftCardService {
+  rpc Issue(IssueGiftCardRequest) returns (IssueGiftCardResponse);
+  rpc GetByCode(GetGiftCardRequest) returns (GetGiftCardResponse);
+  rpc AttachToCheckout(CheckoutGiftCardRequest) returns (CheckoutGiftCardResponse);
+  rpc DetachFromCheckout(CheckoutGiftCardRequest) returns (CheckoutGiftCardResponse);
+  rpc CheckoutBalance(CheckoutBalanceRequest) returns (CheckoutBalanceResponse);
+  rpc Redeem(RedeemGiftCardRequest) returns (RedeemGiftCardResponse);
+  rpc AdjustBalance(BalanceMutationRequest) returns (BalanceMutationResponse);
+  rpc Refund(BalanceMutationRequest) returns (BalanceMutationResponse);
+  rpc SetActive(SetActiveRequest) returns (SetActiveResponse);
+}

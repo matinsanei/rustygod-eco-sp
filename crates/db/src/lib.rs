@@ -10,6 +10,7 @@ pub mod checkout_store;
 pub mod commerce;
 pub mod entities;
 pub mod fulfillment;
+pub mod giftcards;
 pub mod order_store;
 pub mod payments;
 pub mod promotions;
@@ -24,6 +25,12 @@ pub enum DbError {
     SeaOrm(#[from] sea_orm::DbErr),
     #[error("checkout {0} not found")]
     CheckoutNotFound(String),
+    #[error("gift card {0} not found")]
+    GiftCardNotFound(String),
+    #[error("gift card not applicable: {0}")]
+    GiftCardNotApplicable(String),
+    #[error("gift card conflict: {0}")]
+    GiftCardConflict(String),
     #[error("lock poisoned: {0}")]
     Lock(String),
 }

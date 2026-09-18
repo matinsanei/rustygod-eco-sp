@@ -20,6 +20,8 @@ sha1 = { workspace = true }
 digest = { workspace = true }
 rsa = { workspace = true }
 rustygod-proto = { path = "../proto" }
+rand = { workspace = true }
+rust_decimal_macros = { workspace = true }
 
 [dev-dependencies]
 rand = { workspace = true }

@@ -5,6 +5,7 @@
 pub mod auth;
 pub mod checkout;
 pub mod discount;
+pub mod giftcard;
 pub mod money;
 pub mod order;
 pub mod payments;

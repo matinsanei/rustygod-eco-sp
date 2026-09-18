@@ -67,26 +67,6 @@ service ShippingService {
   rpc ListShippingMethods(ListShippingMethodsRequest) returns (ListShippingMethodsResponse);
 }
 
-// ---- GiftCard (mirrors saleor/giftcard) ----
-
-message GiftCardInfo {
-  string code = 1;
-  string currency = 2;
-  string current_balance_amount = 3;
-  string initial_balance_amount = 4;
-  bool is_active = 5;
-}
-
-message GetGiftCardRequest { string code = 1; }
-message GetGiftCardResponse {
-  GiftCardInfo gift_card = 1;
-  repeated rustygod.common.Error errors = 2;
-}
-
-service GiftCardService {
-  rpc GetGiftCard(GetGiftCardRequest) returns (GetGiftCardResponse);
-}
-
 // ---- Menu (mirrors saleor/menu, MPTT tree) ----
 
 message MenuItemInfo {

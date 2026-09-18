@@ -1,10 +1,11 @@
 //! gRPC services over `rustygod_db::commerce`: discount, shipping,
-//! giftcard, menu, page, account, channel, tax, warehouse.
+//! menu, page, account, channel, tax, warehouse.
+//! (Gift cards live in the dedicated `GiftCardService`, `service_giftcard`.)
 
 use rustygod_db::commerce;
 use rustygod_proto::commerce::{
     account_service_server::AccountService, channel_service_server::ChannelService,
-    discount_service_server::DiscountService, gift_card_service_server::GiftCardService,
+    discount_service_server::DiscountService,
     menu_service_server::MenuService, page_service_server::PageService,
     shipping_service_server::ShippingService, tax_service_server::TaxService,
     warehouse_service_server::WarehouseService, *,
@@ -42,7 +43,6 @@ macro_rules! svc {
 
 svc!(DiscountServiceImpl);
 svc!(ShippingServiceImpl);
-svc!(GiftCardServiceImpl);
 svc!(MenuServiceImpl);
 svc!(PageServiceImpl);
 svc!(AccountServiceImpl);
@@ -140,34 +140,6 @@ impl ShippingService for ShippingServiceImpl {
                 })
                 .collect(),
         }))
-    }
-}
-
-#[tonic::async_trait]
-impl GiftCardService for GiftCardServiceImpl {
-    async fn get_gift_card(
-        &self,
-        request: Request<GetGiftCardRequest>,
-    ) -> Result<Response<GetGiftCardResponse>, Status> {
-        match commerce::get_gift_card(self.db()?, &request.into_inner().code)
-            .await
-            .map_err(|e| Status::internal(e.to_string()))?
-        {
-            Some(g) => Ok(Response::new(GetGiftCardResponse {
-                gift_card: Some(GiftCardInfo {
-                    code: g.code,
-                    currency: g.currency,
-                    current_balance_amount: g.current_balance.to_string(),
-                    initial_balance_amount: g.initial_balance.to_string(),
-                    is_active: g.is_active,
-                }),
-                errors: vec![],
-            })),
-            None => Ok(Response::new(GetGiftCardResponse {
-                gift_card: None,
-                errors: vec![err("NOT_FOUND", "gift card not found".into())],
-            })),
-        }
     }
 }
 

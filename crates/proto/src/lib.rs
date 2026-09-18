@@ -19,6 +19,9 @@ pub mod ai {
 pub mod payment {
     tonic::include_proto!("rustygod.payment");
 }
+pub mod giftcard {
+    tonic::include_proto!("rustygod.giftcard");
+}
 pub mod webhook {
     tonic::include_proto!("rustygod.webhook");
 }
