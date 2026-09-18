@@ -8,16 +8,19 @@
 //! - stocks upsert per (warehouse, variant) with the allocated floor intact;
 //! - shipping-zone links are explicit assign/unassign rows.
 
+use chrono::Utc;
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, ConnectionTrait, DatabaseConnection, EntityTrait,
-    QueryFilter, QueryOrder, Set, TransactionTrait,
+    QueryFilter, QueryOrder, QuerySelect, SelectorTrait, Set, TransactionTrait,
+    sea_query::LockType,
 };
 use serde_json::json;
 use uuid::Uuid;
 
 use crate::{
     entities::{
-        account_address, shipping_shippingzone, warehouse_stock, warehouse_warehouse,
+        account_address, product_productvariant, shipping_shippingzone, warehouse_allocation,
+        warehouse_reservation, warehouse_stock, warehouse_warehouse,
         warehouse_warehouse_shipping_zones,
     },
     DbError, Result,
@@ -300,8 +303,8 @@ pub async fn warehouses_for_zone(
         .await?)
 }
 
-/// Best-effort cleanup for tests: delete stocks, zone links, warehouse,
-/// and its address row (reverse of create).
+/// Test cleanup: delete a warehouse created by tests (listings first).
+/// Refuses channels that gained orders/checkouts since creation.
 pub async fn delete_warehouse_deep(db: &DatabaseConnection, warehouse_id: Uuid) -> Result<()> {
     let txn = db.begin().await?;
     let row = warehouse_warehouse::Entity::find_by_id(warehouse_id)
@@ -323,5 +326,112 @@ pub async fn delete_warehouse_deep(db: &DatabaseConnection, warehouse_id: Uuid) 
         .exec(&txn)
         .await?;
     txn.commit().await?;
+    Ok(())
+}
+
+/// Allocate order lines against stocks, inside the caller's transaction.
+///
+/// Django's `allocate_stocks` semantics for the checkout-complete path:
+/// - only `track_inventory` variants allocate (digital goods skip);
+/// - stock rows lock `FOR UPDATE` in ascending id order — the documented
+///   lock ordering that keeps concurrent completions deadlock-free;
+/// - free = quantity − allocated − **active reservations of other lines**
+///   (this checkout's own reservations are consumed, not double-counted);
+/// - most-free stock first; shortfall is `INSUFFICIENT_STOCK` and rolls
+///   the whole completion back (oversell prevention, R1).
+/// Writes `warehouse_allocation` rows + bumps `quantity_allocated`.
+pub async fn allocate_order_lines(
+    txn: &impl ConnectionTrait,
+    items: &[(Uuid, i32, i32)],
+    own_checkout_line_ids: &[Uuid],
+) -> Result<()> {
+    if items.is_empty() {
+        return Ok(());
+    }
+    // Track-inventory flags in one query.
+    let vids: Vec<i32> = items.iter().map(|(_, v, _)| *v).collect();
+    let tracked: std::collections::HashMap<i32, bool> = product_productvariant::Entity::find()
+        .select_only()
+        .column(product_productvariant::Column::Id)
+        .column(product_productvariant::Column::TrackInventory)
+        .filter(product_productvariant::Column::Id.is_in(vids))
+        .into_tuple::<(i32, bool)>()
+        .all(txn)
+        .await?
+        .into_iter()
+        .collect();
+
+    for (line_id, vid, qty) in items {
+        if !tracked.get(vid).copied().unwrap_or(true) {
+            continue;
+        }
+        // Lock all candidate stocks up front, ascending id (lock order).
+        let mut stocks = warehouse_stock::Entity::find()
+            .filter(warehouse_stock::Column::ProductVariantId.eq(*vid))
+            .order_by_asc(warehouse_stock::Column::Id)
+            .lock(LockType::Update)
+            .all(txn)
+            .await?;
+        // Active reservations of OTHER lines hold units back.
+        let now: sea_orm::prelude::DateTimeWithTimeZone = chrono::Utc::now().into();
+        let stock_ids: Vec<i32> = stocks.iter().map(|s| s.id).collect();
+        let held: std::collections::HashMap<i32, i32> = if stock_ids.is_empty() {
+            Default::default()
+        } else {
+            let mut q = warehouse_reservation::Entity::find()
+                .select_only()
+                .column(warehouse_reservation::Column::StockId)
+                .column(warehouse_reservation::Column::QuantityReserved)
+                .filter(warehouse_reservation::Column::StockId.is_in(stock_ids))
+                .filter(warehouse_reservation::Column::ReservedUntil.gt(now));
+            if !own_checkout_line_ids.is_empty() {
+                q = q.filter(
+                    warehouse_reservation::Column::CheckoutLineId
+                        .is_not_in(own_checkout_line_ids.to_vec()),
+                );
+            }
+            let rows: Vec<(i32, i32)> = q.into_tuple().all(txn).await?;
+            let mut m = std::collections::HashMap::new();
+            for (sid, q) in rows {
+                *m.entry(sid).or_insert(0) += q;
+            }
+            m
+        };
+        // Most-free first (stable: ties break by ascending id, already sorted).
+        stocks.sort_by(|a, b| {
+            let fa = a.quantity - a.quantity_allocated - held.get(&a.id).copied().unwrap_or(0);
+            let fb = b.quantity - b.quantity_allocated - held.get(&b.id).copied().unwrap_or(0);
+            fb.cmp(&fa)
+        });
+        let mut need = *qty;
+        for s in &stocks {
+            if need <= 0 {
+                break;
+            }
+            let free =
+                s.quantity - s.quantity_allocated - held.get(&s.id).copied().unwrap_or(0);
+            if free <= 0 {
+                continue;
+            }
+            let take = free.min(need);
+            warehouse_allocation::ActiveModel {
+                quantity_allocated: Set(take),
+                stock_id: Set(s.id),
+                order_line_id: Set(*line_id),
+                ..Default::default()
+            }
+            .insert(txn)
+            .await?;
+            let mut sam: warehouse_stock::ActiveModel = s.clone().into();
+            sam.quantity_allocated = Set(s.quantity_allocated + take);
+            sam.update(txn).await?;
+            need -= take;
+        }
+        if need > 0 {
+            return Err(DbError::Warehouse(format!(
+                "insufficient stock for variant {vid}: short by {need}"
+            )));
+        }
+    }
     Ok(())
 }

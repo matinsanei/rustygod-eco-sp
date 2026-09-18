@@ -48,8 +48,7 @@ async fn channel_id(db: &impl sea_orm::ConnectionTrait, slug: &str) -> Result<(i
 }
 
 /// Public channel resolution: (channel_id, currency_code).
-pub async fn channel_info(db: &impl sea_orm::ConnectionTrait, slug: &str) -> Result<(i32, String)> {
-    channel_channel::Entity::find()
+pub async fn channel_info(db: &impl sea_orm::ConnectionTrait, slug: &str) -> Result<(i32, String)> {    channel_channel::Entity::find()
         .select_only()
         .column(channel_channel::Column::Id)
         .column(channel_channel::Column::CurrencyCode)
@@ -58,6 +57,20 @@ pub async fn channel_info(db: &impl sea_orm::ConnectionTrait, slug: &str) -> Res
         .one(db)
         .await?
         .ok_or_else(|| DbError::SeaOrm(sea_orm::DbErr::RecordNotFound(slug.to_string())))
+}
+
+/// Reverse lookup: slug for a channel id (slim select, no INTERVAL mistype).
+pub async fn channel_slug_for_id(
+    db: &impl sea_orm::ConnectionTrait,
+    channel_id: i32,
+) -> Result<String> {
+    channel_channel::Entity::find_by_id(channel_id)
+        .select_only()
+        .column(channel_channel::Column::Slug)
+        .into_tuple()
+        .one(db)
+        .await?
+        .ok_or_else(|| DbError::SeaOrm(sea_orm::DbErr::RecordNotFound(channel_id.to_string())))
 }
 
 fn published_filter(

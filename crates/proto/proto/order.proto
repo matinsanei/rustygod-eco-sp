@@ -31,6 +31,18 @@ message GetOrderResponse {
   repeated rustygod.common.Error errors = 2;
 }
 
+message ReconcileOrderRequest { string id = 1; }
+message ReconCheck {
+  string name = 1;
+  bool ok = 2;
+  string detail = 3;
+}
+message ReconcileOrderResponse {
+  repeated ReconCheck checks = 1;
+  bool all_ok = 2;
+  repeated rustygod.common.Error errors = 3;
+}
+
 message ListOrdersRequest {
   int32 first = 1;
   string after = 2;
@@ -48,6 +60,7 @@ service OrderService {
   rpc CancelFulfillment(CancelFulfillmentRequest) returns (FulfillmentResponse);
   rpc RefundFulfillment(RefundFulfillmentRequest) returns (FulfillmentResponse);
   rpc ListFulfillments(ListFulfillmentsRequest) returns (ListFulfillmentsResponse);
+  rpc ReconcileOrder(ReconcileOrderRequest) returns (ReconcileOrderResponse);
 }
 
 // Mirrors saleor/order fulfillments: fulfillment_order auto-increments,

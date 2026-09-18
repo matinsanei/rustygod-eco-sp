@@ -52,6 +52,22 @@ export interface GetOrderResponse {
   errors: Error[];
 }
 
+export interface ReconcileOrderRequest {
+  id: string;
+}
+
+export interface ReconCheck {
+  name: string;
+  ok: boolean;
+  detail: string;
+}
+
+export interface ReconcileOrderResponse {
+  checks: ReconCheck[];
+  allOk: boolean;
+  errors: Error[];
+}
+
 export interface ListOrdersRequest {
   first: number;
   after: string;
@@ -502,6 +518,219 @@ export const GetOrderResponse: MessageFns<GetOrderResponse> = {
   fromPartial<I extends Exact<DeepPartial<GetOrderResponse>, I>>(object: I): GetOrderResponse {
     const message = createBaseGetOrderResponse();
     message.order = (object.order !== undefined && object.order !== null) ? Order.fromPartial(object.order) : undefined;
+    message.errors = object.errors?.map((e) => Error.fromPartial(e)) || [];
+    return message;
+  },
+};
+
+function createBaseReconcileOrderRequest(): ReconcileOrderRequest {
+  return { id: "" };
+}
+
+export const ReconcileOrderRequest: MessageFns<ReconcileOrderRequest> = {
+  encode(message: ReconcileOrderRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.id !== "") {
+      writer.uint32(10).string(message.id);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ReconcileOrderRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseReconcileOrderRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.id = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<ReconcileOrderRequest>, I>>(base?: I): ReconcileOrderRequest {
+    return ReconcileOrderRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ReconcileOrderRequest>, I>>(object: I): ReconcileOrderRequest {
+    const message = createBaseReconcileOrderRequest();
+    message.id = object.id ?? "";
+    return message;
+  },
+};
+
+function createBaseReconCheck(): ReconCheck {
+  return { name: "", ok: false, detail: "" };
+}
+
+export const ReconCheck: MessageFns<ReconCheck> = {
+  encode(message: ReconCheck, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.name !== "") {
+      writer.uint32(10).string(message.name);
+    }
+    if (message.ok !== false) {
+      writer.uint32(16).bool(message.ok);
+    }
+    if (message.detail !== "") {
+      writer.uint32(26).string(message.detail);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ReconCheck {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseReconCheck();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.name = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 16) {
+              break;
+            }
+
+            message.ok = reader.bool();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.detail = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<ReconCheck>, I>>(base?: I): ReconCheck {
+    return ReconCheck.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ReconCheck>, I>>(object: I): ReconCheck {
+    const message = createBaseReconCheck();
+    message.name = object.name ?? "";
+    message.ok = object.ok ?? false;
+    message.detail = object.detail ?? "";
+    return message;
+  },
+};
+
+function createBaseReconcileOrderResponse(): ReconcileOrderResponse {
+  return { checks: [], allOk: false, errors: [] };
+}
+
+export const ReconcileOrderResponse: MessageFns<ReconcileOrderResponse> = {
+  encode(message: ReconcileOrderResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    for (const v of message.checks) {
+      ReconCheck.encode(v!, writer.uint32(10).fork()).join();
+    }
+    if (message.allOk !== false) {
+      writer.uint32(16).bool(message.allOk);
+    }
+    for (const v of message.errors) {
+      Error.encode(v!, writer.uint32(26).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ReconcileOrderResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseReconcileOrderResponse();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.checks.push(ReconCheck.decode(reader, reader.uint32()));
+            continue;
+          }
+          case 2: {
+            if (tag !== 16) {
+              break;
+            }
+
+            message.allOk = reader.bool();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.errors.push(Error.decode(reader, reader.uint32()));
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<ReconcileOrderResponse>, I>>(base?: I): ReconcileOrderResponse {
+    return ReconcileOrderResponse.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ReconcileOrderResponse>, I>>(object: I): ReconcileOrderResponse {
+    const message = createBaseReconcileOrderResponse();
+    message.checks = object.checks?.map((e) => ReconCheck.fromPartial(e)) || [];
+    message.allOk = object.allOk ?? false;
     message.errors = object.errors?.map((e) => Error.fromPartial(e)) || [];
     return message;
   },
@@ -1381,6 +1610,17 @@ export const OrderServiceService = {
       Buffer.from(ListFulfillmentsResponse.encode(value).finish()),
     responseDeserialize: (value: Buffer): ListFulfillmentsResponse => ListFulfillmentsResponse.decode(value),
   },
+  reconcileOrder: {
+    path: "/rustygod.order.OrderService/ReconcileOrder" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: ReconcileOrderRequest): Buffer =>
+      Buffer.from(ReconcileOrderRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): ReconcileOrderRequest => ReconcileOrderRequest.decode(value),
+    responseSerialize: (value: ReconcileOrderResponse): Buffer =>
+      Buffer.from(ReconcileOrderResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): ReconcileOrderResponse => ReconcileOrderResponse.decode(value),
+  },
 } as const;
 
 export interface OrderServiceServer extends UntypedServiceImplementation {
@@ -1390,6 +1630,7 @@ export interface OrderServiceServer extends UntypedServiceImplementation {
   cancelFulfillment: handleUnaryCall<CancelFulfillmentRequest, FulfillmentResponse>;
   refundFulfillment: handleUnaryCall<RefundFulfillmentRequest, FulfillmentResponse>;
   listFulfillments: handleUnaryCall<ListFulfillmentsRequest, ListFulfillmentsResponse>;
+  reconcileOrder: handleUnaryCall<ReconcileOrderRequest, ReconcileOrderResponse>;
 }
 
 export interface OrderServiceClient extends Client {
@@ -1482,6 +1723,21 @@ export interface OrderServiceClient extends Client {
     metadata: Metadata,
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: ListFulfillmentsResponse) => void,
+  ): ClientUnaryCall;
+  reconcileOrder(
+    request: ReconcileOrderRequest,
+    callback: (error: ServiceError | null, response: ReconcileOrderResponse) => void,
+  ): ClientUnaryCall;
+  reconcileOrder(
+    request: ReconcileOrderRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: ReconcileOrderResponse) => void,
+  ): ClientUnaryCall;
+  reconcileOrder(
+    request: ReconcileOrderRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: ReconcileOrderResponse) => void,
   ): ClientUnaryCall;
 }
 

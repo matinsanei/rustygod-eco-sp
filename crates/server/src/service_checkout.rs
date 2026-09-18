@@ -357,7 +357,6 @@ impl CheckoutService for CheckoutServiceImpl {
     ) -> Result<Response<CompleteCheckoutResponse>, Status> {
         let req = request.into_inner();
         if self.db.is_some() {
-            use sea_orm::TransactionTrait;
             let db = self.db()?;
             let Some(token) = parse_token(&req.checkout_id) else {
                 return Ok(Response::new(CompleteCheckoutResponse {
@@ -365,81 +364,33 @@ impl CheckoutService for CheckoutServiceImpl {
                     errors: vec![Self::err("NOT_FOUND", "checkout not found".into())],
                 }));
             };
-            // Whole completion is ONE transaction: mint order + delete checkout
-            // commit together, or neither does (no orphan orders, no lost checkouts).
-            let txn = db.begin().await.map_err(|e| Status::internal(e.to_string()))?;
-            enum Fail {
-                Client(&'static str, String),
-                Internal(Status),
-            }
-            let result: Result<String, Fail> = async {
-                let Some((co, lines)) = checkout_store::load_checkout(&txn, token)
-                    .await
-                    .map_err(|e| Fail::Internal(Status::internal(e.to_string())))?
-                else {
-                    return Err(Fail::Client("NOT_FOUND", "checkout not found".into()));
-                };
-                if lines.is_empty() {
-                    return Err(Fail::Client("EMPTY_CHECKOUT", "checkout has no lines".into()));
-                }
-                let ch_slug = channel_slug_for(&co.channel_id);
-                let domain = checkout_store::to_domain(&co, &lines, &ch_slug);
-                let ids: Vec<i32> = lines.iter().map(|l| l.variant_id).collect();
-                let pricing = catalog::checkout_pricing(&txn, &ch_slug, &ids)
-                    .await
-                    .map_err(|e| Fail::Internal(Status::internal(e.to_string())))?;
-                let order = rustygod_db::order_store::mint_from_checkout(
-                    &txn,
-                    &domain,
-                    co.channel_id,
-                    &ch_slug,
-                    &pricing,
-                )
-                .await
-                .map_err(|e| Fail::Internal(Status::internal(e.to_string())))?;
-                let order_id = order.id.clone();
-                // Voucher usage increments with completion (Django:
-                // increase_voucher_usage), inside the same transaction.
-                if let Some(code) = co.voucher_code.clone() {
-                    let email = if co.email.clone().unwrap_or_default().is_empty() {
-                        None
+            // The atomic pipeline (db::complete): idempotent replay, locked
+            // validation, mint, voucher, gift cards, allocation, events,
+            // checkout delete — then webhooks after commit.
+            return match rustygod_db::complete::complete_checkout(db, token).await {
+                Ok(out) => Ok(Response::new(CompleteCheckoutResponse {
+                    order_id: out.order_id.to_string(),
+                    errors: vec![],
+                })),
+                Err(e) => {
+                    let msg = e.to_string();
+                    let code = if msg.contains("not found") {
+                        "NOT_FOUND"
+                    } else if msg.contains("no lines") {
+                        "EMPTY_CHECKOUT"
+                    } else if msg.contains("insufficient stock") {
+                        "INSUFFICIENT_STOCK"
+                    } else if msg.contains("not applicable") || msg.contains("invalid") {
+                        "NOT_APPLICABLE"
                     } else {
-                        co.email.clone()
+                        "DB_ERROR"
                     };
-                    rustygod_db::promotions::increase_usage(
-                        &txn,
-                        &code,
-                        email.as_deref(),
-                    )
-                    .await
-                    .map_err(|e| Fail::Internal(Status::internal(e.to_string())))?;
-                }
-                checkout_store::delete_checkout_row(&txn, token)
-                    .await
-                    .map_err(|e| Fail::Internal(Status::internal(e.to_string())))?;
-                Ok(order_id)
-            }
-            .await;
-            match result {
-                Ok(order_id) => {
-                    txn.commit().await.map_err(|e| Status::internal(e.to_string()))?;
-                    return Ok(Response::new(CompleteCheckoutResponse {
-                        order_id,
-                        errors: vec![],
-                    }));
-                }
-                Err(Fail::Client(code, message)) => {
-                    txn.rollback().await.map_err(|e| Status::internal(e.to_string()))?;
-                    return Ok(Response::new(CompleteCheckoutResponse {
+                    Ok(Response::new(CompleteCheckoutResponse {
                         order_id: String::new(),
-                        errors: vec![Self::err(code, message)],
-                    }));
+                        errors: vec![Self::err(code, msg)],
+                    }))
                 }
-                Err(Fail::Internal(status)) => {
-                    txn.rollback().await.map_err(|e| Status::internal(e.to_string()))?;
-                    return Err(status);
-                }
-            }
+            };
         }
         // Offline memory mode (unchanged semantics, panic-free locks).
         let (checkout, seq) = {

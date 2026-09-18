@@ -10,6 +10,7 @@ pub mod catalog;
 pub mod channels;
 pub mod checkout_store;
 pub mod commerce;
+pub mod complete;
 pub mod drafts;
 pub mod entities;
 pub mod fulfillment;
@@ -22,6 +23,7 @@ pub mod plugin_store;
 pub mod taxes;
 pub mod warehouses;
 pub mod promotions;
+pub mod reconcile;
 pub mod relations;
 pub mod webhooks;
 
@@ -53,6 +55,8 @@ pub enum DbError {
     Channel(String),
     #[error("group error: {0}")]
     Group(String),
+    #[error("complete error: {0}")]
+    Complete(String),
     #[error("lock poisoned: {0}")]
     Lock(String),
 }

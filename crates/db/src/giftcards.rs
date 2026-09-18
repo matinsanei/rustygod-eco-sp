@@ -271,7 +271,22 @@ pub async fn redeem_for_order(
 ) -> Result<Decimal> {
     use sea_orm::TransactionTrait;
     let txn = db.begin().await?;
-    let card = lock_card(&txn, code).await?;
+    let take = redeem_for_order_tx(&txn, code, order_id, requested, user_id).await?;
+    txn.commit().await?;
+    Ok(take)
+}
+
+/// Transactional core of [`redeem_for_order`]: runs inside the caller's
+/// transaction (used by the atomic checkout-complete pipeline, where the
+/// card debit must commit or roll back with the order itself).
+pub async fn redeem_for_order_tx(
+    txn: &impl ConnectionTrait,
+    code: &str,
+    order_id: Option<Uuid>,
+    requested: Decimal,
+    user_id: Option<i32>,
+) -> Result<Decimal> {
+    let card = lock_card(txn, code).await?;
     if !domain::is_active_card(card.is_active, card.expiry_date, today()) {
         return Err(DbError::GiftCardNotApplicable(
             "gift card is not active".into(),
@@ -282,14 +297,13 @@ pub async fn redeem_for_order(
     am.current_balance_amount = Set(card.current_balance_amount - take);
     am.last_used_on = Set(Some(Utc::now().into()));
     am.used_by_id = Set(user_id);
-    let updated = am.update(&txn).await?;
+    let updated = am.update(txn).await?;
     let mut params = balance_params(&updated);
     if let Some(oid) = order_id {
         params["order_id"] = json!(oid.to_string());
     }
     params["amount_taken"] = json!(take.to_string());
-    write_event(&txn, card.id, events::USED_IN_ORDER, params, user_id, order_id).await?;
-    txn.commit().await?;
+    write_event(txn, card.id, events::USED_IN_ORDER, params, user_id, order_id).await?;
     Ok(take)
 }
 

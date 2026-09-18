@@ -163,6 +163,54 @@ export interface CreateAddressResponse {
   errors: Error[];
 }
 
+export interface GroupInfo {
+  id: string;
+  name: string;
+  permissions: string[];
+  memberIds: string[];
+}
+
+export interface CreateGroupRequest {
+  name: string;
+  permissions: string[];
+}
+
+export interface GroupResponse {
+  group: GroupInfo | undefined;
+  errors: Error[];
+}
+
+export interface ListGroupsRequest {
+}
+
+export interface ListGroupsResponse {
+  groups: GroupInfo[];
+}
+
+export interface RenameGroupRequest {
+  id: string;
+  name: string;
+}
+
+export interface DeleteGroupRequest {
+  id: string;
+}
+
+export interface DeleteGroupResponse {
+  ok: boolean;
+  errors: Error[];
+}
+
+export interface GroupMembersRequest {
+  id: string;
+  userIds: string[];
+}
+
+export interface GroupPermissionsRequest {
+  id: string;
+  codenames: string[];
+}
+
 export interface ChannelInfo {
   id: string;
   slug: string;
@@ -186,6 +234,69 @@ export interface GetChannelResponse {
   errors: Error[];
 }
 
+export interface CreateChannelRequest {
+  name: string;
+  slug: string;
+  currencyCode: string;
+  defaultCountry: string;
+  /** empty = Django default */
+  allocationStrategy: string;
+}
+
+export interface ChannelResponse {
+  channel: ChannelInfo | undefined;
+  errors: Error[];
+}
+
+export interface UpdateChannelRequest {
+  slug: string;
+  /** empty = unchanged */
+  name: string;
+  isActive: boolean;
+  /** gate for is_active */
+  setActive: boolean;
+  /** empty = unchanged */
+  defaultCountry: string;
+  /** empty = unchanged */
+  allocationStrategy: string;
+  autoConfirm: boolean;
+  /** gate for auto_confirm */
+  setAutoConfirm: boolean;
+}
+
+export interface DeleteChannelRequest {
+  slug: string;
+}
+
+export interface DeleteChannelResponse {
+  ok: boolean;
+  errors: Error[];
+}
+
+export interface SetProductListingRequest {
+  channel: string;
+  productId: string;
+  isPublished: boolean;
+  visibleInListings: boolean;
+}
+
+export interface SetProductListingResponse {
+  errors: Error[];
+}
+
+export interface SetVariantPriceRequest {
+  channel: string;
+  variantId: string;
+  /** decimal string, empty = unchanged */
+  price: string;
+  /** decimal string, empty = unchanged */
+  costPrice: string;
+}
+
+export interface SetVariantPriceResponse {
+  errors: Error[];
+}
+
 export interface TaxClassInfo {
   id: string;
   name: string;
@@ -196,6 +307,51 @@ export interface ListTaxClassesRequest {
 
 export interface ListTaxClassesResponse {
   classes: TaxClassInfo[];
+}
+
+export interface GetTaxRateRequest {
+  /** integer id as string; empty = default rate */
+  variantId: string;
+  /** ISO code, e.g. DE */
+  country: string;
+  channel: string;
+}
+
+export interface GetTaxRateResponse {
+  /** percent, e.g. "19" */
+  rate: string;
+  chargeTaxes: boolean;
+  errors: Error[];
+}
+
+export interface TaxLineInput {
+  variantId: string;
+  /** decimal string (channel direction) */
+  unitPrice: string;
+  quantity: number;
+}
+
+export interface TaxedLineInfo {
+  variantId: string;
+  quantity: number;
+  unitNet: string;
+  unitGross: string;
+  totalNet: string;
+  totalGross: string;
+  taxRate: string;
+}
+
+export interface CalculateTaxesRequest {
+  channel: string;
+  country: string;
+  lines: TaxLineInput[];
+}
+
+export interface CalculateTaxesResponse {
+  lines: TaxedLineInfo[];
+  totalNet: string;
+  totalGross: string;
+  errors: Error[];
 }
 
 export interface WarehouseInfo {
@@ -246,6 +402,81 @@ export interface ReleaseReservationRequest {
 
 export interface ReleaseReservationResponse {
   ok: boolean;
+}
+
+export interface CreateWarehouseRequest {
+  name: string;
+  slug: string;
+  email: string;
+  street: string;
+  city: string;
+  postalCode: string;
+  country: string;
+  isPrivate: boolean;
+  /** disabled | local | all */
+  ccOption: string;
+}
+
+export interface WarehouseResponse {
+  warehouse: WarehouseInfo | undefined;
+  errors: Error[];
+}
+
+export interface UpdateWarehouseRequest {
+  id: string;
+  /** empty = unchanged */
+  name: string;
+  /** empty = unchanged */
+  email: string;
+  /** empty = unchanged */
+  ccOption: string;
+  isPrivate: boolean;
+  /** gate for is_private */
+  setPrivate: boolean;
+}
+
+export interface DeleteWarehouseRequest {
+  id: string;
+}
+
+export interface DeleteWarehouseResponse {
+  ok: boolean;
+  errors: Error[];
+}
+
+export interface UpsertStockRequest {
+  warehouseId: string;
+  variantId: string;
+  quantity: number;
+}
+
+export interface UpsertStockResponse {
+  stock: StockInfo | undefined;
+  errors: Error[];
+}
+
+export interface ZoneInfo {
+  id: string;
+  name: string;
+  countries: string;
+  isDefault: boolean;
+}
+
+export interface ListZonesRequest {
+}
+
+export interface ListZonesResponse {
+  zones: ZoneInfo[];
+}
+
+export interface ZoneLinkRequest {
+  warehouseId: string;
+  zoneId: string;
+}
+
+export interface ZoneLinkResponse {
+  ok: boolean;
+  errors: Error[];
 }
 
 function createBaseVoucherInfo(): VoucherInfo {
@@ -2109,6 +2340,654 @@ export const CreateAddressResponse: MessageFns<CreateAddressResponse> = {
   },
 };
 
+function createBaseGroupInfo(): GroupInfo {
+  return { id: "", name: "", permissions: [], memberIds: [] };
+}
+
+export const GroupInfo: MessageFns<GroupInfo> = {
+  encode(message: GroupInfo, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.id !== "") {
+      writer.uint32(10).string(message.id);
+    }
+    if (message.name !== "") {
+      writer.uint32(18).string(message.name);
+    }
+    for (const v of message.permissions) {
+      writer.uint32(26).string(v!);
+    }
+    for (const v of message.memberIds) {
+      writer.uint32(34).string(v!);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): GroupInfo {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseGroupInfo();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.id = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.name = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.permissions.push(reader.string());
+            continue;
+          }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.memberIds.push(reader.string());
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<GroupInfo>, I>>(base?: I): GroupInfo {
+    return GroupInfo.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<GroupInfo>, I>>(object: I): GroupInfo {
+    const message = createBaseGroupInfo();
+    message.id = object.id ?? "";
+    message.name = object.name ?? "";
+    message.permissions = object.permissions?.map((e) => e) || [];
+    message.memberIds = object.memberIds?.map((e) => e) || [];
+    return message;
+  },
+};
+
+function createBaseCreateGroupRequest(): CreateGroupRequest {
+  return { name: "", permissions: [] };
+}
+
+export const CreateGroupRequest: MessageFns<CreateGroupRequest> = {
+  encode(message: CreateGroupRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.name !== "") {
+      writer.uint32(10).string(message.name);
+    }
+    for (const v of message.permissions) {
+      writer.uint32(18).string(v!);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): CreateGroupRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseCreateGroupRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.name = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.permissions.push(reader.string());
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<CreateGroupRequest>, I>>(base?: I): CreateGroupRequest {
+    return CreateGroupRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<CreateGroupRequest>, I>>(object: I): CreateGroupRequest {
+    const message = createBaseCreateGroupRequest();
+    message.name = object.name ?? "";
+    message.permissions = object.permissions?.map((e) => e) || [];
+    return message;
+  },
+};
+
+function createBaseGroupResponse(): GroupResponse {
+  return { group: undefined, errors: [] };
+}
+
+export const GroupResponse: MessageFns<GroupResponse> = {
+  encode(message: GroupResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.group !== undefined) {
+      GroupInfo.encode(message.group, writer.uint32(10).fork()).join();
+    }
+    for (const v of message.errors) {
+      Error.encode(v!, writer.uint32(18).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): GroupResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseGroupResponse();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.group = GroupInfo.decode(reader, reader.uint32());
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.errors.push(Error.decode(reader, reader.uint32()));
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<GroupResponse>, I>>(base?: I): GroupResponse {
+    return GroupResponse.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<GroupResponse>, I>>(object: I): GroupResponse {
+    const message = createBaseGroupResponse();
+    message.group = (object.group !== undefined && object.group !== null)
+      ? GroupInfo.fromPartial(object.group)
+      : undefined;
+    message.errors = object.errors?.map((e) => Error.fromPartial(e)) || [];
+    return message;
+  },
+};
+
+function createBaseListGroupsRequest(): ListGroupsRequest {
+  return {};
+}
+
+export const ListGroupsRequest: MessageFns<ListGroupsRequest> = {
+  encode(_: ListGroupsRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ListGroupsRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseListGroupsRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<ListGroupsRequest>, I>>(base?: I): ListGroupsRequest {
+    return ListGroupsRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ListGroupsRequest>, I>>(_: I): ListGroupsRequest {
+    const message = createBaseListGroupsRequest();
+    return message;
+  },
+};
+
+function createBaseListGroupsResponse(): ListGroupsResponse {
+  return { groups: [] };
+}
+
+export const ListGroupsResponse: MessageFns<ListGroupsResponse> = {
+  encode(message: ListGroupsResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    for (const v of message.groups) {
+      GroupInfo.encode(v!, writer.uint32(10).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ListGroupsResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseListGroupsResponse();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.groups.push(GroupInfo.decode(reader, reader.uint32()));
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<ListGroupsResponse>, I>>(base?: I): ListGroupsResponse {
+    return ListGroupsResponse.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ListGroupsResponse>, I>>(object: I): ListGroupsResponse {
+    const message = createBaseListGroupsResponse();
+    message.groups = object.groups?.map((e) => GroupInfo.fromPartial(e)) || [];
+    return message;
+  },
+};
+
+function createBaseRenameGroupRequest(): RenameGroupRequest {
+  return { id: "", name: "" };
+}
+
+export const RenameGroupRequest: MessageFns<RenameGroupRequest> = {
+  encode(message: RenameGroupRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.id !== "") {
+      writer.uint32(10).string(message.id);
+    }
+    if (message.name !== "") {
+      writer.uint32(18).string(message.name);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): RenameGroupRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseRenameGroupRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.id = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.name = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<RenameGroupRequest>, I>>(base?: I): RenameGroupRequest {
+    return RenameGroupRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<RenameGroupRequest>, I>>(object: I): RenameGroupRequest {
+    const message = createBaseRenameGroupRequest();
+    message.id = object.id ?? "";
+    message.name = object.name ?? "";
+    return message;
+  },
+};
+
+function createBaseDeleteGroupRequest(): DeleteGroupRequest {
+  return { id: "" };
+}
+
+export const DeleteGroupRequest: MessageFns<DeleteGroupRequest> = {
+  encode(message: DeleteGroupRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.id !== "") {
+      writer.uint32(10).string(message.id);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): DeleteGroupRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseDeleteGroupRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.id = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<DeleteGroupRequest>, I>>(base?: I): DeleteGroupRequest {
+    return DeleteGroupRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<DeleteGroupRequest>, I>>(object: I): DeleteGroupRequest {
+    const message = createBaseDeleteGroupRequest();
+    message.id = object.id ?? "";
+    return message;
+  },
+};
+
+function createBaseDeleteGroupResponse(): DeleteGroupResponse {
+  return { ok: false, errors: [] };
+}
+
+export const DeleteGroupResponse: MessageFns<DeleteGroupResponse> = {
+  encode(message: DeleteGroupResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.ok !== false) {
+      writer.uint32(8).bool(message.ok);
+    }
+    for (const v of message.errors) {
+      Error.encode(v!, writer.uint32(18).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): DeleteGroupResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseDeleteGroupResponse();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 8) {
+              break;
+            }
+
+            message.ok = reader.bool();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.errors.push(Error.decode(reader, reader.uint32()));
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<DeleteGroupResponse>, I>>(base?: I): DeleteGroupResponse {
+    return DeleteGroupResponse.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<DeleteGroupResponse>, I>>(object: I): DeleteGroupResponse {
+    const message = createBaseDeleteGroupResponse();
+    message.ok = object.ok ?? false;
+    message.errors = object.errors?.map((e) => Error.fromPartial(e)) || [];
+    return message;
+  },
+};
+
+function createBaseGroupMembersRequest(): GroupMembersRequest {
+  return { id: "", userIds: [] };
+}
+
+export const GroupMembersRequest: MessageFns<GroupMembersRequest> = {
+  encode(message: GroupMembersRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.id !== "") {
+      writer.uint32(10).string(message.id);
+    }
+    for (const v of message.userIds) {
+      writer.uint32(18).string(v!);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): GroupMembersRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseGroupMembersRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.id = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.userIds.push(reader.string());
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<GroupMembersRequest>, I>>(base?: I): GroupMembersRequest {
+    return GroupMembersRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<GroupMembersRequest>, I>>(object: I): GroupMembersRequest {
+    const message = createBaseGroupMembersRequest();
+    message.id = object.id ?? "";
+    message.userIds = object.userIds?.map((e) => e) || [];
+    return message;
+  },
+};
+
+function createBaseGroupPermissionsRequest(): GroupPermissionsRequest {
+  return { id: "", codenames: [] };
+}
+
+export const GroupPermissionsRequest: MessageFns<GroupPermissionsRequest> = {
+  encode(message: GroupPermissionsRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.id !== "") {
+      writer.uint32(10).string(message.id);
+    }
+    for (const v of message.codenames) {
+      writer.uint32(18).string(v!);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): GroupPermissionsRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseGroupPermissionsRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.id = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.codenames.push(reader.string());
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<GroupPermissionsRequest>, I>>(base?: I): GroupPermissionsRequest {
+    return GroupPermissionsRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<GroupPermissionsRequest>, I>>(object: I): GroupPermissionsRequest {
+    const message = createBaseGroupPermissionsRequest();
+    message.id = object.id ?? "";
+    message.codenames = object.codenames?.map((e) => e) || [];
+    return message;
+  },
+};
+
 function createBaseChannelInfo(): ChannelInfo {
   return { id: "", slug: "", currencyCode: "", isActive: false };
 }
@@ -2422,6 +3301,740 @@ export const GetChannelResponse: MessageFns<GetChannelResponse> = {
   },
 };
 
+function createBaseCreateChannelRequest(): CreateChannelRequest {
+  return { name: "", slug: "", currencyCode: "", defaultCountry: "", allocationStrategy: "" };
+}
+
+export const CreateChannelRequest: MessageFns<CreateChannelRequest> = {
+  encode(message: CreateChannelRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.name !== "") {
+      writer.uint32(10).string(message.name);
+    }
+    if (message.slug !== "") {
+      writer.uint32(18).string(message.slug);
+    }
+    if (message.currencyCode !== "") {
+      writer.uint32(26).string(message.currencyCode);
+    }
+    if (message.defaultCountry !== "") {
+      writer.uint32(34).string(message.defaultCountry);
+    }
+    if (message.allocationStrategy !== "") {
+      writer.uint32(42).string(message.allocationStrategy);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): CreateChannelRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseCreateChannelRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.name = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.slug = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.currencyCode = reader.string();
+            continue;
+          }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.defaultCountry = reader.string();
+            continue;
+          }
+          case 5: {
+            if (tag !== 42) {
+              break;
+            }
+
+            message.allocationStrategy = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<CreateChannelRequest>, I>>(base?: I): CreateChannelRequest {
+    return CreateChannelRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<CreateChannelRequest>, I>>(object: I): CreateChannelRequest {
+    const message = createBaseCreateChannelRequest();
+    message.name = object.name ?? "";
+    message.slug = object.slug ?? "";
+    message.currencyCode = object.currencyCode ?? "";
+    message.defaultCountry = object.defaultCountry ?? "";
+    message.allocationStrategy = object.allocationStrategy ?? "";
+    return message;
+  },
+};
+
+function createBaseChannelResponse(): ChannelResponse {
+  return { channel: undefined, errors: [] };
+}
+
+export const ChannelResponse: MessageFns<ChannelResponse> = {
+  encode(message: ChannelResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.channel !== undefined) {
+      ChannelInfo.encode(message.channel, writer.uint32(10).fork()).join();
+    }
+    for (const v of message.errors) {
+      Error.encode(v!, writer.uint32(18).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ChannelResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseChannelResponse();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.channel = ChannelInfo.decode(reader, reader.uint32());
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.errors.push(Error.decode(reader, reader.uint32()));
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<ChannelResponse>, I>>(base?: I): ChannelResponse {
+    return ChannelResponse.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ChannelResponse>, I>>(object: I): ChannelResponse {
+    const message = createBaseChannelResponse();
+    message.channel = (object.channel !== undefined && object.channel !== null)
+      ? ChannelInfo.fromPartial(object.channel)
+      : undefined;
+    message.errors = object.errors?.map((e) => Error.fromPartial(e)) || [];
+    return message;
+  },
+};
+
+function createBaseUpdateChannelRequest(): UpdateChannelRequest {
+  return {
+    slug: "",
+    name: "",
+    isActive: false,
+    setActive: false,
+    defaultCountry: "",
+    allocationStrategy: "",
+    autoConfirm: false,
+    setAutoConfirm: false,
+  };
+}
+
+export const UpdateChannelRequest: MessageFns<UpdateChannelRequest> = {
+  encode(message: UpdateChannelRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.slug !== "") {
+      writer.uint32(10).string(message.slug);
+    }
+    if (message.name !== "") {
+      writer.uint32(18).string(message.name);
+    }
+    if (message.isActive !== false) {
+      writer.uint32(24).bool(message.isActive);
+    }
+    if (message.setActive !== false) {
+      writer.uint32(32).bool(message.setActive);
+    }
+    if (message.defaultCountry !== "") {
+      writer.uint32(42).string(message.defaultCountry);
+    }
+    if (message.allocationStrategy !== "") {
+      writer.uint32(50).string(message.allocationStrategy);
+    }
+    if (message.autoConfirm !== false) {
+      writer.uint32(56).bool(message.autoConfirm);
+    }
+    if (message.setAutoConfirm !== false) {
+      writer.uint32(64).bool(message.setAutoConfirm);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): UpdateChannelRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseUpdateChannelRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.slug = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.name = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 24) {
+              break;
+            }
+
+            message.isActive = reader.bool();
+            continue;
+          }
+          case 4: {
+            if (tag !== 32) {
+              break;
+            }
+
+            message.setActive = reader.bool();
+            continue;
+          }
+          case 5: {
+            if (tag !== 42) {
+              break;
+            }
+
+            message.defaultCountry = reader.string();
+            continue;
+          }
+          case 6: {
+            if (tag !== 50) {
+              break;
+            }
+
+            message.allocationStrategy = reader.string();
+            continue;
+          }
+          case 7: {
+            if (tag !== 56) {
+              break;
+            }
+
+            message.autoConfirm = reader.bool();
+            continue;
+          }
+          case 8: {
+            if (tag !== 64) {
+              break;
+            }
+
+            message.setAutoConfirm = reader.bool();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<UpdateChannelRequest>, I>>(base?: I): UpdateChannelRequest {
+    return UpdateChannelRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<UpdateChannelRequest>, I>>(object: I): UpdateChannelRequest {
+    const message = createBaseUpdateChannelRequest();
+    message.slug = object.slug ?? "";
+    message.name = object.name ?? "";
+    message.isActive = object.isActive ?? false;
+    message.setActive = object.setActive ?? false;
+    message.defaultCountry = object.defaultCountry ?? "";
+    message.allocationStrategy = object.allocationStrategy ?? "";
+    message.autoConfirm = object.autoConfirm ?? false;
+    message.setAutoConfirm = object.setAutoConfirm ?? false;
+    return message;
+  },
+};
+
+function createBaseDeleteChannelRequest(): DeleteChannelRequest {
+  return { slug: "" };
+}
+
+export const DeleteChannelRequest: MessageFns<DeleteChannelRequest> = {
+  encode(message: DeleteChannelRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.slug !== "") {
+      writer.uint32(10).string(message.slug);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): DeleteChannelRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseDeleteChannelRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.slug = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<DeleteChannelRequest>, I>>(base?: I): DeleteChannelRequest {
+    return DeleteChannelRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<DeleteChannelRequest>, I>>(object: I): DeleteChannelRequest {
+    const message = createBaseDeleteChannelRequest();
+    message.slug = object.slug ?? "";
+    return message;
+  },
+};
+
+function createBaseDeleteChannelResponse(): DeleteChannelResponse {
+  return { ok: false, errors: [] };
+}
+
+export const DeleteChannelResponse: MessageFns<DeleteChannelResponse> = {
+  encode(message: DeleteChannelResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.ok !== false) {
+      writer.uint32(8).bool(message.ok);
+    }
+    for (const v of message.errors) {
+      Error.encode(v!, writer.uint32(18).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): DeleteChannelResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseDeleteChannelResponse();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 8) {
+              break;
+            }
+
+            message.ok = reader.bool();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.errors.push(Error.decode(reader, reader.uint32()));
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<DeleteChannelResponse>, I>>(base?: I): DeleteChannelResponse {
+    return DeleteChannelResponse.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<DeleteChannelResponse>, I>>(object: I): DeleteChannelResponse {
+    const message = createBaseDeleteChannelResponse();
+    message.ok = object.ok ?? false;
+    message.errors = object.errors?.map((e) => Error.fromPartial(e)) || [];
+    return message;
+  },
+};
+
+function createBaseSetProductListingRequest(): SetProductListingRequest {
+  return { channel: "", productId: "", isPublished: false, visibleInListings: false };
+}
+
+export const SetProductListingRequest: MessageFns<SetProductListingRequest> = {
+  encode(message: SetProductListingRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.channel !== "") {
+      writer.uint32(10).string(message.channel);
+    }
+    if (message.productId !== "") {
+      writer.uint32(18).string(message.productId);
+    }
+    if (message.isPublished !== false) {
+      writer.uint32(24).bool(message.isPublished);
+    }
+    if (message.visibleInListings !== false) {
+      writer.uint32(32).bool(message.visibleInListings);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): SetProductListingRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseSetProductListingRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.channel = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.productId = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 24) {
+              break;
+            }
+
+            message.isPublished = reader.bool();
+            continue;
+          }
+          case 4: {
+            if (tag !== 32) {
+              break;
+            }
+
+            message.visibleInListings = reader.bool();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<SetProductListingRequest>, I>>(base?: I): SetProductListingRequest {
+    return SetProductListingRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<SetProductListingRequest>, I>>(object: I): SetProductListingRequest {
+    const message = createBaseSetProductListingRequest();
+    message.channel = object.channel ?? "";
+    message.productId = object.productId ?? "";
+    message.isPublished = object.isPublished ?? false;
+    message.visibleInListings = object.visibleInListings ?? false;
+    return message;
+  },
+};
+
+function createBaseSetProductListingResponse(): SetProductListingResponse {
+  return { errors: [] };
+}
+
+export const SetProductListingResponse: MessageFns<SetProductListingResponse> = {
+  encode(message: SetProductListingResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    for (const v of message.errors) {
+      Error.encode(v!, writer.uint32(10).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): SetProductListingResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseSetProductListingResponse();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.errors.push(Error.decode(reader, reader.uint32()));
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<SetProductListingResponse>, I>>(base?: I): SetProductListingResponse {
+    return SetProductListingResponse.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<SetProductListingResponse>, I>>(object: I): SetProductListingResponse {
+    const message = createBaseSetProductListingResponse();
+    message.errors = object.errors?.map((e) => Error.fromPartial(e)) || [];
+    return message;
+  },
+};
+
+function createBaseSetVariantPriceRequest(): SetVariantPriceRequest {
+  return { channel: "", variantId: "", price: "", costPrice: "" };
+}
+
+export const SetVariantPriceRequest: MessageFns<SetVariantPriceRequest> = {
+  encode(message: SetVariantPriceRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.channel !== "") {
+      writer.uint32(10).string(message.channel);
+    }
+    if (message.variantId !== "") {
+      writer.uint32(18).string(message.variantId);
+    }
+    if (message.price !== "") {
+      writer.uint32(26).string(message.price);
+    }
+    if (message.costPrice !== "") {
+      writer.uint32(34).string(message.costPrice);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): SetVariantPriceRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseSetVariantPriceRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.channel = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.variantId = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.price = reader.string();
+            continue;
+          }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.costPrice = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<SetVariantPriceRequest>, I>>(base?: I): SetVariantPriceRequest {
+    return SetVariantPriceRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<SetVariantPriceRequest>, I>>(object: I): SetVariantPriceRequest {
+    const message = createBaseSetVariantPriceRequest();
+    message.channel = object.channel ?? "";
+    message.variantId = object.variantId ?? "";
+    message.price = object.price ?? "";
+    message.costPrice = object.costPrice ?? "";
+    return message;
+  },
+};
+
+function createBaseSetVariantPriceResponse(): SetVariantPriceResponse {
+  return { errors: [] };
+}
+
+export const SetVariantPriceResponse: MessageFns<SetVariantPriceResponse> = {
+  encode(message: SetVariantPriceResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    for (const v of message.errors) {
+      Error.encode(v!, writer.uint32(10).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): SetVariantPriceResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseSetVariantPriceResponse();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.errors.push(Error.decode(reader, reader.uint32()));
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<SetVariantPriceResponse>, I>>(base?: I): SetVariantPriceResponse {
+    return SetVariantPriceResponse.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<SetVariantPriceResponse>, I>>(object: I): SetVariantPriceResponse {
+    const message = createBaseSetVariantPriceResponse();
+    message.errors = object.errors?.map((e) => Error.fromPartial(e)) || [];
+    return message;
+  },
+};
+
 function createBaseTaxClassInfo(): TaxClassInfo {
   return { id: "", name: "" };
 }
@@ -2583,6 +4196,540 @@ export const ListTaxClassesResponse: MessageFns<ListTaxClassesResponse> = {
   fromPartial<I extends Exact<DeepPartial<ListTaxClassesResponse>, I>>(object: I): ListTaxClassesResponse {
     const message = createBaseListTaxClassesResponse();
     message.classes = object.classes?.map((e) => TaxClassInfo.fromPartial(e)) || [];
+    return message;
+  },
+};
+
+function createBaseGetTaxRateRequest(): GetTaxRateRequest {
+  return { variantId: "", country: "", channel: "" };
+}
+
+export const GetTaxRateRequest: MessageFns<GetTaxRateRequest> = {
+  encode(message: GetTaxRateRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.variantId !== "") {
+      writer.uint32(10).string(message.variantId);
+    }
+    if (message.country !== "") {
+      writer.uint32(18).string(message.country);
+    }
+    if (message.channel !== "") {
+      writer.uint32(26).string(message.channel);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): GetTaxRateRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseGetTaxRateRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.variantId = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.country = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.channel = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<GetTaxRateRequest>, I>>(base?: I): GetTaxRateRequest {
+    return GetTaxRateRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<GetTaxRateRequest>, I>>(object: I): GetTaxRateRequest {
+    const message = createBaseGetTaxRateRequest();
+    message.variantId = object.variantId ?? "";
+    message.country = object.country ?? "";
+    message.channel = object.channel ?? "";
+    return message;
+  },
+};
+
+function createBaseGetTaxRateResponse(): GetTaxRateResponse {
+  return { rate: "", chargeTaxes: false, errors: [] };
+}
+
+export const GetTaxRateResponse: MessageFns<GetTaxRateResponse> = {
+  encode(message: GetTaxRateResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.rate !== "") {
+      writer.uint32(10).string(message.rate);
+    }
+    if (message.chargeTaxes !== false) {
+      writer.uint32(16).bool(message.chargeTaxes);
+    }
+    for (const v of message.errors) {
+      Error.encode(v!, writer.uint32(26).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): GetTaxRateResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseGetTaxRateResponse();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.rate = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 16) {
+              break;
+            }
+
+            message.chargeTaxes = reader.bool();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.errors.push(Error.decode(reader, reader.uint32()));
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<GetTaxRateResponse>, I>>(base?: I): GetTaxRateResponse {
+    return GetTaxRateResponse.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<GetTaxRateResponse>, I>>(object: I): GetTaxRateResponse {
+    const message = createBaseGetTaxRateResponse();
+    message.rate = object.rate ?? "";
+    message.chargeTaxes = object.chargeTaxes ?? false;
+    message.errors = object.errors?.map((e) => Error.fromPartial(e)) || [];
+    return message;
+  },
+};
+
+function createBaseTaxLineInput(): TaxLineInput {
+  return { variantId: "", unitPrice: "", quantity: 0 };
+}
+
+export const TaxLineInput: MessageFns<TaxLineInput> = {
+  encode(message: TaxLineInput, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.variantId !== "") {
+      writer.uint32(10).string(message.variantId);
+    }
+    if (message.unitPrice !== "") {
+      writer.uint32(18).string(message.unitPrice);
+    }
+    if (message.quantity !== 0) {
+      writer.uint32(24).int32(message.quantity);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): TaxLineInput {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseTaxLineInput();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.variantId = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.unitPrice = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 24) {
+              break;
+            }
+
+            message.quantity = reader.int32();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<TaxLineInput>, I>>(base?: I): TaxLineInput {
+    return TaxLineInput.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<TaxLineInput>, I>>(object: I): TaxLineInput {
+    const message = createBaseTaxLineInput();
+    message.variantId = object.variantId ?? "";
+    message.unitPrice = object.unitPrice ?? "";
+    message.quantity = object.quantity ?? 0;
+    return message;
+  },
+};
+
+function createBaseTaxedLineInfo(): TaxedLineInfo {
+  return { variantId: "", quantity: 0, unitNet: "", unitGross: "", totalNet: "", totalGross: "", taxRate: "" };
+}
+
+export const TaxedLineInfo: MessageFns<TaxedLineInfo> = {
+  encode(message: TaxedLineInfo, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.variantId !== "") {
+      writer.uint32(10).string(message.variantId);
+    }
+    if (message.quantity !== 0) {
+      writer.uint32(16).int32(message.quantity);
+    }
+    if (message.unitNet !== "") {
+      writer.uint32(26).string(message.unitNet);
+    }
+    if (message.unitGross !== "") {
+      writer.uint32(34).string(message.unitGross);
+    }
+    if (message.totalNet !== "") {
+      writer.uint32(42).string(message.totalNet);
+    }
+    if (message.totalGross !== "") {
+      writer.uint32(50).string(message.totalGross);
+    }
+    if (message.taxRate !== "") {
+      writer.uint32(58).string(message.taxRate);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): TaxedLineInfo {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseTaxedLineInfo();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.variantId = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 16) {
+              break;
+            }
+
+            message.quantity = reader.int32();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.unitNet = reader.string();
+            continue;
+          }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.unitGross = reader.string();
+            continue;
+          }
+          case 5: {
+            if (tag !== 42) {
+              break;
+            }
+
+            message.totalNet = reader.string();
+            continue;
+          }
+          case 6: {
+            if (tag !== 50) {
+              break;
+            }
+
+            message.totalGross = reader.string();
+            continue;
+          }
+          case 7: {
+            if (tag !== 58) {
+              break;
+            }
+
+            message.taxRate = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<TaxedLineInfo>, I>>(base?: I): TaxedLineInfo {
+    return TaxedLineInfo.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<TaxedLineInfo>, I>>(object: I): TaxedLineInfo {
+    const message = createBaseTaxedLineInfo();
+    message.variantId = object.variantId ?? "";
+    message.quantity = object.quantity ?? 0;
+    message.unitNet = object.unitNet ?? "";
+    message.unitGross = object.unitGross ?? "";
+    message.totalNet = object.totalNet ?? "";
+    message.totalGross = object.totalGross ?? "";
+    message.taxRate = object.taxRate ?? "";
+    return message;
+  },
+};
+
+function createBaseCalculateTaxesRequest(): CalculateTaxesRequest {
+  return { channel: "", country: "", lines: [] };
+}
+
+export const CalculateTaxesRequest: MessageFns<CalculateTaxesRequest> = {
+  encode(message: CalculateTaxesRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.channel !== "") {
+      writer.uint32(10).string(message.channel);
+    }
+    if (message.country !== "") {
+      writer.uint32(18).string(message.country);
+    }
+    for (const v of message.lines) {
+      TaxLineInput.encode(v!, writer.uint32(26).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): CalculateTaxesRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseCalculateTaxesRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.channel = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.country = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.lines.push(TaxLineInput.decode(reader, reader.uint32()));
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<CalculateTaxesRequest>, I>>(base?: I): CalculateTaxesRequest {
+    return CalculateTaxesRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<CalculateTaxesRequest>, I>>(object: I): CalculateTaxesRequest {
+    const message = createBaseCalculateTaxesRequest();
+    message.channel = object.channel ?? "";
+    message.country = object.country ?? "";
+    message.lines = object.lines?.map((e) => TaxLineInput.fromPartial(e)) || [];
+    return message;
+  },
+};
+
+function createBaseCalculateTaxesResponse(): CalculateTaxesResponse {
+  return { lines: [], totalNet: "", totalGross: "", errors: [] };
+}
+
+export const CalculateTaxesResponse: MessageFns<CalculateTaxesResponse> = {
+  encode(message: CalculateTaxesResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    for (const v of message.lines) {
+      TaxedLineInfo.encode(v!, writer.uint32(10).fork()).join();
+    }
+    if (message.totalNet !== "") {
+      writer.uint32(18).string(message.totalNet);
+    }
+    if (message.totalGross !== "") {
+      writer.uint32(26).string(message.totalGross);
+    }
+    for (const v of message.errors) {
+      Error.encode(v!, writer.uint32(34).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): CalculateTaxesResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseCalculateTaxesResponse();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.lines.push(TaxedLineInfo.decode(reader, reader.uint32()));
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.totalNet = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.totalGross = reader.string();
+            continue;
+          }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.errors.push(Error.decode(reader, reader.uint32()));
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<CalculateTaxesResponse>, I>>(base?: I): CalculateTaxesResponse {
+    return CalculateTaxesResponse.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<CalculateTaxesResponse>, I>>(object: I): CalculateTaxesResponse {
+    const message = createBaseCalculateTaxesResponse();
+    message.lines = object.lines?.map((e) => TaxedLineInfo.fromPartial(e)) || [];
+    message.totalNet = object.totalNet ?? "";
+    message.totalGross = object.totalGross ?? "";
+    message.errors = object.errors?.map((e) => Error.fromPartial(e)) || [];
     return message;
   },
 };
@@ -3257,6 +5404,944 @@ export const ReleaseReservationResponse: MessageFns<ReleaseReservationResponse> 
   },
 };
 
+function createBaseCreateWarehouseRequest(): CreateWarehouseRequest {
+  return {
+    name: "",
+    slug: "",
+    email: "",
+    street: "",
+    city: "",
+    postalCode: "",
+    country: "",
+    isPrivate: false,
+    ccOption: "",
+  };
+}
+
+export const CreateWarehouseRequest: MessageFns<CreateWarehouseRequest> = {
+  encode(message: CreateWarehouseRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.name !== "") {
+      writer.uint32(10).string(message.name);
+    }
+    if (message.slug !== "") {
+      writer.uint32(18).string(message.slug);
+    }
+    if (message.email !== "") {
+      writer.uint32(26).string(message.email);
+    }
+    if (message.street !== "") {
+      writer.uint32(34).string(message.street);
+    }
+    if (message.city !== "") {
+      writer.uint32(42).string(message.city);
+    }
+    if (message.postalCode !== "") {
+      writer.uint32(50).string(message.postalCode);
+    }
+    if (message.country !== "") {
+      writer.uint32(58).string(message.country);
+    }
+    if (message.isPrivate !== false) {
+      writer.uint32(64).bool(message.isPrivate);
+    }
+    if (message.ccOption !== "") {
+      writer.uint32(74).string(message.ccOption);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): CreateWarehouseRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseCreateWarehouseRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.name = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.slug = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.email = reader.string();
+            continue;
+          }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.street = reader.string();
+            continue;
+          }
+          case 5: {
+            if (tag !== 42) {
+              break;
+            }
+
+            message.city = reader.string();
+            continue;
+          }
+          case 6: {
+            if (tag !== 50) {
+              break;
+            }
+
+            message.postalCode = reader.string();
+            continue;
+          }
+          case 7: {
+            if (tag !== 58) {
+              break;
+            }
+
+            message.country = reader.string();
+            continue;
+          }
+          case 8: {
+            if (tag !== 64) {
+              break;
+            }
+
+            message.isPrivate = reader.bool();
+            continue;
+          }
+          case 9: {
+            if (tag !== 74) {
+              break;
+            }
+
+            message.ccOption = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<CreateWarehouseRequest>, I>>(base?: I): CreateWarehouseRequest {
+    return CreateWarehouseRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<CreateWarehouseRequest>, I>>(object: I): CreateWarehouseRequest {
+    const message = createBaseCreateWarehouseRequest();
+    message.name = object.name ?? "";
+    message.slug = object.slug ?? "";
+    message.email = object.email ?? "";
+    message.street = object.street ?? "";
+    message.city = object.city ?? "";
+    message.postalCode = object.postalCode ?? "";
+    message.country = object.country ?? "";
+    message.isPrivate = object.isPrivate ?? false;
+    message.ccOption = object.ccOption ?? "";
+    return message;
+  },
+};
+
+function createBaseWarehouseResponse(): WarehouseResponse {
+  return { warehouse: undefined, errors: [] };
+}
+
+export const WarehouseResponse: MessageFns<WarehouseResponse> = {
+  encode(message: WarehouseResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.warehouse !== undefined) {
+      WarehouseInfo.encode(message.warehouse, writer.uint32(10).fork()).join();
+    }
+    for (const v of message.errors) {
+      Error.encode(v!, writer.uint32(18).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): WarehouseResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseWarehouseResponse();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.warehouse = WarehouseInfo.decode(reader, reader.uint32());
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.errors.push(Error.decode(reader, reader.uint32()));
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<WarehouseResponse>, I>>(base?: I): WarehouseResponse {
+    return WarehouseResponse.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<WarehouseResponse>, I>>(object: I): WarehouseResponse {
+    const message = createBaseWarehouseResponse();
+    message.warehouse = (object.warehouse !== undefined && object.warehouse !== null)
+      ? WarehouseInfo.fromPartial(object.warehouse)
+      : undefined;
+    message.errors = object.errors?.map((e) => Error.fromPartial(e)) || [];
+    return message;
+  },
+};
+
+function createBaseUpdateWarehouseRequest(): UpdateWarehouseRequest {
+  return { id: "", name: "", email: "", ccOption: "", isPrivate: false, setPrivate: false };
+}
+
+export const UpdateWarehouseRequest: MessageFns<UpdateWarehouseRequest> = {
+  encode(message: UpdateWarehouseRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.id !== "") {
+      writer.uint32(10).string(message.id);
+    }
+    if (message.name !== "") {
+      writer.uint32(18).string(message.name);
+    }
+    if (message.email !== "") {
+      writer.uint32(26).string(message.email);
+    }
+    if (message.ccOption !== "") {
+      writer.uint32(34).string(message.ccOption);
+    }
+    if (message.isPrivate !== false) {
+      writer.uint32(40).bool(message.isPrivate);
+    }
+    if (message.setPrivate !== false) {
+      writer.uint32(48).bool(message.setPrivate);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): UpdateWarehouseRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseUpdateWarehouseRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.id = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.name = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.email = reader.string();
+            continue;
+          }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.ccOption = reader.string();
+            continue;
+          }
+          case 5: {
+            if (tag !== 40) {
+              break;
+            }
+
+            message.isPrivate = reader.bool();
+            continue;
+          }
+          case 6: {
+            if (tag !== 48) {
+              break;
+            }
+
+            message.setPrivate = reader.bool();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<UpdateWarehouseRequest>, I>>(base?: I): UpdateWarehouseRequest {
+    return UpdateWarehouseRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<UpdateWarehouseRequest>, I>>(object: I): UpdateWarehouseRequest {
+    const message = createBaseUpdateWarehouseRequest();
+    message.id = object.id ?? "";
+    message.name = object.name ?? "";
+    message.email = object.email ?? "";
+    message.ccOption = object.ccOption ?? "";
+    message.isPrivate = object.isPrivate ?? false;
+    message.setPrivate = object.setPrivate ?? false;
+    return message;
+  },
+};
+
+function createBaseDeleteWarehouseRequest(): DeleteWarehouseRequest {
+  return { id: "" };
+}
+
+export const DeleteWarehouseRequest: MessageFns<DeleteWarehouseRequest> = {
+  encode(message: DeleteWarehouseRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.id !== "") {
+      writer.uint32(10).string(message.id);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): DeleteWarehouseRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseDeleteWarehouseRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.id = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<DeleteWarehouseRequest>, I>>(base?: I): DeleteWarehouseRequest {
+    return DeleteWarehouseRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<DeleteWarehouseRequest>, I>>(object: I): DeleteWarehouseRequest {
+    const message = createBaseDeleteWarehouseRequest();
+    message.id = object.id ?? "";
+    return message;
+  },
+};
+
+function createBaseDeleteWarehouseResponse(): DeleteWarehouseResponse {
+  return { ok: false, errors: [] };
+}
+
+export const DeleteWarehouseResponse: MessageFns<DeleteWarehouseResponse> = {
+  encode(message: DeleteWarehouseResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.ok !== false) {
+      writer.uint32(8).bool(message.ok);
+    }
+    for (const v of message.errors) {
+      Error.encode(v!, writer.uint32(18).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): DeleteWarehouseResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseDeleteWarehouseResponse();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 8) {
+              break;
+            }
+
+            message.ok = reader.bool();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.errors.push(Error.decode(reader, reader.uint32()));
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<DeleteWarehouseResponse>, I>>(base?: I): DeleteWarehouseResponse {
+    return DeleteWarehouseResponse.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<DeleteWarehouseResponse>, I>>(object: I): DeleteWarehouseResponse {
+    const message = createBaseDeleteWarehouseResponse();
+    message.ok = object.ok ?? false;
+    message.errors = object.errors?.map((e) => Error.fromPartial(e)) || [];
+    return message;
+  },
+};
+
+function createBaseUpsertStockRequest(): UpsertStockRequest {
+  return { warehouseId: "", variantId: "", quantity: 0 };
+}
+
+export const UpsertStockRequest: MessageFns<UpsertStockRequest> = {
+  encode(message: UpsertStockRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.warehouseId !== "") {
+      writer.uint32(10).string(message.warehouseId);
+    }
+    if (message.variantId !== "") {
+      writer.uint32(18).string(message.variantId);
+    }
+    if (message.quantity !== 0) {
+      writer.uint32(24).int32(message.quantity);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): UpsertStockRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseUpsertStockRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.warehouseId = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.variantId = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 24) {
+              break;
+            }
+
+            message.quantity = reader.int32();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<UpsertStockRequest>, I>>(base?: I): UpsertStockRequest {
+    return UpsertStockRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<UpsertStockRequest>, I>>(object: I): UpsertStockRequest {
+    const message = createBaseUpsertStockRequest();
+    message.warehouseId = object.warehouseId ?? "";
+    message.variantId = object.variantId ?? "";
+    message.quantity = object.quantity ?? 0;
+    return message;
+  },
+};
+
+function createBaseUpsertStockResponse(): UpsertStockResponse {
+  return { stock: undefined, errors: [] };
+}
+
+export const UpsertStockResponse: MessageFns<UpsertStockResponse> = {
+  encode(message: UpsertStockResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.stock !== undefined) {
+      StockInfo.encode(message.stock, writer.uint32(10).fork()).join();
+    }
+    for (const v of message.errors) {
+      Error.encode(v!, writer.uint32(18).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): UpsertStockResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseUpsertStockResponse();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.stock = StockInfo.decode(reader, reader.uint32());
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.errors.push(Error.decode(reader, reader.uint32()));
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<UpsertStockResponse>, I>>(base?: I): UpsertStockResponse {
+    return UpsertStockResponse.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<UpsertStockResponse>, I>>(object: I): UpsertStockResponse {
+    const message = createBaseUpsertStockResponse();
+    message.stock = (object.stock !== undefined && object.stock !== null)
+      ? StockInfo.fromPartial(object.stock)
+      : undefined;
+    message.errors = object.errors?.map((e) => Error.fromPartial(e)) || [];
+    return message;
+  },
+};
+
+function createBaseZoneInfo(): ZoneInfo {
+  return { id: "", name: "", countries: "", isDefault: false };
+}
+
+export const ZoneInfo: MessageFns<ZoneInfo> = {
+  encode(message: ZoneInfo, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.id !== "") {
+      writer.uint32(10).string(message.id);
+    }
+    if (message.name !== "") {
+      writer.uint32(18).string(message.name);
+    }
+    if (message.countries !== "") {
+      writer.uint32(26).string(message.countries);
+    }
+    if (message.isDefault !== false) {
+      writer.uint32(32).bool(message.isDefault);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ZoneInfo {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseZoneInfo();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.id = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.name = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.countries = reader.string();
+            continue;
+          }
+          case 4: {
+            if (tag !== 32) {
+              break;
+            }
+
+            message.isDefault = reader.bool();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<ZoneInfo>, I>>(base?: I): ZoneInfo {
+    return ZoneInfo.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ZoneInfo>, I>>(object: I): ZoneInfo {
+    const message = createBaseZoneInfo();
+    message.id = object.id ?? "";
+    message.name = object.name ?? "";
+    message.countries = object.countries ?? "";
+    message.isDefault = object.isDefault ?? false;
+    return message;
+  },
+};
+
+function createBaseListZonesRequest(): ListZonesRequest {
+  return {};
+}
+
+export const ListZonesRequest: MessageFns<ListZonesRequest> = {
+  encode(_: ListZonesRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ListZonesRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseListZonesRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<ListZonesRequest>, I>>(base?: I): ListZonesRequest {
+    return ListZonesRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ListZonesRequest>, I>>(_: I): ListZonesRequest {
+    const message = createBaseListZonesRequest();
+    return message;
+  },
+};
+
+function createBaseListZonesResponse(): ListZonesResponse {
+  return { zones: [] };
+}
+
+export const ListZonesResponse: MessageFns<ListZonesResponse> = {
+  encode(message: ListZonesResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    for (const v of message.zones) {
+      ZoneInfo.encode(v!, writer.uint32(10).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ListZonesResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseListZonesResponse();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.zones.push(ZoneInfo.decode(reader, reader.uint32()));
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<ListZonesResponse>, I>>(base?: I): ListZonesResponse {
+    return ListZonesResponse.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ListZonesResponse>, I>>(object: I): ListZonesResponse {
+    const message = createBaseListZonesResponse();
+    message.zones = object.zones?.map((e) => ZoneInfo.fromPartial(e)) || [];
+    return message;
+  },
+};
+
+function createBaseZoneLinkRequest(): ZoneLinkRequest {
+  return { warehouseId: "", zoneId: "" };
+}
+
+export const ZoneLinkRequest: MessageFns<ZoneLinkRequest> = {
+  encode(message: ZoneLinkRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.warehouseId !== "") {
+      writer.uint32(10).string(message.warehouseId);
+    }
+    if (message.zoneId !== "") {
+      writer.uint32(18).string(message.zoneId);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ZoneLinkRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseZoneLinkRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.warehouseId = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.zoneId = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<ZoneLinkRequest>, I>>(base?: I): ZoneLinkRequest {
+    return ZoneLinkRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ZoneLinkRequest>, I>>(object: I): ZoneLinkRequest {
+    const message = createBaseZoneLinkRequest();
+    message.warehouseId = object.warehouseId ?? "";
+    message.zoneId = object.zoneId ?? "";
+    return message;
+  },
+};
+
+function createBaseZoneLinkResponse(): ZoneLinkResponse {
+  return { ok: false, errors: [] };
+}
+
+export const ZoneLinkResponse: MessageFns<ZoneLinkResponse> = {
+  encode(message: ZoneLinkResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.ok !== false) {
+      writer.uint32(8).bool(message.ok);
+    }
+    for (const v of message.errors) {
+      Error.encode(v!, writer.uint32(18).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ZoneLinkResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseZoneLinkResponse();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 8) {
+              break;
+            }
+
+            message.ok = reader.bool();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.errors.push(Error.decode(reader, reader.uint32()));
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<ZoneLinkResponse>, I>>(base?: I): ZoneLinkResponse {
+    return ZoneLinkResponse.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ZoneLinkResponse>, I>>(object: I): ZoneLinkResponse {
+    const message = createBaseZoneLinkResponse();
+    message.ok = object.ok ?? false;
+    message.errors = object.errors?.map((e) => Error.fromPartial(e)) || [];
+    return message;
+  },
+};
+
 export type DiscountServiceService = typeof DiscountServiceService;
 export const DiscountServiceService = {
   validateVoucher: {
@@ -3510,11 +6595,93 @@ export const AccountServiceService = {
       Buffer.from(CreateAddressResponse.encode(value).finish()),
     responseDeserialize: (value: Buffer): CreateAddressResponse => CreateAddressResponse.decode(value),
   },
+  createGroup: {
+    path: "/rustygod.commerce.AccountService/CreateGroup" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: CreateGroupRequest): Buffer => Buffer.from(CreateGroupRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): CreateGroupRequest => CreateGroupRequest.decode(value),
+    responseSerialize: (value: GroupResponse): Buffer => Buffer.from(GroupResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): GroupResponse => GroupResponse.decode(value),
+  },
+  listGroups: {
+    path: "/rustygod.commerce.AccountService/ListGroups" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: ListGroupsRequest): Buffer => Buffer.from(ListGroupsRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): ListGroupsRequest => ListGroupsRequest.decode(value),
+    responseSerialize: (value: ListGroupsResponse): Buffer => Buffer.from(ListGroupsResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): ListGroupsResponse => ListGroupsResponse.decode(value),
+  },
+  renameGroup: {
+    path: "/rustygod.commerce.AccountService/RenameGroup" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: RenameGroupRequest): Buffer => Buffer.from(RenameGroupRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): RenameGroupRequest => RenameGroupRequest.decode(value),
+    responseSerialize: (value: GroupResponse): Buffer => Buffer.from(GroupResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): GroupResponse => GroupResponse.decode(value),
+  },
+  deleteGroup: {
+    path: "/rustygod.commerce.AccountService/DeleteGroup" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: DeleteGroupRequest): Buffer => Buffer.from(DeleteGroupRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): DeleteGroupRequest => DeleteGroupRequest.decode(value),
+    responseSerialize: (value: DeleteGroupResponse): Buffer => Buffer.from(DeleteGroupResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): DeleteGroupResponse => DeleteGroupResponse.decode(value),
+  },
+  addGroupMembers: {
+    path: "/rustygod.commerce.AccountService/AddGroupMembers" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: GroupMembersRequest): Buffer => Buffer.from(GroupMembersRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): GroupMembersRequest => GroupMembersRequest.decode(value),
+    responseSerialize: (value: GroupResponse): Buffer => Buffer.from(GroupResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): GroupResponse => GroupResponse.decode(value),
+  },
+  removeGroupMembers: {
+    path: "/rustygod.commerce.AccountService/RemoveGroupMembers" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: GroupMembersRequest): Buffer => Buffer.from(GroupMembersRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): GroupMembersRequest => GroupMembersRequest.decode(value),
+    responseSerialize: (value: GroupResponse): Buffer => Buffer.from(GroupResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): GroupResponse => GroupResponse.decode(value),
+  },
+  grantGroupPermissions: {
+    path: "/rustygod.commerce.AccountService/GrantGroupPermissions" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: GroupPermissionsRequest): Buffer =>
+      Buffer.from(GroupPermissionsRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): GroupPermissionsRequest => GroupPermissionsRequest.decode(value),
+    responseSerialize: (value: GroupResponse): Buffer => Buffer.from(GroupResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): GroupResponse => GroupResponse.decode(value),
+  },
+  revokeGroupPermissions: {
+    path: "/rustygod.commerce.AccountService/RevokeGroupPermissions" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: GroupPermissionsRequest): Buffer =>
+      Buffer.from(GroupPermissionsRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): GroupPermissionsRequest => GroupPermissionsRequest.decode(value),
+    responseSerialize: (value: GroupResponse): Buffer => Buffer.from(GroupResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): GroupResponse => GroupResponse.decode(value),
+  },
 } as const;
 
 export interface AccountServiceServer extends UntypedServiceImplementation {
   getCustomer: handleUnaryCall<GetCustomerRequest, GetCustomerResponse>;
   createAddress: handleUnaryCall<AddressInput, CreateAddressResponse>;
+  createGroup: handleUnaryCall<CreateGroupRequest, GroupResponse>;
+  listGroups: handleUnaryCall<ListGroupsRequest, ListGroupsResponse>;
+  renameGroup: handleUnaryCall<RenameGroupRequest, GroupResponse>;
+  deleteGroup: handleUnaryCall<DeleteGroupRequest, DeleteGroupResponse>;
+  addGroupMembers: handleUnaryCall<GroupMembersRequest, GroupResponse>;
+  removeGroupMembers: handleUnaryCall<GroupMembersRequest, GroupResponse>;
+  grantGroupPermissions: handleUnaryCall<GroupPermissionsRequest, GroupResponse>;
+  revokeGroupPermissions: handleUnaryCall<GroupPermissionsRequest, GroupResponse>;
 }
 
 export interface AccountServiceClient extends Client {
@@ -3548,6 +6715,126 @@ export interface AccountServiceClient extends Client {
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: CreateAddressResponse) => void,
   ): ClientUnaryCall;
+  createGroup(
+    request: CreateGroupRequest,
+    callback: (error: ServiceError | null, response: GroupResponse) => void,
+  ): ClientUnaryCall;
+  createGroup(
+    request: CreateGroupRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: GroupResponse) => void,
+  ): ClientUnaryCall;
+  createGroup(
+    request: CreateGroupRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: GroupResponse) => void,
+  ): ClientUnaryCall;
+  listGroups(
+    request: ListGroupsRequest,
+    callback: (error: ServiceError | null, response: ListGroupsResponse) => void,
+  ): ClientUnaryCall;
+  listGroups(
+    request: ListGroupsRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: ListGroupsResponse) => void,
+  ): ClientUnaryCall;
+  listGroups(
+    request: ListGroupsRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: ListGroupsResponse) => void,
+  ): ClientUnaryCall;
+  renameGroup(
+    request: RenameGroupRequest,
+    callback: (error: ServiceError | null, response: GroupResponse) => void,
+  ): ClientUnaryCall;
+  renameGroup(
+    request: RenameGroupRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: GroupResponse) => void,
+  ): ClientUnaryCall;
+  renameGroup(
+    request: RenameGroupRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: GroupResponse) => void,
+  ): ClientUnaryCall;
+  deleteGroup(
+    request: DeleteGroupRequest,
+    callback: (error: ServiceError | null, response: DeleteGroupResponse) => void,
+  ): ClientUnaryCall;
+  deleteGroup(
+    request: DeleteGroupRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: DeleteGroupResponse) => void,
+  ): ClientUnaryCall;
+  deleteGroup(
+    request: DeleteGroupRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: DeleteGroupResponse) => void,
+  ): ClientUnaryCall;
+  addGroupMembers(
+    request: GroupMembersRequest,
+    callback: (error: ServiceError | null, response: GroupResponse) => void,
+  ): ClientUnaryCall;
+  addGroupMembers(
+    request: GroupMembersRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: GroupResponse) => void,
+  ): ClientUnaryCall;
+  addGroupMembers(
+    request: GroupMembersRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: GroupResponse) => void,
+  ): ClientUnaryCall;
+  removeGroupMembers(
+    request: GroupMembersRequest,
+    callback: (error: ServiceError | null, response: GroupResponse) => void,
+  ): ClientUnaryCall;
+  removeGroupMembers(
+    request: GroupMembersRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: GroupResponse) => void,
+  ): ClientUnaryCall;
+  removeGroupMembers(
+    request: GroupMembersRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: GroupResponse) => void,
+  ): ClientUnaryCall;
+  grantGroupPermissions(
+    request: GroupPermissionsRequest,
+    callback: (error: ServiceError | null, response: GroupResponse) => void,
+  ): ClientUnaryCall;
+  grantGroupPermissions(
+    request: GroupPermissionsRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: GroupResponse) => void,
+  ): ClientUnaryCall;
+  grantGroupPermissions(
+    request: GroupPermissionsRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: GroupResponse) => void,
+  ): ClientUnaryCall;
+  revokeGroupPermissions(
+    request: GroupPermissionsRequest,
+    callback: (error: ServiceError | null, response: GroupResponse) => void,
+  ): ClientUnaryCall;
+  revokeGroupPermissions(
+    request: GroupPermissionsRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: GroupResponse) => void,
+  ): ClientUnaryCall;
+  revokeGroupPermissions(
+    request: GroupPermissionsRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: GroupResponse) => void,
+  ): ClientUnaryCall;
 }
 
 export const AccountServiceClient = makeGenericClientConstructor(
@@ -3580,11 +6867,66 @@ export const ChannelServiceService = {
     responseSerialize: (value: GetChannelResponse): Buffer => Buffer.from(GetChannelResponse.encode(value).finish()),
     responseDeserialize: (value: Buffer): GetChannelResponse => GetChannelResponse.decode(value),
   },
+  createChannel: {
+    path: "/rustygod.commerce.ChannelService/CreateChannel" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: CreateChannelRequest): Buffer => Buffer.from(CreateChannelRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): CreateChannelRequest => CreateChannelRequest.decode(value),
+    responseSerialize: (value: ChannelResponse): Buffer => Buffer.from(ChannelResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): ChannelResponse => ChannelResponse.decode(value),
+  },
+  updateChannel: {
+    path: "/rustygod.commerce.ChannelService/UpdateChannel" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: UpdateChannelRequest): Buffer => Buffer.from(UpdateChannelRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): UpdateChannelRequest => UpdateChannelRequest.decode(value),
+    responseSerialize: (value: ChannelResponse): Buffer => Buffer.from(ChannelResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): ChannelResponse => ChannelResponse.decode(value),
+  },
+  deleteChannel: {
+    path: "/rustygod.commerce.ChannelService/DeleteChannel" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: DeleteChannelRequest): Buffer => Buffer.from(DeleteChannelRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): DeleteChannelRequest => DeleteChannelRequest.decode(value),
+    responseSerialize: (value: DeleteChannelResponse): Buffer =>
+      Buffer.from(DeleteChannelResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): DeleteChannelResponse => DeleteChannelResponse.decode(value),
+  },
+  setProductListing: {
+    path: "/rustygod.commerce.ChannelService/SetProductListing" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: SetProductListingRequest): Buffer =>
+      Buffer.from(SetProductListingRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): SetProductListingRequest => SetProductListingRequest.decode(value),
+    responseSerialize: (value: SetProductListingResponse): Buffer =>
+      Buffer.from(SetProductListingResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): SetProductListingResponse => SetProductListingResponse.decode(value),
+  },
+  setVariantPrice: {
+    path: "/rustygod.commerce.ChannelService/SetVariantPrice" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: SetVariantPriceRequest): Buffer =>
+      Buffer.from(SetVariantPriceRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): SetVariantPriceRequest => SetVariantPriceRequest.decode(value),
+    responseSerialize: (value: SetVariantPriceResponse): Buffer =>
+      Buffer.from(SetVariantPriceResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): SetVariantPriceResponse => SetVariantPriceResponse.decode(value),
+  },
 } as const;
 
 export interface ChannelServiceServer extends UntypedServiceImplementation {
   listChannels: handleUnaryCall<ListChannelsRequest, ListChannelsResponse>;
   getChannel: handleUnaryCall<GetChannelRequest, GetChannelResponse>;
+  createChannel: handleUnaryCall<CreateChannelRequest, ChannelResponse>;
+  updateChannel: handleUnaryCall<UpdateChannelRequest, ChannelResponse>;
+  deleteChannel: handleUnaryCall<DeleteChannelRequest, DeleteChannelResponse>;
+  setProductListing: handleUnaryCall<SetProductListingRequest, SetProductListingResponse>;
+  setVariantPrice: handleUnaryCall<SetVariantPriceRequest, SetVariantPriceResponse>;
 }
 
 export interface ChannelServiceClient extends Client {
@@ -3618,6 +6960,81 @@ export interface ChannelServiceClient extends Client {
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: GetChannelResponse) => void,
   ): ClientUnaryCall;
+  createChannel(
+    request: CreateChannelRequest,
+    callback: (error: ServiceError | null, response: ChannelResponse) => void,
+  ): ClientUnaryCall;
+  createChannel(
+    request: CreateChannelRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: ChannelResponse) => void,
+  ): ClientUnaryCall;
+  createChannel(
+    request: CreateChannelRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: ChannelResponse) => void,
+  ): ClientUnaryCall;
+  updateChannel(
+    request: UpdateChannelRequest,
+    callback: (error: ServiceError | null, response: ChannelResponse) => void,
+  ): ClientUnaryCall;
+  updateChannel(
+    request: UpdateChannelRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: ChannelResponse) => void,
+  ): ClientUnaryCall;
+  updateChannel(
+    request: UpdateChannelRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: ChannelResponse) => void,
+  ): ClientUnaryCall;
+  deleteChannel(
+    request: DeleteChannelRequest,
+    callback: (error: ServiceError | null, response: DeleteChannelResponse) => void,
+  ): ClientUnaryCall;
+  deleteChannel(
+    request: DeleteChannelRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: DeleteChannelResponse) => void,
+  ): ClientUnaryCall;
+  deleteChannel(
+    request: DeleteChannelRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: DeleteChannelResponse) => void,
+  ): ClientUnaryCall;
+  setProductListing(
+    request: SetProductListingRequest,
+    callback: (error: ServiceError | null, response: SetProductListingResponse) => void,
+  ): ClientUnaryCall;
+  setProductListing(
+    request: SetProductListingRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: SetProductListingResponse) => void,
+  ): ClientUnaryCall;
+  setProductListing(
+    request: SetProductListingRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: SetProductListingResponse) => void,
+  ): ClientUnaryCall;
+  setVariantPrice(
+    request: SetVariantPriceRequest,
+    callback: (error: ServiceError | null, response: SetVariantPriceResponse) => void,
+  ): ClientUnaryCall;
+  setVariantPrice(
+    request: SetVariantPriceRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: SetVariantPriceResponse) => void,
+  ): ClientUnaryCall;
+  setVariantPrice(
+    request: SetVariantPriceRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: SetVariantPriceResponse) => void,
+  ): ClientUnaryCall;
 }
 
 export const ChannelServiceClient = makeGenericClientConstructor(
@@ -3642,10 +7059,32 @@ export const TaxServiceService = {
       Buffer.from(ListTaxClassesResponse.encode(value).finish()),
     responseDeserialize: (value: Buffer): ListTaxClassesResponse => ListTaxClassesResponse.decode(value),
   },
+  getTaxRate: {
+    path: "/rustygod.commerce.TaxService/GetTaxRate" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: GetTaxRateRequest): Buffer => Buffer.from(GetTaxRateRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): GetTaxRateRequest => GetTaxRateRequest.decode(value),
+    responseSerialize: (value: GetTaxRateResponse): Buffer => Buffer.from(GetTaxRateResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): GetTaxRateResponse => GetTaxRateResponse.decode(value),
+  },
+  calculateTaxes: {
+    path: "/rustygod.commerce.TaxService/CalculateTaxes" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: CalculateTaxesRequest): Buffer =>
+      Buffer.from(CalculateTaxesRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): CalculateTaxesRequest => CalculateTaxesRequest.decode(value),
+    responseSerialize: (value: CalculateTaxesResponse): Buffer =>
+      Buffer.from(CalculateTaxesResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): CalculateTaxesResponse => CalculateTaxesResponse.decode(value),
+  },
 } as const;
 
 export interface TaxServiceServer extends UntypedServiceImplementation {
   listTaxClasses: handleUnaryCall<ListTaxClassesRequest, ListTaxClassesResponse>;
+  getTaxRate: handleUnaryCall<GetTaxRateRequest, GetTaxRateResponse>;
+  calculateTaxes: handleUnaryCall<CalculateTaxesRequest, CalculateTaxesResponse>;
 }
 
 export interface TaxServiceClient extends Client {
@@ -3663,6 +7102,36 @@ export interface TaxServiceClient extends Client {
     metadata: Metadata,
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: ListTaxClassesResponse) => void,
+  ): ClientUnaryCall;
+  getTaxRate(
+    request: GetTaxRateRequest,
+    callback: (error: ServiceError | null, response: GetTaxRateResponse) => void,
+  ): ClientUnaryCall;
+  getTaxRate(
+    request: GetTaxRateRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: GetTaxRateResponse) => void,
+  ): ClientUnaryCall;
+  getTaxRate(
+    request: GetTaxRateRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: GetTaxRateResponse) => void,
+  ): ClientUnaryCall;
+  calculateTaxes(
+    request: CalculateTaxesRequest,
+    callback: (error: ServiceError | null, response: CalculateTaxesResponse) => void,
+  ): ClientUnaryCall;
+  calculateTaxes(
+    request: CalculateTaxesRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: CalculateTaxesResponse) => void,
+  ): ClientUnaryCall;
+  calculateTaxes(
+    request: CalculateTaxesRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: CalculateTaxesResponse) => void,
   ): ClientUnaryCall;
 }
 
@@ -3718,6 +7187,73 @@ export const WarehouseServiceService = {
       Buffer.from(ReleaseReservationResponse.encode(value).finish()),
     responseDeserialize: (value: Buffer): ReleaseReservationResponse => ReleaseReservationResponse.decode(value),
   },
+  createWarehouse: {
+    path: "/rustygod.commerce.WarehouseService/CreateWarehouse" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: CreateWarehouseRequest): Buffer =>
+      Buffer.from(CreateWarehouseRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): CreateWarehouseRequest => CreateWarehouseRequest.decode(value),
+    responseSerialize: (value: WarehouseResponse): Buffer => Buffer.from(WarehouseResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): WarehouseResponse => WarehouseResponse.decode(value),
+  },
+  updateWarehouse: {
+    path: "/rustygod.commerce.WarehouseService/UpdateWarehouse" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: UpdateWarehouseRequest): Buffer =>
+      Buffer.from(UpdateWarehouseRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): UpdateWarehouseRequest => UpdateWarehouseRequest.decode(value),
+    responseSerialize: (value: WarehouseResponse): Buffer => Buffer.from(WarehouseResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): WarehouseResponse => WarehouseResponse.decode(value),
+  },
+  deleteWarehouse: {
+    path: "/rustygod.commerce.WarehouseService/DeleteWarehouse" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: DeleteWarehouseRequest): Buffer =>
+      Buffer.from(DeleteWarehouseRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): DeleteWarehouseRequest => DeleteWarehouseRequest.decode(value),
+    responseSerialize: (value: DeleteWarehouseResponse): Buffer =>
+      Buffer.from(DeleteWarehouseResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): DeleteWarehouseResponse => DeleteWarehouseResponse.decode(value),
+  },
+  upsertStock: {
+    path: "/rustygod.commerce.WarehouseService/UpsertStock" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: UpsertStockRequest): Buffer => Buffer.from(UpsertStockRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): UpsertStockRequest => UpsertStockRequest.decode(value),
+    responseSerialize: (value: UpsertStockResponse): Buffer => Buffer.from(UpsertStockResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): UpsertStockResponse => UpsertStockResponse.decode(value),
+  },
+  listZones: {
+    path: "/rustygod.commerce.WarehouseService/ListZones" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: ListZonesRequest): Buffer => Buffer.from(ListZonesRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): ListZonesRequest => ListZonesRequest.decode(value),
+    responseSerialize: (value: ListZonesResponse): Buffer => Buffer.from(ListZonesResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): ListZonesResponse => ListZonesResponse.decode(value),
+  },
+  assignZone: {
+    path: "/rustygod.commerce.WarehouseService/AssignZone" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: ZoneLinkRequest): Buffer => Buffer.from(ZoneLinkRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): ZoneLinkRequest => ZoneLinkRequest.decode(value),
+    responseSerialize: (value: ZoneLinkResponse): Buffer => Buffer.from(ZoneLinkResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): ZoneLinkResponse => ZoneLinkResponse.decode(value),
+  },
+  unassignZone: {
+    path: "/rustygod.commerce.WarehouseService/UnassignZone" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: ZoneLinkRequest): Buffer => Buffer.from(ZoneLinkRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): ZoneLinkRequest => ZoneLinkRequest.decode(value),
+    responseSerialize: (value: ZoneLinkResponse): Buffer => Buffer.from(ZoneLinkResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): ZoneLinkResponse => ZoneLinkResponse.decode(value),
+  },
 } as const;
 
 export interface WarehouseServiceServer extends UntypedServiceImplementation {
@@ -3725,6 +7261,13 @@ export interface WarehouseServiceServer extends UntypedServiceImplementation {
   listStocks: handleUnaryCall<ListStocksRequest, ListStocksResponse>;
   reserveStock: handleUnaryCall<ReserveStockRequest, ReserveStockResponse>;
   releaseReservation: handleUnaryCall<ReleaseReservationRequest, ReleaseReservationResponse>;
+  createWarehouse: handleUnaryCall<CreateWarehouseRequest, WarehouseResponse>;
+  updateWarehouse: handleUnaryCall<UpdateWarehouseRequest, WarehouseResponse>;
+  deleteWarehouse: handleUnaryCall<DeleteWarehouseRequest, DeleteWarehouseResponse>;
+  upsertStock: handleUnaryCall<UpsertStockRequest, UpsertStockResponse>;
+  listZones: handleUnaryCall<ListZonesRequest, ListZonesResponse>;
+  assignZone: handleUnaryCall<ZoneLinkRequest, ZoneLinkResponse>;
+  unassignZone: handleUnaryCall<ZoneLinkRequest, ZoneLinkResponse>;
 }
 
 export interface WarehouseServiceClient extends Client {
@@ -3787,6 +7330,111 @@ export interface WarehouseServiceClient extends Client {
     metadata: Metadata,
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: ReleaseReservationResponse) => void,
+  ): ClientUnaryCall;
+  createWarehouse(
+    request: CreateWarehouseRequest,
+    callback: (error: ServiceError | null, response: WarehouseResponse) => void,
+  ): ClientUnaryCall;
+  createWarehouse(
+    request: CreateWarehouseRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: WarehouseResponse) => void,
+  ): ClientUnaryCall;
+  createWarehouse(
+    request: CreateWarehouseRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: WarehouseResponse) => void,
+  ): ClientUnaryCall;
+  updateWarehouse(
+    request: UpdateWarehouseRequest,
+    callback: (error: ServiceError | null, response: WarehouseResponse) => void,
+  ): ClientUnaryCall;
+  updateWarehouse(
+    request: UpdateWarehouseRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: WarehouseResponse) => void,
+  ): ClientUnaryCall;
+  updateWarehouse(
+    request: UpdateWarehouseRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: WarehouseResponse) => void,
+  ): ClientUnaryCall;
+  deleteWarehouse(
+    request: DeleteWarehouseRequest,
+    callback: (error: ServiceError | null, response: DeleteWarehouseResponse) => void,
+  ): ClientUnaryCall;
+  deleteWarehouse(
+    request: DeleteWarehouseRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: DeleteWarehouseResponse) => void,
+  ): ClientUnaryCall;
+  deleteWarehouse(
+    request: DeleteWarehouseRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: DeleteWarehouseResponse) => void,
+  ): ClientUnaryCall;
+  upsertStock(
+    request: UpsertStockRequest,
+    callback: (error: ServiceError | null, response: UpsertStockResponse) => void,
+  ): ClientUnaryCall;
+  upsertStock(
+    request: UpsertStockRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: UpsertStockResponse) => void,
+  ): ClientUnaryCall;
+  upsertStock(
+    request: UpsertStockRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: UpsertStockResponse) => void,
+  ): ClientUnaryCall;
+  listZones(
+    request: ListZonesRequest,
+    callback: (error: ServiceError | null, response: ListZonesResponse) => void,
+  ): ClientUnaryCall;
+  listZones(
+    request: ListZonesRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: ListZonesResponse) => void,
+  ): ClientUnaryCall;
+  listZones(
+    request: ListZonesRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: ListZonesResponse) => void,
+  ): ClientUnaryCall;
+  assignZone(
+    request: ZoneLinkRequest,
+    callback: (error: ServiceError | null, response: ZoneLinkResponse) => void,
+  ): ClientUnaryCall;
+  assignZone(
+    request: ZoneLinkRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: ZoneLinkResponse) => void,
+  ): ClientUnaryCall;
+  assignZone(
+    request: ZoneLinkRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: ZoneLinkResponse) => void,
+  ): ClientUnaryCall;
+  unassignZone(
+    request: ZoneLinkRequest,
+    callback: (error: ServiceError | null, response: ZoneLinkResponse) => void,
+  ): ClientUnaryCall;
+  unassignZone(
+    request: ZoneLinkRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: ZoneLinkResponse) => void,
+  ): ClientUnaryCall;
+  unassignZone(
+    request: ZoneLinkRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: ZoneLinkResponse) => void,
   ): ClientUnaryCall;
 }
 

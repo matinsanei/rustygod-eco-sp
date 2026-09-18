@@ -4,7 +4,7 @@ use rustygod_proto::order::{
     order_service_server::OrderService, CancelFulfillmentRequest, CreateFulfillmentRequest,
     FulfillmentInfo, FulfillmentLineInfo, FulfillmentResponse, GetOrderRequest, GetOrderResponse,
     ListFulfillmentsRequest, ListFulfillmentsResponse, ListOrdersRequest, ListOrdersResponse,
-    RefundFulfillmentRequest,
+    ReconCheck, ReconcileOrderRequest, ReconcileOrderResponse, RefundFulfillmentRequest,
 };
 use sea_orm::DatabaseConnection;
 use tonic::{Request, Response, Status};
@@ -239,8 +239,7 @@ impl OrderService for OrderServiceImpl {
     async fn list_fulfillments(
         &self,
         request: Request<ListFulfillmentsRequest>,
-    ) -> Result<Response<ListFulfillmentsResponse>, Status> {
-        let db = self.db()?;
+    ) -> Result<Response<ListFulfillmentsResponse>, Status> {        let db = self.db()?;
         let Ok(order_id) = request.into_inner().order_id.parse::<Uuid>() else {
             return Ok(Response::new(ListFulfillmentsResponse { fulfillments: vec![] }));
         };
@@ -250,6 +249,47 @@ impl OrderService for OrderServiceImpl {
         Ok(Response::new(ListFulfillmentsResponse {
             fulfillments: list.iter().map(fulfillment_to_proto).collect(),
         }))
+    }
+
+    async fn reconcile_order(
+        &self,
+        request: Request<ReconcileOrderRequest>,
+    ) -> Result<Response<ReconcileOrderResponse>, Status> {
+        let db = self.db()?;
+        crate::access::authorize(db, request.metadata(), crate::access::MANAGE_ORDERS).await?;
+        let Ok(order_id) = request.into_inner().id.parse::<Uuid>() else {
+            return Ok(Response::new(ReconcileOrderResponse {
+                checks: vec![],
+                all_ok: false,
+                errors: vec![rustygod_proto::common::Error {
+                    code: "INVALID".into(),
+                    message: "id must be a UUID".into(),
+                    field: String::new(),
+                }],
+            }));
+        };
+        match rustygod_db::reconcile::reconcile_order(db, order_id).await {
+            Ok(checks) => {
+                let all_ok = checks.iter().all(|c| c.ok);
+                Ok(Response::new(ReconcileOrderResponse {
+                    checks: checks
+                        .into_iter()
+                        .map(|c| ReconCheck { name: c.name, ok: c.ok, detail: c.detail })
+                        .collect(),
+                    all_ok,
+                    errors: vec![],
+                }))
+            }
+            Err(e) => Ok(Response::new(ReconcileOrderResponse {
+                checks: vec![],
+                all_ok: false,
+                errors: vec![rustygod_proto::common::Error {
+                    code: "NOT_FOUND".into(),
+                    message: e.to_string(),
+                    field: String::new(),
+                }],
+            })),
+        }
     }
 }
 
