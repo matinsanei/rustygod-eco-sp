@@ -233,6 +233,7 @@ pub async fn create_line_row(
 }
 
 /// Slim order header (never SELECT * — `search_vector` tsvector mistype).
+#[derive(Debug)]
 pub struct OrderHeader {
     pub id: Uuid,
     pub number: i32,

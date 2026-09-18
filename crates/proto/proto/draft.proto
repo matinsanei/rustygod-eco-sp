@@ -1,0 +1,81 @@
+syntax = "proto3";
+
+package rustygod.draft;
+
+import "common.proto";
+
+// Staff draft orders: editable pre-orders finalized into real orders.
+// Mirrors saleor/graphql/order/mutations/draft_order_*.py.
+message DraftLineInput {
+  string variant_id = 1; // integer id as string
+  int32 quantity = 2;
+  string custom_price = 3; // optional decimal string (staff override)
+  bool force_new_line = 4;
+}
+
+message DraftOrderInfo {
+  string id = 1;
+  string number = 2;
+  string status = 3;
+  string currency = 4;
+  string total_gross = 5;
+  int32 lines_count = 6;
+}
+
+message CreateDraftOrderRequest {
+  string channel = 1;
+  string email = 2;
+  repeated DraftLineInput lines = 3;
+}
+message CreateDraftOrderResponse {
+  DraftOrderInfo order = 1;
+  repeated rustygod.common.Error errors = 2;
+}
+
+message DraftOrderLinesRequest {
+  string order_id = 1;
+  string channel = 2;
+  repeated DraftLineInput lines = 3;
+}
+message DraftOrderLinesResponse {
+  DraftOrderInfo order = 1;
+  repeated rustygod.common.Error errors = 2;
+}
+
+message SetDraftLineQuantityRequest {
+  string order_id = 1;
+  string line_id = 2;
+  int32 quantity = 3;
+}
+message SetDraftLineQuantityResponse {
+  DraftOrderInfo order = 1;
+  repeated rustygod.common.Error errors = 2;
+}
+
+message RemoveDraftLineRequest {
+  string order_id = 1;
+  string line_id = 2;
+}
+message RemoveDraftLineResponse {
+  DraftOrderInfo order = 1;
+  repeated rustygod.common.Error errors = 2;
+}
+
+message DraftOrderIdRequest { string order_id = 1; }
+message CompleteDraftOrderResponse {
+  DraftOrderInfo order = 1;
+  string status = 2;
+  repeated rustygod.common.Error errors = 3;
+}
+message DeleteDraftOrderResponse {
+  repeated rustygod.common.Error errors = 1;
+}
+
+service DraftOrderService {
+  rpc CreateDraftOrder(CreateDraftOrderRequest) returns (CreateDraftOrderResponse);
+  rpc AddDraftLines(DraftOrderLinesRequest) returns (DraftOrderLinesResponse);
+  rpc SetDraftLineQuantity(SetDraftLineQuantityRequest) returns (SetDraftLineQuantityResponse);
+  rpc RemoveDraftLine(RemoveDraftLineRequest) returns (RemoveDraftLineResponse);
+  rpc CompleteDraftOrder(DraftOrderIdRequest) returns (CompleteDraftOrderResponse);
+  rpc DeleteDraftOrder(DraftOrderIdRequest) returns (DeleteDraftOrderResponse);
+}

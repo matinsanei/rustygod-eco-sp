@@ -8,6 +8,7 @@ pub mod auth;
 pub mod catalog;
 pub mod checkout_store;
 pub mod commerce;
+pub mod drafts;
 pub mod entities;
 pub mod fulfillment;
 pub mod giftcards;
@@ -31,6 +32,8 @@ pub enum DbError {
     GiftCardNotApplicable(String),
     #[error("gift card conflict: {0}")]
     GiftCardConflict(String),
+    #[error("draft order error: {0}")]
+    Draft(String),
     #[error("lock poisoned: {0}")]
     Lock(String),
 }

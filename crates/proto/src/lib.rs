@@ -22,6 +22,9 @@ pub mod payment {
 pub mod giftcard {
     tonic::include_proto!("rustygod.giftcard");
 }
+pub mod draft {
+    tonic::include_proto!("rustygod.draft");
+}
 pub mod webhook {
     tonic::include_proto!("rustygod.webhook");
 }
