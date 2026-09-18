@@ -12,6 +12,7 @@ pub mod drafts;
 pub mod entities;
 pub mod fulfillment;
 pub mod giftcards;
+pub mod invoices;
 pub mod order_store;
 pub mod payments;
 pub mod promotions;
@@ -34,6 +35,8 @@ pub enum DbError {
     GiftCardConflict(String),
     #[error("draft order error: {0}")]
     Draft(String),
+    #[error("invoice error: {0}")]
+    Invoice(String),
     #[error("lock poisoned: {0}")]
     Lock(String),
 }

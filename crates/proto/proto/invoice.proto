@@ -1,0 +1,64 @@
+syntax = "proto3";
+
+package rustygod.invoice;
+
+import "common.proto";
+
+// Staff invoices over Django's invoice_* tables.
+// Mirrors saleor/graphql/invoice/mutations/.
+message InvoiceInfo {
+  int32 id = 1;
+  string order_id = 2;
+  string status = 3;
+  string number = 4;
+  string url = 5;
+}
+
+message RequestInvoiceRequest {
+  string order_id = 1;
+  string number = 2; // optional
+}
+message RequestInvoiceResponse {
+  InvoiceInfo invoice = 1;
+  repeated rustygod.common.Error errors = 2;
+}
+
+message FulfillInvoiceRequest {
+  int32 id = 1;
+  string number = 2;
+  string url = 3;
+}
+message FulfillInvoiceResponse {
+  InvoiceInfo invoice = 1;
+  repeated rustygod.common.Error errors = 2;
+}
+
+message InvoiceIdRequest { int32 id = 1; }
+message InvoiceResponse {
+  InvoiceInfo invoice = 1;
+  repeated rustygod.common.Error errors = 2;
+}
+
+message SendInvoiceRequest {
+  int32 id = 1;
+  string email = 2;
+}
+message SendInvoiceResponse {
+  InvoiceInfo invoice = 1;
+  repeated rustygod.common.Error errors = 2;
+}
+
+message ListReadyInvoicesRequest { string order_id = 1; }
+message ListReadyInvoicesResponse {
+  repeated InvoiceInfo invoices = 1;
+  repeated rustygod.common.Error errors = 2;
+}
+
+service InvoiceService {
+  rpc RequestInvoice(RequestInvoiceRequest) returns (RequestInvoiceResponse);
+  rpc FulfillInvoice(FulfillInvoiceRequest) returns (FulfillInvoiceResponse);
+  rpc SendInvoice(SendInvoiceRequest) returns (SendInvoiceResponse);
+  rpc RequestDeletion(InvoiceIdRequest) returns (InvoiceResponse);
+  rpc DeleteInvoice(InvoiceIdRequest) returns (InvoiceResponse);
+  rpc ListReady(ListReadyInvoicesRequest) returns (ListReadyInvoicesResponse);
+}

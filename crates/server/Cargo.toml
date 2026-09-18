@@ -27,3 +27,5 @@ serde_json = { workspace = true }
 tokio = { workspace = true }
 tonic = { workspace = true }
 fs2 = { workspace = true }
+sea-orm = { workspace = true }
+uuid = { workspace = true }

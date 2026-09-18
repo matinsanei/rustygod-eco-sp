@@ -13,6 +13,7 @@ use rustygod_proto::{
         tax_service_server::TaxServiceServer, warehouse_service_server::WarehouseServiceServer,
     },
     order::order_service_server::OrderServiceServer,
+    invoice::invoice_service_server::InvoiceServiceServer,
     draft::draft_order_service_server::DraftOrderServiceServer,
     giftcard::gift_card_service_server::GiftCardServiceServer,
     payment::payment_service_server::PaymentServiceServer,
@@ -30,6 +31,7 @@ use rustygod_server::{
         WarehouseServiceImpl,
     },
     service_draft::DraftOrderServiceImpl,
+    service_invoice::InvoiceServiceImpl,
     service_giftcard::GiftCardServiceImpl,
     service_order::OrderServiceImpl,
     service_payment::PaymentServiceImpl,
@@ -84,6 +86,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .add_service(CheckoutServiceServer::new(checkout_svc))
         .add_service(OrderServiceServer::new(order_svc))
         .add_service(DraftOrderServiceServer::new(DraftOrderServiceImpl::new(db.clone())))
+        .add_service(InvoiceServiceServer::new(InvoiceServiceImpl::new(db.clone())))
         .add_service(PaymentServiceServer::new(PaymentServiceImpl::new(db.clone())))
         .add_service(WebhookServiceServer::new(WebhookServiceImpl::new(db.clone())))
         .add_service(AuthServiceServer::new(AuthServiceImpl::new(db.clone())))
