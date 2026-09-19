@@ -1,12 +1,15 @@
 //! PaymentService: TransactionItem lifecycle over Django's tables +
-//! manual gateway actions (authorize/charge/refund/cancel).
+//! PSP-driven gateway actions (authorize/charge/refund/cancel via the
+//! configured PSP, async callbacks, 3DS challenges, adjustments).
+//! Money RPCs demand MANAGE_PAYMENTS.
 
 use rust_decimal::Decimal;
+use rustygod_core::psp::{ChallengePsp, ManualPsp, Psp, PspAction, ScriptedPsp};
 use rustygod_db::payments;
 use rustygod_proto::payment::{
-    payment_service_server::PaymentService, CreateTransactionRequest, CreateTransactionResponse,
-    GatewayActionRequest, GatewayActionResponse, GetTransactionRequest, GetTransactionResponse,
-    TransactionInfo,
+    payment_service_server::PaymentService, AdjustAuthorizationRequest, CreateTransactionRequest,
+    CreateTransactionResponse, GatewayActionRequest, GatewayActionResponse, GetTransactionRequest,
+    GetTransactionResponse, PspCallbackRequest, PspCallbackResponse, TransactionInfo,
 };
 use sea_orm::DatabaseConnection;
 use tonic::{Request, Response, Status};
@@ -51,29 +54,134 @@ impl PaymentServiceImpl {
 
     async fn gateway(
         &self,
-        req: GatewayActionRequest,
+        req: Request<GatewayActionRequest>,
         op: &'static str,
     ) -> Result<Response<GatewayActionResponse>, Status> {
         let db = self.db()?;
+        crate::access::authorize(db, req.metadata(), crate::access::MANAGE_PAYMENTS).await?;
+        let req = req.into_inner();
         let id: i32 = req.transaction_id.parse().unwrap_or(-1);
         let amount: Decimal = req
             .amount
             .parse()
             .map_err(|_| Status::invalid_argument("amount must be a decimal string"))?;
-        let out = match op {
-            "authorize" => payments::authorize(db, id, amount, &req.idempotency_key).await,
-            "charge" => payments::charge(db, id, amount, &req.idempotency_key).await,
-            "refund" => payments::refund(db, id, amount, &req.idempotency_key).await,
-            "cancel" => payments::cancel(db, id, amount, &req.idempotency_key).await,
+        let action = match op {
+            "authorize" => PspAction::Authorize,
+            "charge" => PspAction::Charge,
+            "refund" => PspAction::Refund,
+            "cancel" => PspAction::Cancel,
             _ => return Err(Status::invalid_argument("unknown action")),
         };
-        match out {
-            Ok(v) => Ok(Response::new(GatewayActionResponse {
-                transaction: Some(Self::view(&v)),
+        // PSP selector. async-sim is pending-by-default: settle via PspCallback.
+        let domain = std::env::var("RUSTYGOD_DOMAIN").unwrap_or_else(|_| "localhost".into());
+        let manual = ManualPsp;
+        let challenge = ChallengePsp::new(domain);
+        let async_sim = ScriptedPsp::pending("async-sim");
+        let psp: &dyn Psp = match req.gateway.as_str() {
+            "" | "manual" => &manual,
+            "challenge" => &challenge,
+            "async-sim" => &async_sim,
+            other => {
+                return Ok(Response::new(GatewayActionResponse {
+                    transaction: None,
+                    action_required: false,
+                    redirect_url: String::new(),
+                    errors: vec![Self::err(
+                        "REJECTED",
+                        format!("unknown gateway {other:?}: want manual|challenge|async-sim"),
+                    )],
+                }))
+            }
+        };
+        let ret = if req.return_url.is_empty() { None } else { Some(req.return_url.as_str()) };
+        match payments::execute_via(db, id, action, amount, &req.idempotency_key, psp, ret).await {
+            Ok(out) => Ok(Response::new(GatewayActionResponse {
+                transaction: Some(Self::view(&out.txn)),
+                action_required: out.action_required,
+                redirect_url: out.redirect_url.unwrap_or_default(),
                 errors: vec![],
             })),
             Err(e) => Ok(Response::new(GatewayActionResponse {
                 transaction: None,
+                action_required: false,
+                redirect_url: String::new(),
+                errors: vec![Self::err("REJECTED", e.to_string())],
+            })),
+        }
+    }
+
+    async fn psp_callback(
+        &self,
+        request: Request<PspCallbackRequest>,
+    ) -> Result<Response<PspCallbackResponse>, Status> {
+        let db = self.db()?;
+        crate::access::authorize(db, request.metadata(), crate::access::MANAGE_PAYMENTS).await?;
+        let r = request.into_inner();
+        let fail = |code: &str, message: String| {
+            Response::new(PspCallbackResponse {
+                transaction: None,
+                replayed: false,
+                errors: vec![Self::err(code, message)],
+            })
+        };
+        let id: i32 = r.transaction_id.parse().unwrap_or(-1);
+        let action = match r.action.as_str() {
+            "authorize" => PspAction::Authorize,
+            "charge" => PspAction::Charge,
+            "refund" => PspAction::Refund,
+            "cancel" => PspAction::Cancel,
+            _ => return Ok(fail("INVALID", "action must be authorize|charge|refund|cancel".into())),
+        };
+        if r.psp_reference.is_empty() || r.idempotency_key.is_empty() {
+            return Ok(fail("INVALID", "psp_reference and idempotency_key are required".into()));
+        }
+        match payments::psp_callback(
+            db, id, action, &r.psp_reference, r.success, &r.message, &r.idempotency_key,
+        )
+        .await
+        {
+            Ok(out) => Ok(Response::new(PspCallbackResponse {
+                transaction: Some(Self::view(&out.view)),
+                replayed: out.replayed,
+                errors: vec![],
+            })),
+            Err(e) => {
+                let msg = e.to_string();
+                let code = if msg.contains("UNKNOWN_REQUEST") {
+                    "NOT_FOUND"
+                } else if msg.contains("TERMINAL") {
+                    "ALREADY_SETTLED"
+                } else {
+                    "REJECTED"
+                };
+                Ok(fail(code, msg))
+            }
+        }
+    }
+
+    async fn adjust_authorization(
+        &self,
+        request: Request<AdjustAuthorizationRequest>,
+    ) -> Result<Response<GatewayActionResponse>, Status> {
+        let db = self.db()?;
+        crate::access::authorize(db, request.metadata(), crate::access::MANAGE_PAYMENTS).await?;
+        let r = request.into_inner();
+        let id: i32 = r.transaction_id.parse().unwrap_or(-1);
+        let amount: Decimal = r
+            .amount
+            .parse()
+            .map_err(|_| Status::invalid_argument("amount must be a decimal string"))?;
+        match payments::adjust_authorization(db, id, amount, &r.idempotency_key).await {
+            Ok(v) => Ok(Response::new(GatewayActionResponse {
+                transaction: Some(Self::view(&v)),
+                action_required: false,
+                redirect_url: String::new(),
+                errors: vec![],
+            })),
+            Err(e) => Ok(Response::new(GatewayActionResponse {
+                transaction: None,
+                action_required: false,
+                redirect_url: String::new(),
                 errors: vec![Self::err("REJECTED", e.to_string())],
             })),
         }
@@ -86,6 +194,8 @@ impl PaymentService for PaymentServiceImpl {
         &self,
         request: Request<CreateTransactionRequest>,
     ) -> Result<Response<CreateTransactionResponse>, Status> {
+        let db = self.db()?;
+        crate::access::authorize(db, request.metadata(), crate::access::MANAGE_PAYMENTS).await?;
         let req = request.into_inner();
         let checkout_id = if req.checkout_id.is_empty() {
             None
@@ -137,8 +247,10 @@ impl PaymentService for PaymentServiceImpl {
         &self,
         request: Request<GetTransactionRequest>,
     ) -> Result<Response<GetTransactionResponse>, Status> {
+        let db = self.db()?;
+        crate::access::authorize(db, request.metadata(), crate::access::MANAGE_PAYMENTS).await?;
         let id: i32 = request.into_inner().id.parse().unwrap_or(-1);
-        match payments::view(self.db()?, id).await {
+        match payments::view(db, id).await {
             Ok(v) => Ok(Response::new(GetTransactionResponse {
                 transaction: Some(Self::view(&v)),
                 errors: vec![],
@@ -154,27 +266,41 @@ impl PaymentService for PaymentServiceImpl {
         &self,
         request: Request<GatewayActionRequest>,
     ) -> Result<Response<GatewayActionResponse>, Status> {
-        self.gateway(request.into_inner(), "authorize").await
+        self.gateway(request, "authorize").await
     }
 
     async fn charge(
         &self,
         request: Request<GatewayActionRequest>,
     ) -> Result<Response<GatewayActionResponse>, Status> {
-        self.gateway(request.into_inner(), "charge").await
+        self.gateway(request, "charge").await
     }
 
     async fn refund(
         &self,
         request: Request<GatewayActionRequest>,
     ) -> Result<Response<GatewayActionResponse>, Status> {
-        self.gateway(request.into_inner(), "refund").await
+        self.gateway(request, "refund").await
     }
 
     async fn cancel(
         &self,
         request: Request<GatewayActionRequest>,
     ) -> Result<Response<GatewayActionResponse>, Status> {
-        self.gateway(request.into_inner(), "cancel").await
+        self.gateway(request, "cancel").await
+    }
+
+    async fn psp_callback(
+        &self,
+        request: Request<PspCallbackRequest>,
+    ) -> Result<Response<PspCallbackResponse>, Status> {
+        Self::psp_callback(self, request).await
+    }
+
+    async fn adjust_authorization(
+        &self,
+        request: Request<AdjustAuthorizationRequest>,
+    ) -> Result<Response<GatewayActionResponse>, Status> {
+        Self::adjust_authorization(self, request).await
     }
 }

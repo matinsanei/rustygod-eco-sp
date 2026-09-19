@@ -62,11 +62,48 @@ export interface GatewayActionRequest {
   transactionId: string;
   amount: string;
   idempotencyKey: string;
+  /**
+   * PSP selector: "manual" (default, sync) | "challenge" (always 3DS) |
+   * "async-sim" (pending, settle via PspCallback). Unknown → REJECTED.
+   */
+  gateway: string;
+  /** Where the customer returns after a challenge (3DS return_url). */
+  returnUrl: string;
 }
 
 export interface GatewayActionResponse {
   transaction: TransactionInfo | undefined;
   errors: Error[];
+  /**
+   * True when the PSP demands a customer challenge: redirect them to
+   * redirect_url, then settle with PspCallback.
+   */
+  actionRequired: boolean;
+  redirectUrl: string;
+}
+
+/** Settles a pending request or customer challenge: the PSP's async answer. */
+export interface PspCallbackRequest {
+  transactionId: string;
+  /** authorize|charge|refund|cancel — must match the pending request's family. */
+  action: string;
+  pspReference: string;
+  success: boolean;
+  message: string;
+  idempotencyKey: string;
+}
+
+export interface PspCallbackResponse {
+  transaction: TransactionInfo | undefined;
+  replayed: boolean;
+  errors: Error[];
+}
+
+/** Django's escape hatch: overwrite authorized without a new success event. */
+export interface AdjustAuthorizationRequest {
+  transactionId: string;
+  amount: string;
+  idempotencyKey: string;
 }
 
 function createBaseTransactionInfo(): TransactionInfo {
@@ -539,7 +576,7 @@ export const GetTransactionResponse: MessageFns<GetTransactionResponse> = {
 };
 
 function createBaseGatewayActionRequest(): GatewayActionRequest {
-  return { transactionId: "", amount: "", idempotencyKey: "" };
+  return { transactionId: "", amount: "", idempotencyKey: "", gateway: "", returnUrl: "" };
 }
 
 export const GatewayActionRequest: MessageFns<GatewayActionRequest> = {
@@ -552,6 +589,12 @@ export const GatewayActionRequest: MessageFns<GatewayActionRequest> = {
     }
     if (message.idempotencyKey !== "") {
       writer.uint32(26).string(message.idempotencyKey);
+    }
+    if (message.gateway !== "") {
+      writer.uint32(34).string(message.gateway);
+    }
+    if (message.returnUrl !== "") {
+      writer.uint32(42).string(message.returnUrl);
     }
     return writer;
   },
@@ -593,6 +636,22 @@ export const GatewayActionRequest: MessageFns<GatewayActionRequest> = {
             message.idempotencyKey = reader.string();
             continue;
           }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.gateway = reader.string();
+            continue;
+          }
+          case 5: {
+            if (tag !== 42) {
+              break;
+            }
+
+            message.returnUrl = reader.string();
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -613,12 +672,14 @@ export const GatewayActionRequest: MessageFns<GatewayActionRequest> = {
     message.transactionId = object.transactionId ?? "";
     message.amount = object.amount ?? "";
     message.idempotencyKey = object.idempotencyKey ?? "";
+    message.gateway = object.gateway ?? "";
+    message.returnUrl = object.returnUrl ?? "";
     return message;
   },
 };
 
 function createBaseGatewayActionResponse(): GatewayActionResponse {
-  return { transaction: undefined, errors: [] };
+  return { transaction: undefined, errors: [], actionRequired: false, redirectUrl: "" };
 }
 
 export const GatewayActionResponse: MessageFns<GatewayActionResponse> = {
@@ -628,6 +689,12 @@ export const GatewayActionResponse: MessageFns<GatewayActionResponse> = {
     }
     for (const v of message.errors) {
       Error.encode(v!, writer.uint32(18).fork()).join();
+    }
+    if (message.actionRequired !== false) {
+      writer.uint32(24).bool(message.actionRequired);
+    }
+    if (message.redirectUrl !== "") {
+      writer.uint32(34).string(message.redirectUrl);
     }
     return writer;
   },
@@ -661,6 +728,22 @@ export const GatewayActionResponse: MessageFns<GatewayActionResponse> = {
             message.errors.push(Error.decode(reader, reader.uint32()));
             continue;
           }
+          case 3: {
+            if (tag !== 24) {
+              break;
+            }
+
+            message.actionRequired = reader.bool();
+            continue;
+          }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.redirectUrl = reader.string();
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -682,6 +765,283 @@ export const GatewayActionResponse: MessageFns<GatewayActionResponse> = {
       ? TransactionInfo.fromPartial(object.transaction)
       : undefined;
     message.errors = object.errors?.map((e) => Error.fromPartial(e)) || [];
+    message.actionRequired = object.actionRequired ?? false;
+    message.redirectUrl = object.redirectUrl ?? "";
+    return message;
+  },
+};
+
+function createBasePspCallbackRequest(): PspCallbackRequest {
+  return { transactionId: "", action: "", pspReference: "", success: false, message: "", idempotencyKey: "" };
+}
+
+export const PspCallbackRequest: MessageFns<PspCallbackRequest> = {
+  encode(message: PspCallbackRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.transactionId !== "") {
+      writer.uint32(10).string(message.transactionId);
+    }
+    if (message.action !== "") {
+      writer.uint32(18).string(message.action);
+    }
+    if (message.pspReference !== "") {
+      writer.uint32(26).string(message.pspReference);
+    }
+    if (message.success !== false) {
+      writer.uint32(32).bool(message.success);
+    }
+    if (message.message !== "") {
+      writer.uint32(42).string(message.message);
+    }
+    if (message.idempotencyKey !== "") {
+      writer.uint32(50).string(message.idempotencyKey);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): PspCallbackRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBasePspCallbackRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.transactionId = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.action = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.pspReference = reader.string();
+            continue;
+          }
+          case 4: {
+            if (tag !== 32) {
+              break;
+            }
+
+            message.success = reader.bool();
+            continue;
+          }
+          case 5: {
+            if (tag !== 42) {
+              break;
+            }
+
+            message.message = reader.string();
+            continue;
+          }
+          case 6: {
+            if (tag !== 50) {
+              break;
+            }
+
+            message.idempotencyKey = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<PspCallbackRequest>, I>>(base?: I): PspCallbackRequest {
+    return PspCallbackRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<PspCallbackRequest>, I>>(object: I): PspCallbackRequest {
+    const message = createBasePspCallbackRequest();
+    message.transactionId = object.transactionId ?? "";
+    message.action = object.action ?? "";
+    message.pspReference = object.pspReference ?? "";
+    message.success = object.success ?? false;
+    message.message = object.message ?? "";
+    message.idempotencyKey = object.idempotencyKey ?? "";
+    return message;
+  },
+};
+
+function createBasePspCallbackResponse(): PspCallbackResponse {
+  return { transaction: undefined, replayed: false, errors: [] };
+}
+
+export const PspCallbackResponse: MessageFns<PspCallbackResponse> = {
+  encode(message: PspCallbackResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.transaction !== undefined) {
+      TransactionInfo.encode(message.transaction, writer.uint32(10).fork()).join();
+    }
+    if (message.replayed !== false) {
+      writer.uint32(16).bool(message.replayed);
+    }
+    for (const v of message.errors) {
+      Error.encode(v!, writer.uint32(26).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): PspCallbackResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBasePspCallbackResponse();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.transaction = TransactionInfo.decode(reader, reader.uint32());
+            continue;
+          }
+          case 2: {
+            if (tag !== 16) {
+              break;
+            }
+
+            message.replayed = reader.bool();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.errors.push(Error.decode(reader, reader.uint32()));
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<PspCallbackResponse>, I>>(base?: I): PspCallbackResponse {
+    return PspCallbackResponse.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<PspCallbackResponse>, I>>(object: I): PspCallbackResponse {
+    const message = createBasePspCallbackResponse();
+    message.transaction = (object.transaction !== undefined && object.transaction !== null)
+      ? TransactionInfo.fromPartial(object.transaction)
+      : undefined;
+    message.replayed = object.replayed ?? false;
+    message.errors = object.errors?.map((e) => Error.fromPartial(e)) || [];
+    return message;
+  },
+};
+
+function createBaseAdjustAuthorizationRequest(): AdjustAuthorizationRequest {
+  return { transactionId: "", amount: "", idempotencyKey: "" };
+}
+
+export const AdjustAuthorizationRequest: MessageFns<AdjustAuthorizationRequest> = {
+  encode(message: AdjustAuthorizationRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.transactionId !== "") {
+      writer.uint32(10).string(message.transactionId);
+    }
+    if (message.amount !== "") {
+      writer.uint32(18).string(message.amount);
+    }
+    if (message.idempotencyKey !== "") {
+      writer.uint32(26).string(message.idempotencyKey);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): AdjustAuthorizationRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseAdjustAuthorizationRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.transactionId = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.amount = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.idempotencyKey = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<AdjustAuthorizationRequest>, I>>(base?: I): AdjustAuthorizationRequest {
+    return AdjustAuthorizationRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<AdjustAuthorizationRequest>, I>>(object: I): AdjustAuthorizationRequest {
+    const message = createBaseAdjustAuthorizationRequest();
+    message.transactionId = object.transactionId ?? "";
+    message.amount = object.amount ?? "";
+    message.idempotencyKey = object.idempotencyKey ?? "";
     return message;
   },
 };
@@ -750,6 +1110,26 @@ export const PaymentServiceService = {
       Buffer.from(GatewayActionResponse.encode(value).finish()),
     responseDeserialize: (value: Buffer): GatewayActionResponse => GatewayActionResponse.decode(value),
   },
+  pspCallback: {
+    path: "/rustygod.payment.PaymentService/PspCallback" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: PspCallbackRequest): Buffer => Buffer.from(PspCallbackRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): PspCallbackRequest => PspCallbackRequest.decode(value),
+    responseSerialize: (value: PspCallbackResponse): Buffer => Buffer.from(PspCallbackResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): PspCallbackResponse => PspCallbackResponse.decode(value),
+  },
+  adjustAuthorization: {
+    path: "/rustygod.payment.PaymentService/AdjustAuthorization" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: AdjustAuthorizationRequest): Buffer =>
+      Buffer.from(AdjustAuthorizationRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): AdjustAuthorizationRequest => AdjustAuthorizationRequest.decode(value),
+    responseSerialize: (value: GatewayActionResponse): Buffer =>
+      Buffer.from(GatewayActionResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): GatewayActionResponse => GatewayActionResponse.decode(value),
+  },
 } as const;
 
 export interface PaymentServiceServer extends UntypedServiceImplementation {
@@ -759,6 +1139,8 @@ export interface PaymentServiceServer extends UntypedServiceImplementation {
   charge: handleUnaryCall<GatewayActionRequest, GatewayActionResponse>;
   refund: handleUnaryCall<GatewayActionRequest, GatewayActionResponse>;
   cancel: handleUnaryCall<GatewayActionRequest, GatewayActionResponse>;
+  pspCallback: handleUnaryCall<PspCallbackRequest, PspCallbackResponse>;
+  adjustAuthorization: handleUnaryCall<AdjustAuthorizationRequest, GatewayActionResponse>;
 }
 
 export interface PaymentServiceClient extends Client {
@@ -848,6 +1230,36 @@ export interface PaymentServiceClient extends Client {
   ): ClientUnaryCall;
   cancel(
     request: GatewayActionRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: GatewayActionResponse) => void,
+  ): ClientUnaryCall;
+  pspCallback(
+    request: PspCallbackRequest,
+    callback: (error: ServiceError | null, response: PspCallbackResponse) => void,
+  ): ClientUnaryCall;
+  pspCallback(
+    request: PspCallbackRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: PspCallbackResponse) => void,
+  ): ClientUnaryCall;
+  pspCallback(
+    request: PspCallbackRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: PspCallbackResponse) => void,
+  ): ClientUnaryCall;
+  adjustAuthorization(
+    request: AdjustAuthorizationRequest,
+    callback: (error: ServiceError | null, response: GatewayActionResponse) => void,
+  ): ClientUnaryCall;
+  adjustAuthorization(
+    request: AdjustAuthorizationRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: GatewayActionResponse) => void,
+  ): ClientUnaryCall;
+  adjustAuthorization(
+    request: AdjustAuthorizationRequest,
     metadata: Metadata,
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: GatewayActionResponse) => void,

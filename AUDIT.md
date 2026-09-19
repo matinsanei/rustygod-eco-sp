@@ -1,16 +1,16 @@
 # 📋 Audit Report — rustygod-saleor vs the E-Commerce Engine Checklist
 
-Date: 2026-09-18 · Last update: T1a granted refunds + zero warnings.
+Date: 2026-09-18 · Last update: T1b PSP engine (dedup, async, 3DS, R3).
 Method: every item verified against code + green tests (no vibes).
 Score: ✅ = 1, ⚠️ = 0.5, ❌ = 0.
 
-## Overall: 70% (50.5 / 72)
+## Overall: 72% (51.5 / 72)
 
 | Section | Score | Before this session |
 |---|---|---|
 | §1 Features (37) | **69%** (21 ✅ · 9 ⚠️ · 7 ❌) | ~49% |
-| §2 Risks (10) | **85%** (7 ✅ · 3 ⚠️) | ~25% |
-| §3 Edge cases (15) | **50%** (6 ✅ · 3 ⚠️ · 6 ❌) | ~13% |
+| §2 Risks (10) | **90%** (8 ✅ · 2 ⚠️) | ~25% |
+| §3 Edge cases (15) | **53%** (6 ✅ · 4 ⚠️ · 5 ❌) | ~13% |
 | §4 Reconciliation (10) | **90%** (8 ✅ · 2 ⚠️) | ~10% |
 
 ## §1 Features — what changed today
@@ -36,13 +36,14 @@ click-and-collect (flag only).
 
 R8 → ✅ (outbox in-transaction + post-commit fast send + sweeper pickup
 with single-flight claim). R9 → ✅ (expiry honored in allocate +
-sweeper deletes + indexes). 7 ✅ · 3 ⚠️ (R2, R3, R10) = **85%**.
+sweeper deletes + indexes). R3 → ✅ (T1b: single auth-success,
+PSP-triple dedup, per-checkout in-flight guard). 8 ✅ · 2 ⚠️ (R2, R10) = **90%**.
 
 | ID | Risk | Status | Evidence |
 |---|---|---|---|
 | R1 | Stock race → oversell | ✅ | FOR UPDATE + rollback test |
 | R2 | TOCTOU check→reserve | ⚠️ | reservations + allocate account for them; no reserve-at-add-line flow yet |
-| R3 | Double payment | ⚠️ | complete idempotent; double-Pay-button (two checkouts) still possible |
+| R3 | Double payment | ✅ was ⚠️ | single auth-success + PSP dedup + per-checkout in-flight guard |
 | R4 | Voucher double-spend | ✅ | locked atomic increment |
 | R5 | Gift double-redeem | ✅ | locked debit inside completion TXN |
 | R6 | Deadlock | ✅ | documented lock order 1→4 |
@@ -57,8 +58,9 @@ sweeper deletes + indexes). 7 ✅ · 3 ⚠️ (R2, R3, R10) = **85%**.
 flagged by reconcile), E12 (reservation expiry honored), E13 (second buyer
 loses cleanly), E15 (fulfillment cancel restores stock).
 ⚠️ E4 (unlisted variant errors, code is generic), E6 (multi-stock allocate,
-no split-shipment flow), E7 (refund exists, no return flow).
-❌ E2 (zone validation), E3 (guest→user link), E9 (3DS), E10 (auto-complete
+no split-shipment flow), E7 (refund exists, no return flow), E9 (3DS
+challenge/rehearsal loop over RPC+callback; no real PSP yet).
+❌ E2 (zone validation), E3 (guest→user link), E10 (auto-complete
 task), E11 (guest conversion), E14 (cancel-after-payment).
 
 ## §4 Reconciliation — `ReconcileOrder` RPC, 9 checks, all green on fresh orders
@@ -85,4 +87,6 @@ cargo test --workspace 2>&1 | grep -cE "test .* ok$"   # must equal checks below
 # R1/R7: contract_complete (3) · RC*: reconcile asserts inside it (9/9)
 # R4: contract_promotions · R5: contract_giftcards · events: contract_drafts/invoices
 # RC2: contract_granted_refunds (5, incl. live reconcile parity assert)
+# R3/E9: contract_psp (10: dedup, async, 3DS, adjustment, in-flight guard)
+# PSP math: payment_calc (12: cutoff, timestamp race, psp-less rules)
 ```

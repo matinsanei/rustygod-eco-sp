@@ -40,10 +40,42 @@ message GatewayActionRequest {
   string transaction_id = 1;
   string amount = 2;
   string idempotency_key = 3;
+  // PSP selector: "manual" (default, sync) | "challenge" (always 3DS) |
+  // "async-sim" (pending, settle via PspCallback). Unknown → REJECTED.
+  string gateway = 4;
+  // Where the customer returns after a challenge (3DS return_url).
+  string return_url = 5;
 }
 message GatewayActionResponse {
   TransactionInfo transaction = 1;
   repeated rustygod.common.Error errors = 2;
+  // True when the PSP demands a customer challenge: redirect them to
+  // redirect_url, then settle with PspCallback.
+  bool action_required = 3;
+  string redirect_url = 4;
+}
+
+// Settles a pending request or customer challenge: the PSP's async answer.
+message PspCallbackRequest {
+  string transaction_id = 1;
+  // authorize|charge|refund|cancel — must match the pending request's family.
+  string action = 2;
+  string psp_reference = 3;
+  bool success = 4;
+  string message = 5;
+  string idempotency_key = 6;
+}
+message PspCallbackResponse {
+  TransactionInfo transaction = 1;
+  bool replayed = 2;
+  repeated rustygod.common.Error errors = 3;
+}
+
+// Django's escape hatch: overwrite authorized without a new success event.
+message AdjustAuthorizationRequest {
+  string transaction_id = 1;
+  string amount = 2;
+  string idempotency_key = 3;
 }
 
 service PaymentService {
@@ -53,4 +85,6 @@ service PaymentService {
   rpc Charge(GatewayActionRequest) returns (GatewayActionResponse);
   rpc Refund(GatewayActionRequest) returns (GatewayActionResponse);
   rpc Cancel(GatewayActionRequest) returns (GatewayActionResponse);
+  rpc PspCallback(PspCallbackRequest) returns (PspCallbackResponse);
+  rpc AdjustAuthorization(AdjustAuthorizationRequest) returns (GatewayActionResponse);
 }

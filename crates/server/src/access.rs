@@ -22,6 +22,7 @@ pub const MANAGE_APPS: &str = "manage_apps";
 pub const MANAGE_PRODUCTS: &str = "manage_products";
 pub const MANAGE_CHANNELS: &str = "manage_channels";
 pub const MANAGE_STAFF: &str = "manage_staff";
+pub const MANAGE_PAYMENTS: &str = "manage_payments";
 
 #[derive(Debug)]
 pub enum Requestor {

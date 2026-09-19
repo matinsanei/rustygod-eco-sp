@@ -13,6 +13,7 @@ pub mod money;
 pub mod order;
 pub mod payments;
 pub mod product;
+pub mod psp;
 pub mod webhooks;
 
 #[derive(Debug, thiserror::Error)]
