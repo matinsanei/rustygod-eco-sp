@@ -335,15 +335,32 @@ pub async fn refund_fulfillment(
     reason: &str,
 ) -> Result<FulfillmentView> {
     use sea_orm::TransactionTrait;
+    let txn = db.begin().await?;
+    let id = refund_fulfillment_in(&txn, order_id, items, reason, true).await?;
+    txn.commit().await?;
+    view(db, id).await
+}
+
+/// Transactional core of [`refund_fulfillment`]: same validation, no
+/// transaction management. `restock=false` books the return without
+/// putting units back on the shelf (damaged/lost goods still leave
+/// `quantity_fulfilled` accounting to the caller — Django's return flow
+/// separates the stock move from the money the same way).
+pub async fn refund_fulfillment_in(
+    txn: &impl sea_orm::ConnectionTrait,
+    order_id: Uuid,
+    items: &[FulfillItem],
+    reason: &str,
+    restock: bool,
+) -> Result<i32> {
     if items.is_empty() {
         return Err(fail("refund needs at least one line"));
     }
-    let txn = db.begin().await?;
     order_order::Entity::find_by_id(order_id)
-        .one(&txn)
+        .one(txn)
         .await?
         .ok_or_else(|| fail("order not found"))?;
-    let seq = next_fulfillment_order(&txn, order_id).await?;
+    let seq = next_fulfillment_order(txn, order_id).await?;
     let f = order_fulfillment::ActiveModel {
         fulfillment_order: Set(seq),
         order_id: Set(order_id),
@@ -355,22 +372,22 @@ pub async fn refund_fulfillment(
         private_metadata: Set(json!({})),
         ..Default::default()
     }
-    .insert(&txn)
+    .insert(txn)
     .await?;
     for item in items {
         if item.quantity < 1 {
             return Err(fail("refund quantity must be positive"));
         }
         let line = order_orderline::Entity::find_by_id(item.order_line_id)
-            .one(&txn)
+            .one(txn)
             .await?
             .ok_or_else(|| fail("order line not found"))?;
         if line.order_id != order_id {
             return Err(fail("order line does not belong to this order"));
         }
         // Refundable = fulfilled (non-canceled) minus already returned.
-        let done = fulfilled_qty(&txn, item.order_line_id).await?;
-        let returned = returned_qty(&txn, item.order_line_id).await?;
+        let done = fulfilled_qty(txn, item.order_line_id).await?;
+        let returned = returned_qty(txn, item.order_line_id).await?;
         if done - returned < item.quantity {
             return Err(fail(format!(
                 "cannot refund {}: only {} fulfilled and unreturned",
@@ -382,7 +399,7 @@ pub async fn refund_fulfillment(
         // the units were taken from).
         let stock_id = match item.stock_id {
             Some(sid) => Some(sid),
-            None => stock_of_fulfilled_line(&txn, item.order_line_id).await?,
+            None => stock_of_fulfilled_line(txn, item.order_line_id).await?,
         };
         order_fulfillmentline::ActiveModel {
             order_line_id: Set(item.order_line_id),
@@ -392,15 +409,18 @@ pub async fn refund_fulfillment(
             reason: Set(reason.to_string()),
             ..Default::default()
         }
-        .insert(&txn)
+        .insert(txn)
         .await?;
-        if let Some(sid) = stock_id {
-            increase_stock_qty(&txn, sid, item.quantity).await?;
+        // Damaged/lost returns (restock=false) book the return without
+        // putting units back on the shelf.
+        if restock {
+            if let Some(sid) = stock_id {
+                increase_stock_qty(txn, sid, item.quantity).await?;
+            }
         }
     }
-    refresh_order_status(&txn, order_id).await?;
-    txn.commit().await?;
-    view(db, f.id).await
+    refresh_order_status(txn, order_id).await?;
+    Ok(f.id)
 }
 
 /// Stock the units were fulfilled from (latest non-canceled fulfillment
@@ -529,4 +549,117 @@ pub async fn list_fulfillments(
         out.push(view(db, r.id).await?);
     }
     Ok(out)
+}
+
+#[derive(Debug)]
+pub struct ReturnRefundView {
+    pub fulfillment_id: i32,
+    pub granted_refund_id: i32,
+    pub amount: rust_decimal::Decimal,
+}
+
+/// Return lines AND refund their money, atomically: a `refunded`
+/// fulfillment (optional restock) + a line-based granted refund (amount
+/// derived from unit gross × qty) executed on one transaction.
+///
+/// Django links a grant to a single transaction and leaves multi-payment
+/// orders to staff judgment — same here: pass `transaction_item_id`
+/// explicitly when the order has several charged transactions, otherwise
+/// the sole charged one is used (error if there isn't exactly one).
+pub async fn return_and_refund(
+    db: &DatabaseConnection,
+    order_id: Uuid,
+    items: &[FulfillItem],
+    reason: &str,
+    restock: bool,
+    transaction_item_id: Option<i32>,
+) -> Result<ReturnRefundView> {
+    use sea_orm::{sea_query::LockType, TransactionTrait};
+    let txn = db.begin().await?;
+    // Shared lock contract: the order row first.
+    let order = order_order::Entity::find_by_id(order_id)
+        .lock(LockType::Update)
+        .one(&txn)
+        .await?
+        .ok_or_else(|| fail(format!("order {order_id} not found")))?;
+    match order.status.as_str() {
+        "canceled" | "draft" | "expired" => {
+            return Err(fail(format!("order in status {} cannot be returned", order.status)))
+        }
+        _ => {}
+    }
+    if reason.is_empty() {
+        return Err(fail("reason is required"));
+    }
+    let fulfillment_id = refund_fulfillment_in(&txn, order_id, items, reason, restock).await?;
+
+    // Resolve the single money source for the line-based grant.
+    // Net buckets: `charged_value` is already net of refunds.
+    let charged: Vec<(i32, rust_decimal::Decimal, String)> =
+        crate::entities::payment_transactionitem::Entity::find()
+            .filter(crate::entities::payment_transactionitem::Column::OrderId.eq(order_id))
+            .all(&txn)
+            .await?
+            .into_iter()
+            .map(|t| (t.id, t.charged_value, t.currency))
+            .filter(|(_, avail, _)| *avail > rust_decimal::Decimal::ZERO)
+            .collect();
+    let txn_id = match transaction_item_id {
+        Some(id) => {
+            if !charged.iter().any(|(i, _, _)| *i == id) {
+                return Err(fail(format!(
+                    "transaction {id} has no unrefunded charge on order {order_id}"
+                )));
+            }
+            id
+        }
+        None => match charged.as_slice() {
+            [(id, _, _)] => *id,
+            [] => return Err(fail("order has no charged transaction to refund from")),
+            _ => {
+                return Err(fail(
+                    "order has several charged transactions; pass transaction_item_id explicitly",
+                ))
+            }
+        },
+    };
+    let grant_id = crate::granted_refunds::create_granted_refund_in(
+        &txn,
+        &crate::granted_refunds::NewGrant {
+            order_id,
+            transaction_item_id: Some(txn_id),
+            amount: None, // derived from the returned lines
+            lines: items
+                .iter()
+                .map(|i| crate::granted_refunds::GrantLineInput {
+                    order_line_id: i.order_line_id,
+                    quantity: i.quantity,
+                })
+                .collect(),
+            reason: reason.to_string(),
+            shipping_costs_included: false,
+            user_id: None,
+            app_id: None,
+        },
+    )
+    .await?;
+    let amount = crate::granted_refunds::view(&txn, grant_id).await?.amount;
+    crate::payments::refund_in(&txn, txn_id, amount, &format!("return-{fulfillment_id}"), Some(grant_id))
+        .await?;
+    crate::granted_refunds::refresh_grant_status(&txn, grant_id).await?;
+    crate::payments::refresh_order_statuses(&txn, Some(order_id)).await?;
+
+    let payload = serde_json::json!({
+        "id": order_id.to_string(),
+        "fulfillment_id": fulfillment_id,
+        "granted_refund_id": grant_id,
+    })
+    .to_string();
+    let ch_slug = crate::catalog::channel_slug_for_id(&txn, order.channel_id).await.ok();
+    let mut delivery_ids = crate::webhooks::trigger_event_tx(&txn, "order_updated", ch_slug.as_deref(), &payload).await?;
+    delivery_ids.extend(
+        crate::webhooks::trigger_event_tx(&txn, "fulfillment_returned", ch_slug.as_deref(), &payload).await?,
+    );
+    txn.commit().await?;
+    Ok(ReturnRefundView { fulfillment_id, granted_refund_id: grant_id, amount })
 }

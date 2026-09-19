@@ -213,31 +213,47 @@ async fn record_failure_in(
 }
 
 /// Idempotent event report + bucket recalculation in one transaction.
-///
-/// Beyond the idempotency key this ports Saleor's `deduplicate_event`:
-/// same `(transaction_id, psp_reference, type)` + same amount is an
-/// already-processed replay (no new row); same triple + different amount
-/// is PSP confusion — recorded as a failure event and rejected. A second
-/// `authorization_success` (any psp) is rejected with `ALREADY_EXISTS`
-/// (Django's message, verbatim concept: use `AUTHORIZATION_ADJUSTMENT`).
+/// (See the `report_event_in` core for the rule set.)
 pub async fn report_event(
     db: &DatabaseConnection,
     transaction_id: i32,
     ev: &NewEvent,
 ) -> Result<TxnView> {
     use sea_orm::TransactionTrait;
+    let txn = db.begin().await?;
+    // Rejection paths (mismatch, double auth-success) still write their
+    // failure audit trail first (Django saves, then raises) — commit it
+    // with the error instead of rolling back.
+    if let Err(e) = report_event_in(&txn, transaction_id, ev).await {
+        let _ = txn.commit().await;
+        return Err(e);
+    }
+    txn.commit().await?;
+    let v = view(db, transaction_id).await?;
+    refresh_order_statuses(db, v.order_id).await?;
+    Ok(v)
+}
+
+/// Transactional core of [`report_event`]: same dedup + guards +
+/// recalculation, no transaction management, no order-status refresh.
+/// Compose this inside bigger atomic flows (paid cancel, return+refund)
+/// so money, stock, and status commit or roll back together.
+pub async fn report_event_in(
+    txn: &impl sea_orm::ConnectionTrait,
+    transaction_id: i32,
+    ev: &NewEvent,
+) -> Result<()> {
     if ev.amount < Decimal::ZERO {
         return Err(DbError::SeaOrm(sea_orm::DbErr::Custom(
             "event amount must be >= 0".into(),
         )));
     }
-    let txn = db.begin().await?;
     // Serialize all writers of one transaction (Django's select_for_update
     // in the report path): concurrent callbacks can't interleave req/ok
     // pairs or double-settle.
     payment_transactionitem::Entity::find_by_id(transaction_id)
         .lock(LockType::Update)
-        .one(&txn)
+        .one(txn)
         .await?
         .ok_or_else(|| {
             DbError::SeaOrm(sea_orm::DbErr::RecordNotFound(transaction_id.to_string()))
@@ -246,13 +262,12 @@ pub async fn report_event(
         if payment_transactionevent::Entity::find()
             .filter(payment_transactionevent::Column::TransactionId.eq(transaction_id))
             .filter(payment_transactionevent::Column::IdempotencyKey.eq(key))
-            .one(&txn)
+            .one(txn)
             .await?
             .is_some()
         {
-            // Replay: no duplicate, just return current state.
-            txn.commit().await?;
-            return view(db, transaction_id).await;
+            // Replay: no duplicate; the caller owns commit/refresh.
+            return Ok(());
         }
     }
     if !is_record_only(&ev.event_type) {
@@ -262,16 +277,15 @@ pub async fn report_event(
                 .filter(payment_transactionevent::Column::TransactionId.eq(transaction_id))
                 .filter(payment_transactionevent::Column::PspReference.eq(psp.clone()))
                 .filter(payment_transactionevent::Column::Type.eq(ev.event_type.clone()))
-                .one(&txn)
+                .one(txn)
                 .await?
             {
                 if existing.amount_value == ev.amount {
-                    txn.commit().await?;
-                    return view(db, transaction_id).await;
+                    return Ok(());
                 }
                 let msg = "The transaction with provided `pspReference` and `type` already exists with different amount.";
                 record_failure_in(
-                    &txn,
+                    txn,
                     transaction_id,
                     &rustygod_core::payments::failure_event_of(&ev.event_type)
                         .unwrap_or("info")
@@ -283,9 +297,9 @@ pub async fn report_event(
                     ev.idempotency_key.clone().map(|k| format!("{k}-mismatch")),
                 )
                 .await?;
-                // The failure record must survive the rejection (Django
-                // saves the failed event, then raises) — commit, then err.
-                txn.commit().await?;
+                // The failure record stays in the caller's transaction:
+                // accepted callers commit it, rejecting flows roll everything
+                // back together (atomicity beats the audit trail there).
                 return Err(gateway_err(msg));
             }
         }
@@ -296,13 +310,13 @@ pub async fn report_event(
                 .filter(
                     payment_transactionevent::Column::Type.eq("authorization_success".to_string()),
                 )
-                .one(&txn)
+                .one(txn)
                 .await?
                 .is_some()
         {
             let msg = "Event with `AUTHORIZATION_SUCCESS` already reported for the transaction. Use `AUTHORIZATION_ADJUSTMENT` to change the authorization amount.";
             record_failure_in(
-                &txn,
+                txn,
                 transaction_id,
                 "authorization_failure",
                 ev.amount,
@@ -312,7 +326,6 @@ pub async fn report_event(
                 ev.idempotency_key.clone().map(|k| format!("{k}-dup-auth")),
             )
             .await?;
-            txn.commit().await?;
             return Err(gateway_err(msg));
         }
     }
@@ -330,13 +343,10 @@ pub async fn report_event(
         external_url: Set(ev.external_url.clone()),
         ..Default::default()
     }
-    .insert(&txn)
+    .insert(txn)
     .await?;
-    recalc_in(&txn, transaction_id).await?;
-    txn.commit().await?;
-    let v = view(db, transaction_id).await?;
-    refresh_order_statuses(db, v.order_id).await?;
-    Ok(v)
+    recalc_in(txn, transaction_id).await?;
+    Ok(())
 }
 
 async fn recalc_in(db: &impl sea_orm::ConnectionTrait, transaction_id: i32) -> Result<()> {
@@ -406,7 +416,7 @@ pub async fn view(
 /// coverage, mirroring Django's evaluation (full/partial/none over
 /// order total; granted refunds out of v1 scope).
 pub async fn refresh_order_statuses(
-    db: &DatabaseConnection,
+    db: &impl sea_orm::ConnectionTrait,
     order_id: Option<Uuid>,
 ) -> Result<()> {
     let Some(oid) = order_id else { return Ok(()) };
@@ -523,10 +533,14 @@ pub async fn execute_via(
             }
         }
         PspAction::Refund => {
-            if amount > cur.charged - cur.refunded {
+            // Net-bucket semantics: every refund_success already subtracted
+            // `charged`, so `charged_value` alone IS the unrefunded
+            // remainder (NOT charged-minus-refunded — that double-counts
+            // past refunds and wrongly blocks sequential partial refunds).
+            if amount > cur.charged {
                 return Err(gateway_err(format!(
                     "cannot refund {amount}: only {} charged and unrefunded",
-                    cur.charged - cur.refunded
+                    cur.charged
                 )));
             }
         }
@@ -736,6 +750,62 @@ pub async fn refund(
     Ok(execute_via(db, transaction_id, PspAction::Refund, amount, idempotency_key, &ManualPsp, None).await?.txn)
 }
 
+/// Transactional core of a sync manual refund: same guards as [`refund`],
+/// request+success under one psp_reference, no transaction management.
+/// Compose inside bigger atomic flows (paid cancel, return+refund).
+/// Optionally links both events back to a granted-refund decision.
+pub async fn refund_in(
+    txn: &impl sea_orm::ConnectionTrait,
+    transaction_id: i32,
+    amount: Decimal,
+    idempotency_key: &str,
+    grant_id: Option<i32>,
+) -> Result<()> {
+    if amount <= Decimal::ZERO {
+        return Err(gateway_err("refund amount must be positive"));
+    }
+    let cur = view(txn, transaction_id).await?;
+    // Net bucket: `charged_value` is already net of refunds (see execute_via).
+    if amount > cur.charged {
+        return Err(gateway_err(format!(
+            "cannot refund {amount}: only {} charged and unrefunded",
+            cur.charged
+        )));
+    }
+    // One psp_reference for the pair: request+success must land in the SAME
+    // recalculation group, otherwise charged is subtracted twice (once as
+    // pending, once as settled).
+    let psp = Uuid::new_v4().to_string();
+    let message = match grant_id {
+        Some(g) => format!("granted refund {g}"),
+        None => "manual gateway refund".to_string(),
+    };
+    let mk = |t: String, k: String| NewEvent {
+        event_type: t,
+        amount,
+        currency: cur.currency.clone(),
+        psp_reference: Some(psp.clone()),
+        message: message.clone(),
+        idempotency_key: Some(k),
+        include_in_calculations: true,
+        related_granted_refund_id: grant_id,
+        external_url: None,
+    };
+    report_event_in(
+        txn,
+        transaction_id,
+        &mk("refund_request".into(), format!("{idempotency_key}-req")),
+    )
+    .await?;
+    report_event_in(
+        txn,
+        transaction_id,
+        &mk("refund_success".into(), format!("{idempotency_key}-ok")),
+    )
+    .await?;
+    Ok(())
+}
+
 /// Refund on behalf of a granted-refund decision: same guards as
 /// [`refund`], but the request+success pair is linked back to the grant so
 /// status derivation (`granted_refunds::refresh_grant_status`) can find it.
@@ -746,45 +816,13 @@ pub async fn refund_for_grant(
     idempotency_key: &str,
     grant_id: i32,
 ) -> Result<TxnView> {
-    if amount <= Decimal::ZERO {
-        return Err(gateway_err("refund amount must be positive"));
-    }
-    let cur = view(db, transaction_id).await?;
-    if amount > cur.charged - cur.refunded {
-        return Err(gateway_err(format!(
-            "cannot refund {amount}: only {} charged and unrefunded",
-            cur.charged - cur.refunded
-        )));
-    }
+    use sea_orm::TransactionTrait;
+    let txn = db.begin().await?;
+    refund_in(&txn, transaction_id, amount, idempotency_key, Some(grant_id)).await?;
+    txn.commit().await?;
     let v = view(db, transaction_id).await?;
-    // One psp_reference for the pair: request+success must land in the SAME
-    // recalculation group, otherwise charged is subtracted twice (once as
-    // pending, once as settled).
-    let psp = Uuid::new_v4().to_string();
-    let mk = |t: String, k: String| NewEvent {
-        event_type: t,
-        amount,
-        currency: v.currency.clone(),
-        psp_reference: Some(psp.clone()),
-        message: format!("granted refund {grant_id}"),
-        idempotency_key: Some(k),
-        include_in_calculations: true,
-        related_granted_refund_id: Some(grant_id),
-        external_url: None,
-    };
-    report_event(
-        db,
-        transaction_id,
-        &mk("refund_request".into(), format!("{idempotency_key}-req")),
-    )
-    .await?;
-    report_event(
-        db,
-        transaction_id,
-        &mk("refund_success".into(), format!("{idempotency_key}-ok")),
-    )
-    .await?;
-    view(db, transaction_id).await
+    refresh_order_statuses(db, v.order_id).await?;
+    Ok(v)
 }
 
 /// Cancel authorized-but-uncharged funds.

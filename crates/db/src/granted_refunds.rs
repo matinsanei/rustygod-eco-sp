@@ -99,8 +99,20 @@ async fn granted_qty_for_line(
 /// Create the decision row + lines. Moves no money (status starts `none`).
 pub async fn create_granted_refund(db: &DatabaseConnection, new: &NewGrant) -> Result<GrantView> {
     let txn = db.begin().await?;
+    let id = create_granted_refund_in(&txn, new).await?;
+    txn.commit().await?;
+    view(db, id).await
+}
+
+/// Transactional core of [`create_granted_refund`]: same Saleor validation,
+/// no transaction management. Returns the new grant id; read the view with
+/// [`view`] on the caller's transaction.
+pub async fn create_granted_refund_in(
+    txn: &impl sea_orm::ConnectionTrait,
+    new: &NewGrant,
+) -> Result<i32> {
     let order = order_order::Entity::find_by_id(new.order_id)
-        .one(&txn)
+        .one(txn)
         .await?
         .ok_or_else(|| fail(format!("order {} not found", new.order_id)))?;
 
@@ -122,7 +134,7 @@ pub async fn create_granted_refund(db: &DatabaseConnection, new: &NewGrant) -> R
             return Err(fail("line quantity must be positive"));
         }
         let ol = order_orderline::Entity::find_by_id(l.order_line_id)
-            .one(&txn)
+            .one(txn)
             .await?
             .ok_or_else(|| fail(format!("order line {} not found", l.order_line_id)))?;
         if ol.order_id != new.order_id {
@@ -131,7 +143,7 @@ pub async fn create_granted_refund(db: &DatabaseConnection, new: &NewGrant) -> R
                 l.order_line_id, new.order_id
             )));
         }
-        let already = granted_qty_for_line(&txn, new.order_id, l.order_line_id).await?;
+        let already = granted_qty_for_line(txn, new.order_id, l.order_line_id).await?;
         if l.quantity > ol.quantity - already {
             return Err(fail(format!(
                 "line {} only has {} grantable units left",
@@ -164,7 +176,7 @@ pub async fn create_granted_refund(db: &DatabaseConnection, new: &NewGrant) -> R
     // (Cross-decision over-grant is stopped at execute by the money guard.)
     if let Some(txn_id) = new.transaction_item_id {
         let t = payment_transactionitem::Entity::find_by_id(txn_id)
-            .one(&txn)
+            .one(txn)
             .await?
             .ok_or_else(|| fail(format!("transaction {txn_id} not found")))?;
         if t.charged_value < amount {
@@ -194,7 +206,7 @@ pub async fn create_granted_refund(db: &DatabaseConnection, new: &NewGrant) -> R
         reason_reference_id: Set(None),
         ..Default::default()
     }
-    .insert(&txn)
+    .insert(txn)
     .await?;
     for l in &new.lines {
         order_ordergrantedrefundline::ActiveModel {
@@ -205,11 +217,10 @@ pub async fn create_granted_refund(db: &DatabaseConnection, new: &NewGrant) -> R
             reason_reference_id: Set(None),
             ..Default::default()
         }
-        .insert(&txn)
+        .insert(txn)
         .await?;
     }
-    txn.commit().await?;
-    view(db, row.id).await
+    Ok(row.id)
 }
 
 /// Recompute status from the last refund-family event on the linked
@@ -274,19 +285,15 @@ pub async fn execute_granted_refund(
     grant_id: i32,
     idempotency_key: &str,
 ) -> Result<ExecuteOutcome> {
+    use sea_orm::TransactionTrait;
+    let txn = db.begin().await?;
+    let replayed = execute_granted_refund_in(&txn, grant_id, idempotency_key).await?;
+    txn.commit().await?;
     let current = view(db, grant_id).await?;
-    if current.status == "success" {
-        return Ok(ExecuteOutcome {
-            view: current,
-            replayed: true,
-            delivery_ids: vec![],
-        });
+    payments::refresh_order_statuses(db, Some(current.order_id)).await?;
+    if replayed {
+        return Ok(ExecuteOutcome { view: current, replayed: true, delivery_ids: vec![] });
     }
-    let Some(txn_id) = current.transaction_item_id else {
-        return Err(fail("granted refund has no transaction linked"));
-    };
-    payments::refund_for_grant(db, txn_id, current.amount, idempotency_key, grant_id).await?;
-    refresh_grant_status(db, grant_id).await?;
 
     // Outbox, same contract as complete/cancel (post-commit send by caller).
     let payload = serde_json::json!({
@@ -301,6 +308,26 @@ pub async fn execute_granted_refund(
         replayed: false,
         delivery_ids,
     })
+}
+
+/// Transactional core of [`execute_granted_refund`]: guarded money move +
+/// status flip, no transaction management, no outbox (the caller emits
+/// events on its own transaction). Returns `replayed`.
+pub async fn execute_granted_refund_in(
+    txn: &impl sea_orm::ConnectionTrait,
+    grant_id: i32,
+    idempotency_key: &str,
+) -> Result<bool> {
+    let current = view(txn, grant_id).await?;
+    if current.status == "success" {
+        return Ok(true);
+    }
+    let Some(txn_id) = current.transaction_item_id else {
+        return Err(fail("granted refund has no transaction linked"));
+    };
+    payments::refund_in(txn, txn_id, current.amount, idempotency_key, Some(grant_id)).await?;
+    refresh_grant_status(txn, grant_id).await?;
+    Ok(false)
 }
 
 pub async fn view(db: &impl sea_orm::ConnectionTrait, grant_id: i32) -> Result<GrantView> {
@@ -328,4 +355,75 @@ pub async fn view(db: &impl sea_orm::ConnectionTrait, grant_id: i32) -> Result<G
             })
             .collect(),
     })
+}
+
+pub struct PaidRefund {
+    pub grant_id: i32,
+    pub transaction_id: i32,
+    pub amount: Decimal,
+}
+
+/// Refund `amount` across the order's charged transactions, oldest first.
+/// One grant per touched transaction (each a complete decision: amount +
+/// link + execution + success status), all inside the caller's transaction.
+///
+/// Django links a grant to a single transaction and never auto-distributes;
+/// distribution here is our paid-cancel/return improvement (staff picks
+/// nothing, money still traces per-transaction). Sync manual settlement
+/// only: an async PSP would leave the business operation half-done.
+pub async fn refund_across_charged_in(
+    txn: &impl sea_orm::ConnectionTrait,
+    order_id: uuid::Uuid,
+    amount: Decimal,
+    reason: &str,
+    key_prefix: &str,
+) -> Result<Vec<PaidRefund>> {
+    if amount <= Decimal::ZERO {
+        return Err(fail("refund amount must be positive"));
+    }
+    let txns = payment_transactionitem::Entity::find()
+        .filter(payment_transactionitem::Column::OrderId.eq(order_id))
+        .order_by_asc(payment_transactionitem::Column::Id)
+        .all(txn)
+        .await?;
+    // Net buckets: `charged_value` is already net of refunds, so it alone
+    // is the per-transaction unrefunded remainder.
+    let avail: Decimal = txns.iter().map(|t| t.charged_value).sum();
+    if avail < amount {
+        return Err(fail(format!(
+            "cannot refund {amount}: only {avail} charged and unrefunded on order {order_id}"
+        )));
+    }
+    let mut remaining = amount;
+    let mut out = Vec::new();
+    for t in &txns {
+        if remaining <= Decimal::ZERO {
+            break;
+        }
+        let take = t.charged_value.min(remaining);
+        if take <= Decimal::ZERO {
+            continue;
+        }
+        let grant_id = create_granted_refund_in(
+            txn,
+            &NewGrant {
+                order_id,
+                transaction_item_id: Some(t.id),
+                amount: Some(take),
+                lines: vec![],
+                reason: reason.to_string(),
+                shipping_costs_included: false,
+                user_id: None,
+                app_id: None,
+            },
+        )
+        .await?;
+        payments::refund_in(txn, t.id, take, &format!("{key_prefix}-t{}", t.id), Some(grant_id))
+            .await?;
+        refresh_grant_status(txn, grant_id).await?;
+        remaining -= take;
+        out.push(PaidRefund { grant_id, transaction_id: t.id, amount: take });
+    }
+    debug_assert!(remaining <= Decimal::ZERO);
+    Ok(out)
 }

@@ -2,6 +2,29 @@
 
 ## Unreleased
 
+### ⚠️ Breaking: `CancelOrder` now refunds paid orders (was REQUIRES_REFUND)
+- Before: any captured money → `REQUIRES_REFUND` error, staff refunded manually.
+- Now: paid cancel auto-refunds every unrefunded remainder (one granted
+  decision per charged transaction) + releases allocations + `canceled`,
+  all atomically. `refunded_amount` + `granted_refund_ids` added to the
+  response. Migration: drop the manual-refund-before-cancel step; treat a
+  `canceled` response as money-settled.
+- Eligibility now ports `Order.can_cancel()`: deny-list
+  {canceled, draft, expired} + refusal on ACTIVE fulfillments (return the
+  goods instead). Cancel-after-partial-return is refused while a
+  `fulfilled` row exists — Saleor parity, return the rest instead.
+
+### ⚠️ Fixed: refund guard double-counted past refunds
+- `charged-minus-refunded` on the net `charged_value` bucket wrongly
+  blocked sequential partial refunds (charge 100, refund 20, refund 30
+  → second rejected). Guard is now `amount > charged_value` (the bucket
+  is already net). Single refunds behaved identically; only sequences change.
+
+### Added
+- `ReturnOrderLines` RPC: return lines + line-based granted refund
+  executed on one transaction (optional restock for damaged/lost goods),
+  over-return rejected with nothing persisted.
+
 ### ⚠️ Breaking: second `AUTHORIZATION_SUCCESS` is now rejected
 - Before: authorizing twice on one transaction silently double-counted.
 - Now: `ALREADY_EXISTS` + a math-excluded failure record (exact Django

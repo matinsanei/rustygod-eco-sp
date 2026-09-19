@@ -110,10 +110,11 @@ async fn cancel_releases_allocations_and_flips_status() {
 }
 
 #[tokio::test]
-async fn cancel_refuses_paid_orders() {
+async fn cancel_paid_order_refunds_everything_atomically() {
     let _guard = stock_guard();
     let db = db().await;
-    let (token, _vid) = stocked_checkout(&db, 1).await;
+    let (token, vid) = stocked_checkout(&db, 2).await;
+    let free_before = free_for(&db, vid).await;
     let done = complete::complete_checkout(&db, token).await.unwrap();
 
     // Capture funds against the order (authorize then charge, like a PSP).
@@ -139,16 +140,32 @@ async fn cancel_refuses_paid_orders() {
         .await
         .unwrap();
 
-    let err = cancel::cancel_order(&db, done.order_id).await.unwrap_err();
-    assert!(err.to_string().contains("REQUIRES_REFUND"), "{err}");
+    // Paid cancel now completes the loop instead of refusing.
+    let out = cancel::cancel_order(&db, done.order_id).await.unwrap();
+    assert_eq!(out.refunded, one);
+    assert_eq!(out.grant_ids.len(), 1);
 
-    // Cleanup: refund the cent, delete txn rows + order graph (test-only).
-    rustygod_db::payments::refund(&db, txn.id, rust_decimal::Decimal::new(1, 0), &format!("k-{}", Uuid::new_v4()))
+    let (header, _) = rustygod_db::order_store::get_order_rows(&db, done.order_id)
         .await
+        .unwrap()
         .unwrap();
+    assert_eq!(header.status, "canceled");
+    // Money actually moved back + decision flipped to success.
+    let v = rustygod_db::payments::view(&db, txn.id).await.unwrap();
+    assert_eq!(v.refunded, one);
+    assert_eq!(v.charged, rust_decimal::Decimal::ZERO);
+    let g = rustygod_db::granted_refunds::view(&db, out.grant_ids[0]).await.unwrap();
+    assert_eq!(g.status, "success");
+    // Allocations released, stock back.
+    assert_eq!(free_for(&db, vid).await, free_before);
+    // Reconcile stays green on the canceled+refunded order.
+    let checks = rustygod_db::reconcile::reconcile_order(&db, done.order_id).await.unwrap();
+    assert!(checks.iter().all(|c| c.ok), "{checks:?}");
+
+    // Cleanup incl. grant rows (events reference grants: money first).
     use rustygod_db::entities::{
-        order_order, order_orderevent, order_orderline, payment_transactionevent,
-        payment_transactionitem, warehouse_allocation,
+        order_order, order_ordergrantedrefund, order_ordergrantedrefundline, order_orderevent,
+        order_orderline, payment_transactionevent, payment_transactionitem, warehouse_allocation,
     };
     use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
     let (_, lines) = rustygod_db::order_store::get_order_rows(&db, done.order_id)
@@ -168,12 +185,24 @@ async fn cancel_refuses_paid_orders() {
         .all(&db)
         .await
         .unwrap();
+    // Cleanup order respects FKs: events → grant lines → grants → items
+    // (grants reference BOTH events' links and transaction rows).
     for t in &txns {
         payment_transactionevent::Entity::delete_many()
             .filter(payment_transactionevent::Column::TransactionId.eq(t.id))
             .exec(&db)
             .await
             .unwrap();
+    }
+    for g in &out.grant_ids {
+        order_ordergrantedrefundline::Entity::delete_many()
+            .filter(order_ordergrantedrefundline::Column::GrantedRefundId.eq(*g))
+            .exec(&db)
+            .await
+            .unwrap();
+        order_ordergrantedrefund::Entity::delete_by_id(*g).exec(&db).await.unwrap();
+    }
+    for t in &txns {
         payment_transactionitem::Entity::delete_by_id(t.id).exec(&db).await.unwrap();
     }
     order_orderevent::Entity::delete_many()
@@ -228,4 +257,128 @@ async fn concurrent_complete_and_cancel_never_deadlock() {
         }
     }
     let _ = vid;
+}
+
+#[tokio::test]
+async fn cancel_paid_split_across_two_transactions() {
+    let _guard = stock_guard();
+    let db = db().await;
+    let (token, _vid) = stocked_checkout(&db, 1).await;
+    let done = complete::complete_checkout(&db, token).await.unwrap();
+
+    // Two separate captures (split tender): 1 + 2.
+    let mut ids = vec![];
+    for (tag, amt) in [("s1", 1), ("s2", 2)] {
+        let txn = rustygod_db::payments::create_transaction(
+            &db,
+            &rustygod_db::payments::NewTransaction {
+                checkout_id: None,
+                order_id: Some(done.order_id),
+                currency: "USD".into(),
+                name: "ci".into(),
+                app_identifier: None,
+                idempotency_key: Some(format!("{tag}-{}", Uuid::new_v4())),
+                available_actions: vec!["charge".into(), "refund".into()],
+            },
+        )
+        .await
+        .unwrap();
+        let a = rust_decimal::Decimal::new(amt, 0);
+        rustygod_db::payments::authorize(&db, txn.id, a, &format!("k-{tag}-a-{}", Uuid::new_v4()))
+            .await
+            .unwrap();
+        rustygod_db::payments::charge(&db, txn.id, a, &format!("k-{tag}-c-{}", Uuid::new_v4()))
+            .await
+            .unwrap();
+        ids.push(txn.id);
+    }
+
+    let out = cancel::cancel_order(&db, done.order_id).await.unwrap();
+    assert_eq!(out.refunded, rust_decimal::Decimal::new(3, 0));
+    assert_eq!(out.grant_ids.len(), 2, "one decision per charged transaction");
+    for (tid, want) in ids.iter().zip([1, 2]) {
+        let v = rustygod_db::payments::view(&db, *tid).await.unwrap();
+        assert_eq!(v.refunded, rust_decimal::Decimal::new(want, 0));
+        assert_eq!(v.charged, rust_decimal::Decimal::ZERO, "fully refunded");
+    }
+    // Cleanup incl. grants.
+    use rustygod_db::entities::{
+        order_order, order_ordergrantedrefund, order_ordergrantedrefundline, order_orderevent,
+        order_orderline, payment_transactionevent, payment_transactionitem, warehouse_allocation,
+    };
+    use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
+    let (_, lines) = rustygod_db::order_store::get_order_rows(&db, done.order_id)
+        .await
+        .unwrap()
+        .unwrap();
+    for l in &lines {
+        warehouse_allocation::Entity::delete_many()
+            .filter(warehouse_allocation::Column::OrderLineId.eq(l.id))
+            .exec(&db)
+            .await
+            .unwrap();
+        order_orderline::Entity::delete_by_id(l.id).exec(&db).await.unwrap();
+    }
+    for t in &ids {
+        payment_transactionevent::Entity::delete_many()
+            .filter(payment_transactionevent::Column::TransactionId.eq(*t))
+            .exec(&db)
+            .await
+            .unwrap();
+    }
+    for g in &out.grant_ids {
+        order_ordergrantedrefundline::Entity::delete_many()
+            .filter(order_ordergrantedrefundline::Column::GrantedRefundId.eq(*g))
+            .exec(&db)
+            .await
+            .unwrap();
+        order_ordergrantedrefund::Entity::delete_by_id(*g).exec(&db).await.unwrap();
+    }
+    for t in &ids {
+        payment_transactionitem::Entity::delete_by_id(*t).exec(&db).await.unwrap();
+    }
+    order_orderevent::Entity::delete_many()
+        .filter(order_orderevent::Column::OrderId.eq(done.order_id))
+        .exec(&db)
+        .await
+        .unwrap();
+    order_order::Entity::delete_by_id(done.order_id).exec(&db).await.unwrap();
+}
+
+#[tokio::test]
+async fn cancel_refuses_active_fulfillment() {
+    let _guard = stock_guard();
+    let db = db().await;
+    let (token, _vid) = stocked_checkout(&db, 2).await;
+    let done = complete::complete_checkout(&db, token).await.unwrap();
+    let (_, lines) = rustygod_db::order_store::get_order_rows(&db, done.order_id)
+        .await
+        .unwrap()
+        .unwrap();
+    // Ship one unit: the order now has an ACTIVE fulfillment.
+    rustygod_db::fulfillment::create_fulfillment(
+        &db,
+        done.order_id,
+        &[rustygod_db::fulfillment::FulfillItem {
+            order_line_id: lines[0].id,
+            quantity: 1,
+            stock_id: None,
+        }],
+        "",
+    )
+    .await
+    .unwrap();
+    // can_cancel port: goods out the door → no cancel, return instead.
+    let err = cancel::cancel_order(&db, done.order_id).await.unwrap_err();
+    assert!(err.to_string().contains("active fulfillments"), "{err}");
+    // Leave the shelf as found: cancel the fulfillment (restocks).
+    use rustygod_db::entities::order_fulfillment;
+    use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
+    let f = order_fulfillment::Entity::find()
+        .filter(order_fulfillment::Column::OrderId.eq(done.order_id))
+        .one(&db)
+        .await
+        .unwrap()
+        .unwrap();
+    rustygod_db::fulfillment::cancel_fulfillment(&db, f.id).await.unwrap();
 }

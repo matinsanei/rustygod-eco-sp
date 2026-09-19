@@ -47,6 +47,31 @@ message CancelOrderRequest { string id = 1; }
 message CancelOrderResponse {
   string status = 1;
   repeated rustygod.common.Error errors = 2;
+  // Paid cancel settles here (T2): captured money refunded atomically.
+  string refunded_amount = 3;
+  repeated int32 granted_refund_ids = 4;
+}
+
+// Return lines AND refund their money atomically (E7/T2): a `refunded`
+// fulfillment (optional restock) + a line-based granted refund executed
+// on one transaction. Over-return fails with nothing persisted.
+message ReturnLineInput {
+  string order_line_id = 1;
+  int32 quantity = 2;
+  int32 stock_id = 3; // 0 = restore the stock units came from
+}
+message ReturnOrderLinesRequest {
+  string order_id = 1;
+  repeated ReturnLineInput lines = 2;
+  string reason = 3;
+  bool restock = 4;
+  int32 transaction_item_id = 5; // 0 = sole charged transaction
+}
+message ReturnOrderLinesResponse {
+  int32 fulfillment_id = 1;
+  int32 granted_refund_id = 2;
+  string amount = 3;
+  repeated rustygod.common.Error errors = 4;
 }
 
 // Mirrors saleor OrderGrantRefundCreate: decision first, money on execute.
@@ -112,6 +137,7 @@ service OrderService {
   rpc ListFulfillments(ListFulfillmentsRequest) returns (ListFulfillmentsResponse);
   rpc ReconcileOrder(ReconcileOrderRequest) returns (ReconcileOrderResponse);
   rpc CancelOrder(CancelOrderRequest) returns (CancelOrderResponse);
+  rpc ReturnOrderLines(ReturnOrderLinesRequest) returns (ReturnOrderLinesResponse);
   rpc CreateGrantedRefund(CreateGrantedRefundRequest) returns (CreateGrantedRefundResponse);
   rpc ExecuteGrantedRefund(ExecuteGrantedRefundRequest) returns (ExecuteGrantedRefundResponse);
   rpc GetGrantedRefund(GetGrantedRefundRequest) returns (GetGrantedRefundResponse);

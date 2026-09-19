@@ -8,6 +8,7 @@ use rustygod_proto::order::{
     GetGrantedRefundResponse, GetOrderRequest, GetOrderResponse, GrantedRefundLineInfo,
     ListFulfillmentsRequest, ListFulfillmentsResponse, ListOrdersRequest, ListOrdersResponse,
     ReconCheck, ReconcileOrderRequest, ReconcileOrderResponse, RefundFulfillmentRequest,
+    ReturnOrderLinesRequest, ReturnOrderLinesResponse,
 };
 use sea_orm::DatabaseConnection;
 use tonic::{Request, Response, Status};
@@ -309,6 +310,8 @@ impl OrderService for OrderServiceImpl {
                     message: "id must be a UUID".into(),
                     field: String::new(),
                 }],
+                refunded_amount: String::new(),
+                granted_refund_ids: vec![],
             }));
         };
         match rustygod_db::cancel::cancel_order(db, order_id).await {
@@ -328,14 +331,14 @@ impl OrderService for OrderServiceImpl {
                 Ok(Response::new(CancelOrderResponse {
                     status: "canceled".into(),
                     errors: vec![],
+                    refunded_amount: out.refunded.to_string(),
+                    granted_refund_ids: out.grant_ids,
                 }))
             }
             Err(e) => {
                 let msg = e.to_string();
                 let code = if msg.contains("not found") {
                     "NOT_FOUND"
-                } else if msg.contains("REQUIRES_REFUND") {
-                    "REQUIRES_REFUND"
                 } else {
                     "NOT_APPLICABLE"
                 };
@@ -346,7 +349,73 @@ impl OrderService for OrderServiceImpl {
                         message: msg,
                         field: String::new(),
                     }],
+                    refunded_amount: String::new(),
+                    granted_refund_ids: vec![],
                 }))
+            }
+        }
+    }
+
+    async fn return_order_lines(
+        &self,
+        request: Request<ReturnOrderLinesRequest>,
+    ) -> Result<Response<ReturnOrderLinesResponse>, Status> {
+        let db = self.db()?;
+        crate::access::authorize(db, request.metadata(), crate::access::MANAGE_ORDERS).await?;
+        let r = request.into_inner();
+        let fail = |code: &str, message: String| {
+            Response::new(ReturnOrderLinesResponse {
+                fulfillment_id: 0,
+                granted_refund_id: 0,
+                amount: String::new(),
+                errors: vec![rustygod_proto::common::Error {
+                    code: code.into(),
+                    message,
+                    field: String::new(),
+                }],
+            })
+        };
+        let Ok(order_id) = r.order_id.parse::<Uuid>() else {
+            return Ok(fail("INVALID", "order_id must be a UUID".into()));
+        };
+        let mut items = vec![];
+        for l in &r.lines {
+            let Ok(lid) = l.order_line_id.parse::<Uuid>() else {
+                return Ok(fail("INVALID", "order_line_id must be a UUID".into()));
+            };
+            items.push(rustygod_db::fulfillment::FulfillItem {
+                order_line_id: lid,
+                quantity: l.quantity,
+                stock_id: (l.stock_id != 0).then_some(l.stock_id),
+            });
+        }
+        match rustygod_db::fulfillment::return_and_refund(
+            db,
+            order_id,
+            &items,
+            &r.reason,
+            r.restock,
+            (r.transaction_item_id != 0).then_some(r.transaction_item_id),
+        )
+        .await
+        {
+            Ok(out) => {
+                // Post-commit fast path for order_updated/fulfillment_returned.
+                Ok(Response::new(ReturnOrderLinesResponse {
+                    fulfillment_id: out.fulfillment_id,
+                    granted_refund_id: out.granted_refund_id,
+                    amount: out.amount.to_string(),
+                    errors: vec![],
+                }))
+            }
+            Err(e) => {
+                let msg = e.to_string();
+                let code = if msg.contains("not found") {
+                    "NOT_FOUND"
+                } else {
+                    "NOT_APPLICABLE"
+                };
+                Ok(fail(code, msg))
             }
         }
     }

@@ -375,3 +375,23 @@ async fn r3_second_transaction_blocked_while_inflight() {
     cleanup(&db, t3.id).await;
     checkout_store::delete_checkout_row(&db, token).await.unwrap();
 }
+
+#[tokio::test]
+async fn sequential_partial_refunds_each_succeed() {
+    // Net-bucket regression: after refund 20 of 100, a second refund of 30
+    // must succeed (remainder 80, then 50) — the old charged-minus-refunded
+    // guard wrongly blocked it.
+    let db = db().await;
+    let t = bare_txn(&db, "seq-ref").await;
+    payments::authorize(&db, t.id, dec("100.00"), "seq-a").await.unwrap();
+    payments::charge(&db, t.id, dec("100.00"), "seq-c").await.unwrap();
+    payments::refund(&db, t.id, dec("20.00"), "seq-r1").await.unwrap();
+    let v = payments::refund(&db, t.id, dec("30.00"), "seq-r2").await.unwrap();
+    assert_eq!(v.refunded, dec("50.00"));
+    assert_eq!(v.charged, dec("50.00"));
+    // And the remainder is still refundable.
+    let v = payments::refund(&db, t.id, dec("50.00"), "seq-r3").await.unwrap();
+    assert_eq!(v.charged, dec("0"));
+    assert_eq!(v.refunded, dec("100.00"));
+    cleanup(&db, t.id).await;
+}
