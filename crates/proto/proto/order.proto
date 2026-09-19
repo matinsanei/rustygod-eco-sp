@@ -49,6 +49,50 @@ message CancelOrderResponse {
   repeated rustygod.common.Error errors = 2;
 }
 
+// Mirrors saleor OrderGrantRefundCreate: decision first, money on execute.
+message GrantRefundLineInput {
+  string order_line_id = 1;
+  int32 quantity = 2;
+}
+message CreateGrantedRefundRequest {
+  string order_id = 1;
+  int32 transaction_item_id = 2; // 0 = none linked
+  string amount = 3;             // empty = derive from lines+shipping
+  repeated GrantRefundLineInput lines = 4;
+  string reason = 5;
+  bool shipping_costs_included = 6;
+}
+message GrantedRefundLineInfo {
+  string order_line_id = 1;
+  int32 quantity = 2;
+}
+message CreateGrantedRefundResponse {
+  int32 granted_refund_id = 1;
+  string amount = 2;
+  string status = 3;
+  repeated GrantedRefundLineInfo lines = 4;
+  repeated rustygod.common.Error errors = 5;
+}
+message ExecuteGrantedRefundRequest {
+  int32 granted_refund_id = 1;
+  string idempotency_key = 2;
+}
+message ExecuteGrantedRefundResponse {
+  string status = 1;
+  bool replayed = 2;
+  repeated rustygod.common.Error errors = 3;
+}
+message GetGrantedRefundRequest { int32 granted_refund_id = 1; }
+message GetGrantedRefundResponse {
+  int32 granted_refund_id = 1;
+  string order_id = 2;
+  string amount = 3;
+  string status = 4;
+  string reason = 5;
+  repeated GrantedRefundLineInfo lines = 6;
+  repeated rustygod.common.Error errors = 7;
+}
+
 message ListOrdersRequest {
   int32 first = 1;
   string after = 2;
@@ -68,6 +112,9 @@ service OrderService {
   rpc ListFulfillments(ListFulfillmentsRequest) returns (ListFulfillmentsResponse);
   rpc ReconcileOrder(ReconcileOrderRequest) returns (ReconcileOrderResponse);
   rpc CancelOrder(CancelOrderRequest) returns (CancelOrderResponse);
+  rpc CreateGrantedRefund(CreateGrantedRefundRequest) returns (CreateGrantedRefundResponse);
+  rpc ExecuteGrantedRefund(ExecuteGrantedRefundRequest) returns (ExecuteGrantedRefundResponse);
+  rpc GetGrantedRefund(GetGrantedRefundRequest) returns (GetGrantedRefundResponse);
 }
 
 // Mirrors saleor/order fulfillments: fulfillment_order auto-increments,

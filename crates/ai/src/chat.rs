@@ -43,7 +43,7 @@ pub async fn answer(
     }
     // Agentic-buying hook v1: attach frequently-bought-together picks.
     let first_variant = top_variant_for(db, hits[0].product_id).await?;
-    let mut product_ids: Vec<i32> = hits.iter().map(|h| h.product_id).collect();
+    let product_ids: Vec<i32> = hits.iter().map(|h| h.product_id).collect();
     if let Some(vid) = first_variant {
         let recos = recommend::recommend_for_variant(db, vid, channel_slug, 3).await?;
         if !recos.is_empty() {
@@ -64,7 +64,7 @@ async fn top_variant_for(
     product_id: i32,
 ) -> Result<Option<i32>> {
     use rustygod_db::entities::product_productvariant;
-    use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QuerySelect, SelectorTrait};
+    use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QuerySelect};
     Ok(product_productvariant::Entity::find()
         .select_only()
         .column(product_productvariant::Column::Id)

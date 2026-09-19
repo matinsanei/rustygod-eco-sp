@@ -4,8 +4,7 @@
 //! permission resolution through groups + direct grants.
 
 use sea_orm::{
-    ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, QuerySelect,
-    SelectorTrait, Set,
+    ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, QuerySelect, Set,
 };
 
 use crate::{

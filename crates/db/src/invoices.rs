@@ -16,7 +16,7 @@ use chrono::Utc;
 use rustygod_core::invoice as domain;
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, ConnectionTrait, DatabaseConnection, EntityTrait,
-    QueryFilter, QueryOrder, QuerySelect, SelectorTrait, Set, TransactionTrait,
+    QueryFilter, QueryOrder, QuerySelect, Set, TransactionTrait,
 };
 use serde_json::json;
 use uuid::Uuid;

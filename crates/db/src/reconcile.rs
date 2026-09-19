@@ -3,13 +3,14 @@
 //! mutates, so it is safe to run on a schedule or on demand.
 
 use rust_decimal::Decimal;
-use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QuerySelect, SelectorTrait};
+use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QuerySelect};
 use uuid::Uuid;
 
 use crate::{
     entities::{
         discount_vouchercode, giftcard_giftcard, order_order, order_order_gift_cards,
-        order_orderevent, order_orderline, payment_transactionitem, warehouse_allocation,
+        order_ordergrantedrefund, order_orderevent, order_orderline, payment_transactionevent,
+        payment_transactionitem, warehouse_allocation,
     },
     DbError, Result,
 };
@@ -63,6 +64,7 @@ pub async fn reconcile_order(
         .await?;
     let charged: Decimal = txns.iter().map(|t| t.charged_value).sum();
     let refunded: Decimal = txns.iter().map(|t| t.refunded_value).sum();
+    let refund_pending: Decimal = txns.iter().map(|t| t.refund_pending_value).sum();
     out.push(check(
         "charged_vs_total",
         charged - refunded <= total,
@@ -193,12 +195,45 @@ pub async fn reconcile_order(
         ));
     }
 
-    // RC2/RC10: refunded never exceeds charged (granted-refund decision
-    // parity until the granted-refund milestone lands).
+    // RC2 (granted-refund milestone LANDED): decision vs money parity.
+    // Net-bucket semantics (Django): a full refund leaves charged=0 and
+    // refunded=total, so `refunded <= charged` is FALSE on refunded orders
+    // by design. The real invariants: no bucket ever goes negative (money
+    // can never be created from thin air), every executed decision
+    // (success/pending) is covered by moved money, and every success grant
+    // has its money event linked back to it.
+    let grants = order_ordergrantedrefund::Entity::find()
+        .filter(order_ordergrantedrefund::Column::OrderId.eq(order_id))
+        .all(db)
+        .await?;
+    let mut decided = Decimal::ZERO;
+    let mut unlinked_success = 0;
+    for g in &grants {
+        if g.status == "success" || g.status == "pending" {
+            decided += g.amount_value;
+        }
+        if g.status == "success" {
+            let n = payment_transactionevent::Entity::find()
+                .filter(
+                    payment_transactionevent::Column::RelatedGrantedRefundId.eq(g.id),
+                )
+                .all(db)
+                .await?
+                .len();
+            if n == 0 {
+                unlinked_success += 1;
+            }
+        }
+    }
     out.push(check(
         "refunded_within_charged",
-        refunded <= charged,
-        format!("refunded={refunded} charged={charged}"),
+        charged >= Decimal::ZERO
+            && refunded >= Decimal::ZERO
+            && decided <= refunded + refund_pending
+            && unlinked_success == 0,
+        format!(
+            "refunded={refunded} charged={charged} decided={decided} unlinked_success={unlinked_success}"
+        ),
     ));
 
     Ok(out)

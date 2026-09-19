@@ -9,7 +9,7 @@
 
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, ConnectionTrait, DatabaseConnection, EntityTrait,
-    QueryFilter, QueryOrder, QuerySelect, SelectorTrait, Set, TransactionTrait,
+    QueryFilter, QueryOrder, QuerySelect, Set, TransactionTrait,
 };
 
 use crate::{
@@ -42,7 +42,7 @@ async fn perm_id(db: &impl ConnectionTrait, codename: &str) -> Result<i32> {
 }
 
 async fn view_of(db: &impl ConnectionTrait, group_id: i32) -> Result<GroupView> {
-    use sea_orm::{QuerySelect, SelectorTrait};
+    use sea_orm::QuerySelect;
     let name: String = account_group::Entity::find_by_id(group_id)
         .select_only()
         .column(account_group::Column::Name)
@@ -120,7 +120,7 @@ pub async fn create_group(
 }
 
 pub async fn list_groups(db: &impl ConnectionTrait) -> Result<Vec<GroupView>> {
-    use sea_orm::{QuerySelect, SelectorTrait};
+    use sea_orm::QuerySelect;
     let ids: Vec<i32> = account_group::Entity::find()
         .select_only()
         .column(account_group::Column::Id)

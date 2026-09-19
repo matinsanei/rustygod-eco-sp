@@ -8,10 +8,9 @@
 //! - stocks upsert per (warehouse, variant) with the allocated floor intact;
 //! - shipping-zone links are explicit assign/unassign rows.
 
-use chrono::Utc;
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, ConnectionTrait, DatabaseConnection, EntityTrait,
-    QueryFilter, QueryOrder, QuerySelect, SelectorTrait, Set, TransactionTrait,
+    QueryFilter, QueryOrder, QuerySelect, Set, TransactionTrait,
     sea_query::LockType,
 };
 use serde_json::json;
@@ -293,7 +292,7 @@ pub async fn warehouses_for_zone(
     db: &impl ConnectionTrait,
     zone_id: i32,
 ) -> Result<Vec<Uuid>> {
-    use sea_orm::{QuerySelect, SelectorTrait};
+    use sea_orm::QuerySelect;
     Ok(warehouse_warehouse_shipping_zones::Entity::find()
         .select_only()
         .column(warehouse_warehouse_shipping_zones::Column::WarehouseId)

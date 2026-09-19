@@ -19,7 +19,7 @@ use rust_decimal::Decimal;
 use rustygod_core::draft as domain;
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, ConnectionTrait, DatabaseConnection, EntityTrait,
-    QueryFilter, QueryOrder, QuerySelect, SelectorTrait, Set, TransactionTrait,
+    QueryFilter, QueryOrder, QuerySelect, Set, TransactionTrait,
 };
 use serde_json::json;
 use uuid::Uuid;

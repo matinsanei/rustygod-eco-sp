@@ -110,8 +110,6 @@ impl VectorStore for InMemoryVectorStore {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::traits::Embedder as _;
-    use crate::traits::VectorStore as _;
 
     #[tokio::test]
     async fn embedder_is_deterministic_and_normalized() {

@@ -16,6 +16,7 @@ pub mod drafts;
 pub mod entities;
 pub mod fulfillment;
 pub mod giftcards;
+pub mod granted_refunds;
 pub mod groups;
 pub mod invoices;
 pub mod order_store;
@@ -60,6 +61,8 @@ pub enum DbError {
     Complete(String),
     #[error("cancel error: {0}")]
     Cancel(String),
+    #[error("granted refund error: {0}")]
+    GrantedRefund(String),
     #[error("lock poisoned: {0}")]
     Lock(String),
 }

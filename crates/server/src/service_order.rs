@@ -1,11 +1,13 @@
 use rustygod_core::order::Order;
-use rustygod_db::{fulfillment, order_store};
+use rustygod_db::{fulfillment, granted_refunds, order_store};
 use rustygod_proto::order::{
     order_service_server::OrderService, CancelFulfillmentRequest, CancelOrderRequest,
-    CancelOrderResponse, CreateFulfillmentRequest, FulfillmentInfo, FulfillmentLineInfo,
-    FulfillmentResponse, GetOrderRequest, GetOrderResponse, ListFulfillmentsRequest,
-    ListFulfillmentsResponse, ListOrdersRequest, ListOrdersResponse, ReconCheck,
-    ReconcileOrderRequest, ReconcileOrderResponse, RefundFulfillmentRequest,
+    CancelOrderResponse, CreateFulfillmentRequest, CreateGrantedRefundRequest,
+    CreateGrantedRefundResponse, ExecuteGrantedRefundRequest, ExecuteGrantedRefundResponse,
+    FulfillmentInfo, FulfillmentLineInfo, FulfillmentResponse, GetGrantedRefundRequest,
+    GetGrantedRefundResponse, GetOrderRequest, GetOrderResponse, GrantedRefundLineInfo,
+    ListFulfillmentsRequest, ListFulfillmentsResponse, ListOrdersRequest, ListOrdersResponse,
+    ReconCheck, ReconcileOrderRequest, ReconcileOrderResponse, RefundFulfillmentRequest,
 };
 use sea_orm::DatabaseConnection;
 use tonic::{Request, Response, Status};
@@ -92,7 +94,7 @@ impl OrderService for OrderServiceImpl {
         let req = request.into_inner();
         if let Some(db) = &self.db {
             use rustygod_db::entities::order_order;
-            use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QueryOrder, QuerySelect, SelectorTrait};
+            use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QueryOrder, QuerySelect};
             let first = if req.first <= 0 { 100 } else { (req.first as u64).min(1000) };
             let mut q = order_order::Entity::find()
                 .select_only()
@@ -346,6 +348,176 @@ impl OrderService for OrderServiceImpl {
                     }],
                 }))
             }
+        }
+    }
+
+    async fn create_granted_refund(
+        &self,
+        request: Request<CreateGrantedRefundRequest>,
+    ) -> Result<Response<CreateGrantedRefundResponse>, Status> {
+        let db = self.db()?;
+        crate::access::authorize(db, request.metadata(), crate::access::MANAGE_ORDERS).await?;
+        let r = request.into_inner();
+        let fail = |code: &str, message: String| {
+            Response::new(CreateGrantedRefundResponse {
+                granted_refund_id: 0,
+                amount: String::new(),
+                status: String::new(),
+                lines: vec![],
+                errors: vec![rustygod_proto::common::Error {
+                    code: code.into(),
+                    message,
+                    field: String::new(),
+                }],
+            })
+        };
+        let Ok(order_id) = r.order_id.parse::<Uuid>() else {
+            return Ok(fail("INVALID", "order_id must be a UUID".into()));
+        };
+        let mut lines = vec![];
+        for l in &r.lines {
+            let Ok(lid) = l.order_line_id.parse::<Uuid>() else {
+                return Ok(fail("INVALID", "order_line_id must be a UUID".into()));
+            };
+            lines.push(granted_refunds::GrantLineInput {
+                order_line_id: lid,
+                quantity: l.quantity,
+            });
+        }
+        let amount = if r.amount.trim().is_empty() {
+            None
+        } else {
+            match r.amount.parse::<rust_decimal::Decimal>() {
+                Ok(a) => Some(a),
+                Err(_) => return Ok(fail("INVALID", "amount must be a decimal".into())),
+            }
+        };
+        match granted_refunds::create_granted_refund(
+            db,
+            &granted_refunds::NewGrant {
+                order_id,
+                transaction_item_id: (r.transaction_item_id != 0)
+                    .then_some(r.transaction_item_id),
+                amount,
+                lines,
+                reason: r.reason,
+                shipping_costs_included: r.shipping_costs_included,
+                user_id: None,
+                app_id: None,
+            },
+        )
+        .await
+        {
+            Ok(g) => Ok(Response::new(CreateGrantedRefundResponse {
+                granted_refund_id: g.id,
+                amount: g.amount.to_string(),
+                status: g.status,
+                lines: g
+                    .lines
+                    .into_iter()
+                    .map(|l| GrantedRefundLineInfo {
+                        order_line_id: l.order_line_id.to_string(),
+                        quantity: l.quantity,
+                    })
+                    .collect(),
+                errors: vec![],
+            })),
+            Err(e) => Ok(fail("NOT_APPLICABLE", e.to_string())),
+        }
+    }
+
+    async fn execute_granted_refund(
+        &self,
+        request: Request<ExecuteGrantedRefundRequest>,
+    ) -> Result<Response<ExecuteGrantedRefundResponse>, Status> {
+        let db = self.db()?;
+        crate::access::authorize(db, request.metadata(), crate::access::MANAGE_ORDERS).await?;
+        let r = request.into_inner();
+        let fail = |code: &str, message: String| {
+            Response::new(ExecuteGrantedRefundResponse {
+                status: String::new(),
+                replayed: false,
+                errors: vec![rustygod_proto::common::Error {
+                    code: code.into(),
+                    message,
+                    field: String::new(),
+                }],
+            })
+        };
+        if r.idempotency_key.trim().is_empty() {
+            return Ok(fail("INVALID", "idempotency_key is required".into()));
+        }
+        match granted_refunds::execute_granted_refund(db, r.granted_refund_id, &r.idempotency_key)
+            .await
+        {
+            Ok(out) => {
+                // Post-commit fast path, same contract as complete/cancel.
+                if !out.delivery_ids.is_empty() {
+                    let dbc = db.clone();
+                    let domain = std::env::var("RUSTYGOD_DOMAIN")
+                        .unwrap_or_else(|_| "localhost".into());
+                    let ids = out.delivery_ids.clone();
+                    tokio::spawn(async move {
+                        for id in ids {
+                            let _ = crate::service_webhook::deliver(&dbc, &domain, id).await;
+                        }
+                    });
+                }
+                Ok(Response::new(ExecuteGrantedRefundResponse {
+                    status: out.view.status,
+                    replayed: out.replayed,
+                    errors: vec![],
+                }))
+            }
+            Err(e) => {
+                let msg = e.to_string();
+                let code = if msg.contains("not found") {
+                    "NOT_FOUND"
+                } else {
+                    "NOT_APPLICABLE"
+                };
+                Ok(fail(code, msg))
+            }
+        }
+    }
+
+    async fn get_granted_refund(
+        &self,
+        request: Request<GetGrantedRefundRequest>,
+    ) -> Result<Response<GetGrantedRefundResponse>, Status> {
+        let db = self.db()?;
+        crate::access::authorize(db, request.metadata(), crate::access::MANAGE_ORDERS).await?;
+        let id = request.into_inner().granted_refund_id;
+        match granted_refunds::view(db, id).await {
+            Ok(g) => Ok(Response::new(GetGrantedRefundResponse {
+                granted_refund_id: g.id,
+                order_id: g.order_id.to_string(),
+                amount: g.amount.to_string(),
+                status: g.status,
+                reason: g.reason,
+                lines: g
+                    .lines
+                    .into_iter()
+                    .map(|l| GrantedRefundLineInfo {
+                        order_line_id: l.order_line_id.to_string(),
+                        quantity: l.quantity,
+                    })
+                    .collect(),
+                errors: vec![],
+            })),
+            Err(e) => Ok(Response::new(GetGrantedRefundResponse {
+                granted_refund_id: 0,
+                order_id: String::new(),
+                amount: String::new(),
+                status: String::new(),
+                reason: String::new(),
+                lines: vec![],
+                errors: vec![rustygod_proto::common::Error {
+                    code: "NOT_FOUND".into(),
+                    message: e.to_string(),
+                    field: String::new(),
+                }],
+            })),
         }
     }
 }

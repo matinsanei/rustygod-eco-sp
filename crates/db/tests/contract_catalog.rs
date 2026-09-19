@@ -30,7 +30,7 @@ async fn published_count_matches_django_listings() {
     // Ground truth straight from Django's tables (id-only select: the table
     // has an INTERVAL column codegen mistypes).
     let ch_id: i32 = {
-        use sea_orm::{QuerySelect, SelectorTrait};
+        use sea_orm::QuerySelect;
         rustygod_db::entities::channel_channel::Entity::find()
             .select_only()
             .column(rustygod_db::entities::channel_channel::Column::Id)

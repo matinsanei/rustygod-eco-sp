@@ -4,7 +4,7 @@
 
 use chrono::Utc;
 use rustygod_db::{database_url, webhooks};
-use sea_orm::{ActiveModelTrait, ConnectionTrait, DatabaseConnection, EntityTrait, Set};
+use sea_orm::{ActiveModelTrait, ConnectionTrait, DatabaseConnection, Set};
 use serde_json::json;
 
 async fn db() -> DatabaseConnection {
@@ -67,7 +67,7 @@ async fn cleanup(db: &DatabaseConnection, f: &Fixture, deliveries: &[i32]) {
     // All deliveries ever made to this webhook (covers fan-out from other
     // triggers sharing the event type), not just the known ids.
     let all: Vec<i32> = {
-        use sea_orm::{QuerySelect, SelectorTrait};
+        use sea_orm::QuerySelect;
         core_eventdelivery::Entity::find()
             .select_only()
             .column(core_eventdelivery::Column::Id)
@@ -114,7 +114,7 @@ async fn cleanup(db: &DatabaseConnection, f: &Fixture, deliveries: &[i32]) {
 /// Remove test fixtures leaked by earlier interrupted runs.
 async fn purge_leftover_fixtures(db: &DatabaseConnection) {
     use rustygod_db::entities::{app_app, webhook_webhook};
-    use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QuerySelect, SelectorTrait};
+    use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QuerySelect};
     let apps: Vec<(i32, String)> = app_app::Entity::find()
         .select_only()
         .column(app_app::Column::Id)

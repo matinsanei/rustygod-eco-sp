@@ -133,7 +133,7 @@ async fn menus_and_pages_match() {
 #[tokio::test]
 async fn customer_lookup_is_safe_and_address_roundtrips() {
     use rustygod_db::entities::account_user;
-    use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QuerySelect, SelectorTrait};
+    use sea_orm::{EntityTrait, QuerySelect};
 
     let db = db().await;
     let email: Option<String> = account_user::Entity::find()
@@ -167,7 +167,6 @@ async fn customer_lookup_is_safe_and_address_roundtrips() {
     assert!(id > 0);
     // Cleanup test row.
     use rustygod_db::entities::account_address;
-    use sea_orm::EntityTrait as _ET;
     account_address::Entity::delete_by_id(id).exec(&db).await.unwrap();
 }
 

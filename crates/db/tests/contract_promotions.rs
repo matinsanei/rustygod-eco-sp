@@ -16,7 +16,7 @@ async fn db() -> DatabaseConnection {
 #[tokio::test]
 async fn catalogue_rule_evaluates_on_real_variant() {
     use rustygod_db::entities::product_productvariant;
-    use sea_orm::{EntityTrait, QuerySelect, SelectorTrait};
+    use sea_orm::{EntityTrait, QuerySelect};
 
     let db = db().await;
     // Variant 353: USD 40.00 with a live 30% catalogue rule (populatedb data).

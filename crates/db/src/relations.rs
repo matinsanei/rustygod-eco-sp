@@ -4,9 +4,8 @@
 //! Mirrors `saleor/product/models.py` relations and the channel-visibility
 //! rules from `saleor/graphql/product/`.
 
-use sea_orm::{ConnectionTrait,
-    ColumnTrait, DatabaseConnection, EntityTrait, PaginatorTrait, QueryFilter, QueryOrder,
-    QuerySelect, SelectorTrait,
+use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, PaginatorTrait, QueryFilter, QueryOrder,
+    QuerySelect,
 };
 
 use crate::{

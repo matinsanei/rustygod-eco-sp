@@ -11,7 +11,7 @@
 use rand::Rng;
 use rustygod_core::auth::{self, PasswordCheck};
 use sea_orm::{
-    ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, QuerySelect, SelectorTrait, Set,
+    ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, QuerySelect, Set,
 };
 use uuid::Uuid;
 

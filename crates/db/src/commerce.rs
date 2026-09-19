@@ -7,9 +7,8 @@
 
 use chrono::Utc;
 use rust_decimal::Decimal;
-use sea_orm::{ConnectionTrait,
-    ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, QueryOrder,
-    QuerySelect, SelectorTrait, Set,
+use sea_orm::{ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, QueryOrder,
+    QuerySelect, Set,
 };
 use serde_json::json;
 

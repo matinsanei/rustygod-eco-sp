@@ -20,8 +20,8 @@ use rustygod_core::{
     order::{Order, OrderLine, OrderStatus},
 };
 use sea_orm::{
-    ActiveModelTrait, ColumnTrait, ConnectionTrait, DatabaseConnection, EntityTrait, QueryFilter,
-    QueryOrder, QuerySelect, SelectorTrait, Set, Statement,
+    ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter,
+    QueryOrder, QuerySelect, Set, Statement,
 };
 use serde_json::json;
 use uuid::Uuid;

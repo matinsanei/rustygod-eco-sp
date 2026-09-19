@@ -103,7 +103,7 @@ async fn collections_match_django() {
 #[tokio::test]
 async fn product_type_matches_django() {
     use rustygod_db::entities::{product_product, product_producttype};
-    use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QuerySelect, SelectorTrait};
+    use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QuerySelect};
 
     let db = db().await;
     // Project explicitly: product tables carry tsvector columns codegen mistypes.
@@ -140,7 +140,7 @@ async fn product_type_matches_django() {
 #[tokio::test]
 async fn attributes_match_assignments() {
     use rustygod_db::entities::attribute_assignedproductattributevalue;
-    use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
+    use sea_orm::EntityTrait;
 
     let db = db().await;
     // A product Django gave attributes to.

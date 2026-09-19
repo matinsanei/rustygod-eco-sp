@@ -77,6 +77,61 @@ export interface CancelOrderResponse {
   errors: Error[];
 }
 
+/** Mirrors saleor OrderGrantRefundCreate: decision first, money on execute. */
+export interface GrantRefundLineInput {
+  orderLineId: string;
+  quantity: number;
+}
+
+export interface CreateGrantedRefundRequest {
+  orderId: string;
+  /** 0 = none linked */
+  transactionItemId: number;
+  /** empty = derive from lines+shipping */
+  amount: string;
+  lines: GrantRefundLineInput[];
+  reason: string;
+  shippingCostsIncluded: boolean;
+}
+
+export interface GrantedRefundLineInfo {
+  orderLineId: string;
+  quantity: number;
+}
+
+export interface CreateGrantedRefundResponse {
+  grantedRefundId: number;
+  amount: string;
+  status: string;
+  lines: GrantedRefundLineInfo[];
+  errors: Error[];
+}
+
+export interface ExecuteGrantedRefundRequest {
+  grantedRefundId: number;
+  idempotencyKey: string;
+}
+
+export interface ExecuteGrantedRefundResponse {
+  status: string;
+  replayed: boolean;
+  errors: Error[];
+}
+
+export interface GetGrantedRefundRequest {
+  grantedRefundId: number;
+}
+
+export interface GetGrantedRefundResponse {
+  grantedRefundId: number;
+  orderId: string;
+  amount: string;
+  status: string;
+  reason: string;
+  lines: GrantedRefundLineInfo[];
+  errors: Error[];
+}
+
 export interface ListOrdersRequest {
   first: number;
   after: string;
@@ -862,6 +917,686 @@ export const CancelOrderResponse: MessageFns<CancelOrderResponse> = {
   fromPartial<I extends Exact<DeepPartial<CancelOrderResponse>, I>>(object: I): CancelOrderResponse {
     const message = createBaseCancelOrderResponse();
     message.status = object.status ?? "";
+    message.errors = object.errors?.map((e) => Error.fromPartial(e)) || [];
+    return message;
+  },
+};
+
+function createBaseGrantRefundLineInput(): GrantRefundLineInput {
+  return { orderLineId: "", quantity: 0 };
+}
+
+export const GrantRefundLineInput: MessageFns<GrantRefundLineInput> = {
+  encode(message: GrantRefundLineInput, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.orderLineId !== "") {
+      writer.uint32(10).string(message.orderLineId);
+    }
+    if (message.quantity !== 0) {
+      writer.uint32(16).int32(message.quantity);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): GrantRefundLineInput {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseGrantRefundLineInput();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.orderLineId = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 16) {
+              break;
+            }
+
+            message.quantity = reader.int32();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<GrantRefundLineInput>, I>>(base?: I): GrantRefundLineInput {
+    return GrantRefundLineInput.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<GrantRefundLineInput>, I>>(object: I): GrantRefundLineInput {
+    const message = createBaseGrantRefundLineInput();
+    message.orderLineId = object.orderLineId ?? "";
+    message.quantity = object.quantity ?? 0;
+    return message;
+  },
+};
+
+function createBaseCreateGrantedRefundRequest(): CreateGrantedRefundRequest {
+  return { orderId: "", transactionItemId: 0, amount: "", lines: [], reason: "", shippingCostsIncluded: false };
+}
+
+export const CreateGrantedRefundRequest: MessageFns<CreateGrantedRefundRequest> = {
+  encode(message: CreateGrantedRefundRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.orderId !== "") {
+      writer.uint32(10).string(message.orderId);
+    }
+    if (message.transactionItemId !== 0) {
+      writer.uint32(16).int32(message.transactionItemId);
+    }
+    if (message.amount !== "") {
+      writer.uint32(26).string(message.amount);
+    }
+    for (const v of message.lines) {
+      GrantRefundLineInput.encode(v!, writer.uint32(34).fork()).join();
+    }
+    if (message.reason !== "") {
+      writer.uint32(42).string(message.reason);
+    }
+    if (message.shippingCostsIncluded !== false) {
+      writer.uint32(48).bool(message.shippingCostsIncluded);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): CreateGrantedRefundRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseCreateGrantedRefundRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.orderId = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 16) {
+              break;
+            }
+
+            message.transactionItemId = reader.int32();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.amount = reader.string();
+            continue;
+          }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.lines.push(GrantRefundLineInput.decode(reader, reader.uint32()));
+            continue;
+          }
+          case 5: {
+            if (tag !== 42) {
+              break;
+            }
+
+            message.reason = reader.string();
+            continue;
+          }
+          case 6: {
+            if (tag !== 48) {
+              break;
+            }
+
+            message.shippingCostsIncluded = reader.bool();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<CreateGrantedRefundRequest>, I>>(base?: I): CreateGrantedRefundRequest {
+    return CreateGrantedRefundRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<CreateGrantedRefundRequest>, I>>(object: I): CreateGrantedRefundRequest {
+    const message = createBaseCreateGrantedRefundRequest();
+    message.orderId = object.orderId ?? "";
+    message.transactionItemId = object.transactionItemId ?? 0;
+    message.amount = object.amount ?? "";
+    message.lines = object.lines?.map((e) => GrantRefundLineInput.fromPartial(e)) || [];
+    message.reason = object.reason ?? "";
+    message.shippingCostsIncluded = object.shippingCostsIncluded ?? false;
+    return message;
+  },
+};
+
+function createBaseGrantedRefundLineInfo(): GrantedRefundLineInfo {
+  return { orderLineId: "", quantity: 0 };
+}
+
+export const GrantedRefundLineInfo: MessageFns<GrantedRefundLineInfo> = {
+  encode(message: GrantedRefundLineInfo, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.orderLineId !== "") {
+      writer.uint32(10).string(message.orderLineId);
+    }
+    if (message.quantity !== 0) {
+      writer.uint32(16).int32(message.quantity);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): GrantedRefundLineInfo {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseGrantedRefundLineInfo();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.orderLineId = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 16) {
+              break;
+            }
+
+            message.quantity = reader.int32();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<GrantedRefundLineInfo>, I>>(base?: I): GrantedRefundLineInfo {
+    return GrantedRefundLineInfo.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<GrantedRefundLineInfo>, I>>(object: I): GrantedRefundLineInfo {
+    const message = createBaseGrantedRefundLineInfo();
+    message.orderLineId = object.orderLineId ?? "";
+    message.quantity = object.quantity ?? 0;
+    return message;
+  },
+};
+
+function createBaseCreateGrantedRefundResponse(): CreateGrantedRefundResponse {
+  return { grantedRefundId: 0, amount: "", status: "", lines: [], errors: [] };
+}
+
+export const CreateGrantedRefundResponse: MessageFns<CreateGrantedRefundResponse> = {
+  encode(message: CreateGrantedRefundResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.grantedRefundId !== 0) {
+      writer.uint32(8).int32(message.grantedRefundId);
+    }
+    if (message.amount !== "") {
+      writer.uint32(18).string(message.amount);
+    }
+    if (message.status !== "") {
+      writer.uint32(26).string(message.status);
+    }
+    for (const v of message.lines) {
+      GrantedRefundLineInfo.encode(v!, writer.uint32(34).fork()).join();
+    }
+    for (const v of message.errors) {
+      Error.encode(v!, writer.uint32(42).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): CreateGrantedRefundResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseCreateGrantedRefundResponse();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 8) {
+              break;
+            }
+
+            message.grantedRefundId = reader.int32();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.amount = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.status = reader.string();
+            continue;
+          }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.lines.push(GrantedRefundLineInfo.decode(reader, reader.uint32()));
+            continue;
+          }
+          case 5: {
+            if (tag !== 42) {
+              break;
+            }
+
+            message.errors.push(Error.decode(reader, reader.uint32()));
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<CreateGrantedRefundResponse>, I>>(base?: I): CreateGrantedRefundResponse {
+    return CreateGrantedRefundResponse.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<CreateGrantedRefundResponse>, I>>(object: I): CreateGrantedRefundResponse {
+    const message = createBaseCreateGrantedRefundResponse();
+    message.grantedRefundId = object.grantedRefundId ?? 0;
+    message.amount = object.amount ?? "";
+    message.status = object.status ?? "";
+    message.lines = object.lines?.map((e) => GrantedRefundLineInfo.fromPartial(e)) || [];
+    message.errors = object.errors?.map((e) => Error.fromPartial(e)) || [];
+    return message;
+  },
+};
+
+function createBaseExecuteGrantedRefundRequest(): ExecuteGrantedRefundRequest {
+  return { grantedRefundId: 0, idempotencyKey: "" };
+}
+
+export const ExecuteGrantedRefundRequest: MessageFns<ExecuteGrantedRefundRequest> = {
+  encode(message: ExecuteGrantedRefundRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.grantedRefundId !== 0) {
+      writer.uint32(8).int32(message.grantedRefundId);
+    }
+    if (message.idempotencyKey !== "") {
+      writer.uint32(18).string(message.idempotencyKey);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ExecuteGrantedRefundRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseExecuteGrantedRefundRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 8) {
+              break;
+            }
+
+            message.grantedRefundId = reader.int32();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.idempotencyKey = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<ExecuteGrantedRefundRequest>, I>>(base?: I): ExecuteGrantedRefundRequest {
+    return ExecuteGrantedRefundRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ExecuteGrantedRefundRequest>, I>>(object: I): ExecuteGrantedRefundRequest {
+    const message = createBaseExecuteGrantedRefundRequest();
+    message.grantedRefundId = object.grantedRefundId ?? 0;
+    message.idempotencyKey = object.idempotencyKey ?? "";
+    return message;
+  },
+};
+
+function createBaseExecuteGrantedRefundResponse(): ExecuteGrantedRefundResponse {
+  return { status: "", replayed: false, errors: [] };
+}
+
+export const ExecuteGrantedRefundResponse: MessageFns<ExecuteGrantedRefundResponse> = {
+  encode(message: ExecuteGrantedRefundResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.status !== "") {
+      writer.uint32(10).string(message.status);
+    }
+    if (message.replayed !== false) {
+      writer.uint32(16).bool(message.replayed);
+    }
+    for (const v of message.errors) {
+      Error.encode(v!, writer.uint32(26).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ExecuteGrantedRefundResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseExecuteGrantedRefundResponse();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.status = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 16) {
+              break;
+            }
+
+            message.replayed = reader.bool();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.errors.push(Error.decode(reader, reader.uint32()));
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<ExecuteGrantedRefundResponse>, I>>(base?: I): ExecuteGrantedRefundResponse {
+    return ExecuteGrantedRefundResponse.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ExecuteGrantedRefundResponse>, I>>(object: I): ExecuteGrantedRefundResponse {
+    const message = createBaseExecuteGrantedRefundResponse();
+    message.status = object.status ?? "";
+    message.replayed = object.replayed ?? false;
+    message.errors = object.errors?.map((e) => Error.fromPartial(e)) || [];
+    return message;
+  },
+};
+
+function createBaseGetGrantedRefundRequest(): GetGrantedRefundRequest {
+  return { grantedRefundId: 0 };
+}
+
+export const GetGrantedRefundRequest: MessageFns<GetGrantedRefundRequest> = {
+  encode(message: GetGrantedRefundRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.grantedRefundId !== 0) {
+      writer.uint32(8).int32(message.grantedRefundId);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): GetGrantedRefundRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseGetGrantedRefundRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 8) {
+              break;
+            }
+
+            message.grantedRefundId = reader.int32();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<GetGrantedRefundRequest>, I>>(base?: I): GetGrantedRefundRequest {
+    return GetGrantedRefundRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<GetGrantedRefundRequest>, I>>(object: I): GetGrantedRefundRequest {
+    const message = createBaseGetGrantedRefundRequest();
+    message.grantedRefundId = object.grantedRefundId ?? 0;
+    return message;
+  },
+};
+
+function createBaseGetGrantedRefundResponse(): GetGrantedRefundResponse {
+  return { grantedRefundId: 0, orderId: "", amount: "", status: "", reason: "", lines: [], errors: [] };
+}
+
+export const GetGrantedRefundResponse: MessageFns<GetGrantedRefundResponse> = {
+  encode(message: GetGrantedRefundResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.grantedRefundId !== 0) {
+      writer.uint32(8).int32(message.grantedRefundId);
+    }
+    if (message.orderId !== "") {
+      writer.uint32(18).string(message.orderId);
+    }
+    if (message.amount !== "") {
+      writer.uint32(26).string(message.amount);
+    }
+    if (message.status !== "") {
+      writer.uint32(34).string(message.status);
+    }
+    if (message.reason !== "") {
+      writer.uint32(42).string(message.reason);
+    }
+    for (const v of message.lines) {
+      GrantedRefundLineInfo.encode(v!, writer.uint32(50).fork()).join();
+    }
+    for (const v of message.errors) {
+      Error.encode(v!, writer.uint32(58).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): GetGrantedRefundResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseGetGrantedRefundResponse();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 8) {
+              break;
+            }
+
+            message.grantedRefundId = reader.int32();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.orderId = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.amount = reader.string();
+            continue;
+          }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.status = reader.string();
+            continue;
+          }
+          case 5: {
+            if (tag !== 42) {
+              break;
+            }
+
+            message.reason = reader.string();
+            continue;
+          }
+          case 6: {
+            if (tag !== 50) {
+              break;
+            }
+
+            message.lines.push(GrantedRefundLineInfo.decode(reader, reader.uint32()));
+            continue;
+          }
+          case 7: {
+            if (tag !== 58) {
+              break;
+            }
+
+            message.errors.push(Error.decode(reader, reader.uint32()));
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<GetGrantedRefundResponse>, I>>(base?: I): GetGrantedRefundResponse {
+    return GetGrantedRefundResponse.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<GetGrantedRefundResponse>, I>>(object: I): GetGrantedRefundResponse {
+    const message = createBaseGetGrantedRefundResponse();
+    message.grantedRefundId = object.grantedRefundId ?? 0;
+    message.orderId = object.orderId ?? "";
+    message.amount = object.amount ?? "";
+    message.status = object.status ?? "";
+    message.reason = object.reason ?? "";
+    message.lines = object.lines?.map((e) => GrantedRefundLineInfo.fromPartial(e)) || [];
     message.errors = object.errors?.map((e) => Error.fromPartial(e)) || [];
     return message;
   },
@@ -1761,6 +2496,39 @@ export const OrderServiceService = {
     responseSerialize: (value: CancelOrderResponse): Buffer => Buffer.from(CancelOrderResponse.encode(value).finish()),
     responseDeserialize: (value: Buffer): CancelOrderResponse => CancelOrderResponse.decode(value),
   },
+  createGrantedRefund: {
+    path: "/rustygod.order.OrderService/CreateGrantedRefund" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: CreateGrantedRefundRequest): Buffer =>
+      Buffer.from(CreateGrantedRefundRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): CreateGrantedRefundRequest => CreateGrantedRefundRequest.decode(value),
+    responseSerialize: (value: CreateGrantedRefundResponse): Buffer =>
+      Buffer.from(CreateGrantedRefundResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): CreateGrantedRefundResponse => CreateGrantedRefundResponse.decode(value),
+  },
+  executeGrantedRefund: {
+    path: "/rustygod.order.OrderService/ExecuteGrantedRefund" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: ExecuteGrantedRefundRequest): Buffer =>
+      Buffer.from(ExecuteGrantedRefundRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): ExecuteGrantedRefundRequest => ExecuteGrantedRefundRequest.decode(value),
+    responseSerialize: (value: ExecuteGrantedRefundResponse): Buffer =>
+      Buffer.from(ExecuteGrantedRefundResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): ExecuteGrantedRefundResponse => ExecuteGrantedRefundResponse.decode(value),
+  },
+  getGrantedRefund: {
+    path: "/rustygod.order.OrderService/GetGrantedRefund" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: GetGrantedRefundRequest): Buffer =>
+      Buffer.from(GetGrantedRefundRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): GetGrantedRefundRequest => GetGrantedRefundRequest.decode(value),
+    responseSerialize: (value: GetGrantedRefundResponse): Buffer =>
+      Buffer.from(GetGrantedRefundResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): GetGrantedRefundResponse => GetGrantedRefundResponse.decode(value),
+  },
 } as const;
 
 export interface OrderServiceServer extends UntypedServiceImplementation {
@@ -1772,6 +2540,9 @@ export interface OrderServiceServer extends UntypedServiceImplementation {
   listFulfillments: handleUnaryCall<ListFulfillmentsRequest, ListFulfillmentsResponse>;
   reconcileOrder: handleUnaryCall<ReconcileOrderRequest, ReconcileOrderResponse>;
   cancelOrder: handleUnaryCall<CancelOrderRequest, CancelOrderResponse>;
+  createGrantedRefund: handleUnaryCall<CreateGrantedRefundRequest, CreateGrantedRefundResponse>;
+  executeGrantedRefund: handleUnaryCall<ExecuteGrantedRefundRequest, ExecuteGrantedRefundResponse>;
+  getGrantedRefund: handleUnaryCall<GetGrantedRefundRequest, GetGrantedRefundResponse>;
 }
 
 export interface OrderServiceClient extends Client {
@@ -1894,6 +2665,51 @@ export interface OrderServiceClient extends Client {
     metadata: Metadata,
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: CancelOrderResponse) => void,
+  ): ClientUnaryCall;
+  createGrantedRefund(
+    request: CreateGrantedRefundRequest,
+    callback: (error: ServiceError | null, response: CreateGrantedRefundResponse) => void,
+  ): ClientUnaryCall;
+  createGrantedRefund(
+    request: CreateGrantedRefundRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: CreateGrantedRefundResponse) => void,
+  ): ClientUnaryCall;
+  createGrantedRefund(
+    request: CreateGrantedRefundRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: CreateGrantedRefundResponse) => void,
+  ): ClientUnaryCall;
+  executeGrantedRefund(
+    request: ExecuteGrantedRefundRequest,
+    callback: (error: ServiceError | null, response: ExecuteGrantedRefundResponse) => void,
+  ): ClientUnaryCall;
+  executeGrantedRefund(
+    request: ExecuteGrantedRefundRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: ExecuteGrantedRefundResponse) => void,
+  ): ClientUnaryCall;
+  executeGrantedRefund(
+    request: ExecuteGrantedRefundRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: ExecuteGrantedRefundResponse) => void,
+  ): ClientUnaryCall;
+  getGrantedRefund(
+    request: GetGrantedRefundRequest,
+    callback: (error: ServiceError | null, response: GetGrantedRefundResponse) => void,
+  ): ClientUnaryCall;
+  getGrantedRefund(
+    request: GetGrantedRefundRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: GetGrantedRefundResponse) => void,
+  ): ClientUnaryCall;
+  getGrantedRefund(
+    request: GetGrantedRefundRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: GetGrantedRefundResponse) => void,
   ): ClientUnaryCall;
 }
 

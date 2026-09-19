@@ -6,7 +6,7 @@ use chrono::NaiveDate;
 use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
 use rustygod_db::{catalog, checkout_store, database_url, giftcards};
-use sea_orm::{ConnectionTrait, DatabaseConnection};
+use sea_orm::DatabaseConnection;
 
 async fn db() -> DatabaseConnection {
     rustygod_db::connect(&database_url())

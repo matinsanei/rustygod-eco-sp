@@ -112,6 +112,10 @@ pub struct NewEvent {
     pub message: String,
     pub idempotency_key: Option<String>,
     pub include_in_calculations: bool,
+    /// Links a money event back to the granted-refund decision that caused
+    /// it (`payment_transactionevent.related_granted_refund_id`). None for
+    /// direct gateway actions.
+    pub related_granted_refund_id: Option<i32>,
 }
 
 /// Idempotent event report + bucket recalculation in one transaction.
@@ -150,6 +154,7 @@ pub async fn report_event(
         message: Set(Some(ev.message.clone())),
         idempotency_key: Set(ev.idempotency_key.clone()),
         include_in_calculations: Set(ev.include_in_calculations),
+        related_granted_refund_id: Set(ev.related_granted_refund_id),
         ..Default::default()
     }
     .insert(&txn)
@@ -294,6 +299,7 @@ fn pair_events(
         message: format!("manual gateway {action}"),
         idempotency_key: Some(k),
         include_in_calculations: true,
+        related_granted_refund_id: None,
     };
     (
         mk(format!("{action}_request"), format!("{key}-req")),
@@ -364,6 +370,56 @@ pub async fn refund(
     let (req, ok) = pair_events("refund", amount, &cur.currency, &Uuid::new_v4().to_string(), idempotency_key);
     report_event(db, transaction_id, &req).await?;
     report_event(db, transaction_id, &ok).await?;
+    view(db, transaction_id).await
+}
+
+/// Refund on behalf of a granted-refund decision: same guards as
+/// [`refund`], but the request+success pair is linked back to the grant so
+/// status derivation (`granted_refunds::refresh_grant_status`) can find it.
+pub async fn refund_for_grant(
+    db: &DatabaseConnection,
+    transaction_id: i32,
+    amount: Decimal,
+    idempotency_key: &str,
+    grant_id: i32,
+) -> Result<TxnView> {
+    if amount <= Decimal::ZERO {
+        return Err(gateway_err("refund amount must be positive"));
+    }
+    let cur = view(db, transaction_id).await?;
+    if amount > cur.charged - cur.refunded {
+        return Err(gateway_err(format!(
+            "cannot refund {amount}: only {} charged and unrefunded",
+            cur.charged - cur.refunded
+        )));
+    }
+    let v = view(db, transaction_id).await?;
+    // One psp_reference for the pair: request+success must land in the SAME
+    // recalculation group, otherwise charged is subtracted twice (once as
+    // pending, once as settled). Same contract as pair_events() above.
+    let psp = Uuid::new_v4().to_string();
+    let mk = |t: String, k: String| NewEvent {
+        event_type: t,
+        amount,
+        currency: v.currency.clone(),
+        psp_reference: Some(psp.clone()),
+        message: format!("granted refund {grant_id}"),
+        idempotency_key: Some(k),
+        include_in_calculations: true,
+        related_granted_refund_id: Some(grant_id),
+    };
+    report_event(
+        db,
+        transaction_id,
+        &mk("refund_request".into(), format!("{idempotency_key}-req")),
+    )
+    .await?;
+    report_event(
+        db,
+        transaction_id,
+        &mk("refund_success".into(), format!("{idempotency_key}-ok")),
+    )
+    .await?;
     view(db, transaction_id).await
 }
 

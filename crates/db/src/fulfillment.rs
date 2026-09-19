@@ -13,7 +13,7 @@
 use chrono::Utc;
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, QueryOrder,
-    QuerySelect, SelectorTrait, Set,
+    QuerySelect, Set,
 };
 use serde_json::json;
 use uuid::Uuid;
@@ -32,7 +32,7 @@ async fn tracked_map(
     db: &impl sea_orm::ConnectionTrait,
     variant_ids: &[i32],
 ) -> Result<std::collections::HashMap<i32, bool>> {
-    use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QuerySelect, SelectorTrait};
+    use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QuerySelect};
     if variant_ids.is_empty() {
         return Ok(Default::default());
     }

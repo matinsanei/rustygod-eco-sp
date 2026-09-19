@@ -86,7 +86,7 @@ async fn cleanup_order(db: &DatabaseConnection, ctx: &OrderCtx) {
     use rustygod_db::entities::{order_fulfillment, order_fulfillmentline, order_order, order_orderline};
     use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
     let fulfills: Vec<i32> = {
-        use sea_orm::{QuerySelect, SelectorTrait};
+        use sea_orm::QuerySelect;
         order_fulfillment::Entity::find()
             .select_only()
             .column(order_fulfillment::Column::Id)
@@ -114,7 +114,7 @@ async fn cleanup_order(db: &DatabaseConnection, ctx: &OrderCtx) {
 
 async fn order_status(db: &DatabaseConnection, oid: Uuid) -> String {
     use rustygod_db::entities::order_order;
-    use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QuerySelect, SelectorTrait};
+    use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QuerySelect};
     order_order::Entity::find_by_id(oid)
         .select_only()
         .column(order_order::Column::Status)

@@ -15,16 +15,15 @@
 use chrono::Utc;
 use rust_decimal::Decimal;
 use sea_orm::{
-    ActiveModelTrait, ColumnTrait, ConnectionTrait, DatabaseConnection, EntityTrait, QueryFilter,
-    QuerySelect, SelectorTrait, Set,
+    ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter,
+    QuerySelect, Set,
 };
-use serde_json::json;
 use uuid::Uuid;
 
 use crate::{
     catalog::channel_info,
     entities::{
-        checkout_checkout, checkout_checkoutline, discount_checkoutdiscount,
+        checkout_checkout, discount_checkoutdiscount,
         discount_checkoutlinediscount, discount_promotion, discount_promotionrule,
         discount_promotionrule_channels, discount_promotionrule_variants, discount_voucher,
         discount_vouchercode, discount_voucherchannellisting, product_collectionproduct,
@@ -109,7 +108,6 @@ struct VariantContext {
 
 async fn variant_context(
     db: &impl sea_orm::ConnectionTrait,
-    variant_id: i32,
     product_id: i32,
 ) -> Result<VariantContext> {
     let category_id: Option<i32> = product_product::Entity::find_by_id(product_id)
@@ -182,7 +180,7 @@ pub async fn evaluate_line(
     if rules.is_empty() {
         return Ok(None);
     }
-    let ctx = variant_context(db, variant_id, product_id).await?;
+    let ctx = variant_context(db, product_id).await?;
     let mut applicable = Vec::new();
     for rule in &rules {
         if rule_matches_variant(db, rule, variant_id, &ctx).await? {
@@ -586,7 +584,7 @@ pub async fn increase_usage(
     code: &str,
     customer_email: Option<&str>,
 ) -> Result<()> {
-    use sea_orm::sea_query::Expr;
+    
     let Some(code_row) = discount_vouchercode::Entity::find()
         .filter(discount_vouchercode::Column::Code.eq(code))
         .one(db)

@@ -178,8 +178,15 @@ pub fn mint_tokens(
     is_staff: bool,
     jwt_token_key: &str,
 ) -> Result<TokenPair, JwtError> {
-    let pem = std::env::var("RSA_PRIVATE_KEY").map_err(|_| JwtError::NoKey)?;
-    mint_tokens_with_key(&pem, issuer, email, user_id, is_staff, jwt_token_key)
+    let key = encoding_key()?;
+    mint_tokens_with_encoding_key(
+        &key,
+        issuer,
+        email,
+        user_id,
+        is_staff,
+        jwt_token_key,
+    )
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -192,6 +199,18 @@ pub fn mint_tokens_with_key(
     jwt_token_key: &str,
 ) -> Result<TokenPair, JwtError> {
     let key = encoding_key_from(pem)?;
+    mint_tokens_with_encoding_key(&key, issuer, email, user_id, is_staff, jwt_token_key)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn mint_tokens_with_encoding_key(
+    key: &jsonwebtoken::EncodingKey,
+    issuer: &str,
+    email: &str,
+    user_id: i32,
+    is_staff: bool,
+    jwt_token_key: &str,
+) -> Result<TokenPair, JwtError> {
     let now = chrono::Utc::now().timestamp();
     let mk = |ttype: &str, ttl: i64| {
         let claims = Claims {

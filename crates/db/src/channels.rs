@@ -11,7 +11,7 @@
 use rust_decimal::Decimal;
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, ConnectionTrait, DatabaseConnection, EntityTrait,
-    QueryFilter, QuerySelect, SelectorTrait, Set, TransactionTrait,
+    QueryFilter, QuerySelect, Set, TransactionTrait,
 };
 use serde_json::json;
 

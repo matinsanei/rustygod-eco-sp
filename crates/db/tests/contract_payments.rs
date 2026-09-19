@@ -151,7 +151,7 @@ async fn order_statuses_refresh_from_coverage() {
 
     // Re-read statuses with explicit projection (never SELECT * on tsvector tables).
     {
-        use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QuerySelect, SelectorTrait};
+        use sea_orm::{EntityTrait, QuerySelect};
         use rustygod_db::entities::order_order;
         let (auth, charge): (String, String) = order_order::Entity::find_by_id(oid)
             .select_only()

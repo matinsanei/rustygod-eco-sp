@@ -16,8 +16,7 @@ use rustygod_core::{
     money::Money,
     product::{Category, Product, ProductVariant},
 };
-use sea_orm::{ConnectionTrait,
-    ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, QuerySelect, SelectorTrait,
+use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, QuerySelect,
 };
 
 use crate::{
@@ -296,6 +295,10 @@ pub async fn list_categories(db: &DatabaseConnection) -> Result<Vec<Category>> {
 /// Stock mirrors `saleor/warehouse`: sum of `stock.quantity - allocated`
 /// across all warehouses. Negative clamp matches Django behavior of
 /// `available_quantity` never going below zero at the API edge.
+///
+/// Currently no read path uses it (availability comes from the materialized
+/// search view); kept as the canonical helper for future stock reads.
+#[allow(dead_code)]
 async fn stock_for(db: &impl sea_orm::ConnectionTrait, variant_id: i32) -> Result<i32> {
     use crate::entities::warehouse_stock;
     let rows = warehouse_stock::Entity::find()

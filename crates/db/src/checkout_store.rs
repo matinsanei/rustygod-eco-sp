@@ -23,7 +23,7 @@ use rust_decimal::Decimal;
 use rustygod_core::{checkout::Checkout, money::Money};
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, QueryOrder,
-    QuerySelect, SelectorTrait, Set,
+    QuerySelect, Set,
 };
 use serde_json::json;
 use uuid::Uuid;

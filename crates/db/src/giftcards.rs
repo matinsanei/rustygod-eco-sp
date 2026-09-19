@@ -217,7 +217,7 @@ pub async fn checkout_cards(
     db: &impl ConnectionTrait,
     checkout_token: Uuid,
 ) -> Result<Vec<giftcard_giftcard::Model>> {
-    use sea_orm::QuerySelect;
+    
     Ok(giftcard_giftcard::Entity::find()
         .inner_join(checkout_checkout_gift_cards::Entity)
         .filter(checkout_checkout_gift_cards::Column::CheckoutId.eq(checkout_token))

@@ -56,7 +56,7 @@ async fn gibberish_search_returns_empty_without_error() {
 #[tokio::test]
 async fn recommendations_reflect_real_copurchases() {
     use rustygod_db::entities::order_orderline;
-    use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QuerySelect, SelectorTrait};
+    use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QuerySelect};
 
     let db = db().await;
     // A variant Django actually sold.
