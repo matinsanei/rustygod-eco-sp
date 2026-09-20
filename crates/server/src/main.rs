@@ -106,7 +106,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let gql_app = {
         use axum::{routing::get, Router, Extension, Json};
         use async_graphql::http::GraphiQLSource;
-        use tower_http::cors::CorsLayer;
+        use tower_http::cors::{AllowHeaders, AllowMethods, AllowOrigin, CorsLayer};
         async fn handler(
             Extension(schema): Extension<rustygod_graphql::AppSchema>,
             headers: axum::http::HeaderMap,
@@ -126,7 +126,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         Router::new()
             .route("/graphql", get(graphiql).post(handler))
-            .layer(CorsLayer::permissive())
+            .layer(
+                CorsLayer::new()
+                    .allow_origin(AllowOrigin::mirror_request())
+                    .allow_credentials(true)
+                    .allow_methods(AllowMethods::mirror_request())
+                    .allow_headers(AllowHeaders::mirror_request()),
+            )
             .layer(Extension(gql_schema))
     };
     let gql_listener = tokio::net::TcpListener::bind(gql_addr).await?;
