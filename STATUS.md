@@ -35,6 +35,15 @@ Saleor's Python, no backend slowdown.
   Exception: `app_app` full-model select is safe (no exotic columns).
 - Money on the wire is **strings** (`rust_decimal` → string, like Saleor's
   Decimal scalar). Lock order: checkout → stocks asc id → voucher → giftcard.
+- Runtime modes (`crates/server/src/modes.rs`, no CLI dep) mirror Saleor's
+  processes: `api` (default, uvicorn equivalent: gRPC + GraphQL + metrics +
+  embedded sweeper), `worker` (celery-worker equivalent: foreground webhook
+  outbox loop, same `sweeper::tick_once`, `RUSTYGOD_WORKER_SECS` default 10),
+  `beat` (celery-beat equivalent: all 20 `CELERY_BEAT_SCHEDULE` entries with
+  Saleor task names/intervals; only `delete-expired-reservations` is real,
+  rest are deferred stubs; `RUSTYGOD_BEAT_SCALE` multiplies intervals for
+  dev), `check` (readiness probe: `SELECT 1` + row counts, exit 0/1).
+  compose has matching `server`/`worker`/`beat` services.
 
 ## 3. What was done this session
 

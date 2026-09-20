@@ -35,7 +35,9 @@ async fn ensure_indexes(db: &DatabaseConnection) {
     }
 }
 
-async fn tick(db: &DatabaseConnection, domain: &str) {
+/// One sweep tick: expired reservations + due webhook deliveries.
+/// Public so `worker` mode runs the exact same logic in the foreground.
+pub async fn tick_once(db: &DatabaseConnection, domain: &str) {
     match rustygod_db::commerce::sweep_expired_reservations(db).await {
         Ok(0) => {}
         Ok(n) => tracing::info!("sweeper: dropped {n} expired reservations"),
@@ -83,7 +85,7 @@ pub fn spawn(db: DatabaseConnection) {
         let mut interval = tokio::time::interval(std::time::Duration::from_secs(secs));
         loop {
             interval.tick().await;
-            tick(&db, &domain).await;
+            tick_once(&db, &domain).await;
         }
     });
 }

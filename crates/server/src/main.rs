@@ -48,6 +48,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
         .init();
 
+    // Runtime modes mirroring Saleor's processes (uvicorn / celery worker /
+    // celery beat). Default `api` preserves the historical no-arg behavior.
+    match rustygod_server::modes::Mode::parse() {
+        rustygod_server::modes::Mode::Worker => {
+            let db = rustygod_server::modes::require_db().await?;
+            return rustygod_server::modes::run_worker(db).await;
+        }
+        rustygod_server::modes::Mode::Beat => {
+            let db = rustygod_server::modes::require_db().await?;
+            return rustygod_server::modes::run_beat(db).await;
+        }
+        rustygod_server::modes::Mode::Check => {
+            let db = rustygod_server::modes::require_db().await?;
+            return rustygod_server::modes::run_check(db).await;
+        }
+        rustygod_server::modes::Mode::Api => {}
+    }
+
     let addr = std::env::var("RUSTYGOD_ADDR")
         .unwrap_or_else(|_| "127.0.0.1:50051".to_string())
         .parse()?;

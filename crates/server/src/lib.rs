@@ -1,3 +1,4 @@
+pub mod modes;
 pub mod mapping;
 pub mod access;
 pub mod telemetry;
