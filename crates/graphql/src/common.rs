@@ -4,22 +4,67 @@ use async_graphql::*;
 
 #[derive(SimpleObject, Clone)]
 pub struct PageInfo {
+    #[graphql(name = "hasNextPage")]
     pub has_next_page: bool,
+    #[graphql(name = "hasPreviousPage")]
     pub has_previous_page: bool,
+    #[graphql(name = "startCursor")]
     pub start_cursor: Option<String>,
+    #[graphql(name = "endCursor")]
     pub end_cursor: Option<String>,
+}
+
+#[derive(SimpleObject, Clone)]
+#[graphql(name = "CountryDisplay")]
+pub struct GqlCountryDisplay { pub code: String, pub country: String }
+
+#[derive(SimpleObject, Clone)]
+#[graphql(name = "StockSettings")]
+pub struct GqlStockSettings {
+    #[graphql(name = "allocationStrategy")]
+    pub allocation_strategy: String,
 }
 
 #[derive(SimpleObject, Clone)]
 pub struct Money {
     pub amount: String,
     pub currency: String,
+    #[graphql(name = "fractionDigits")]
+    pub fraction_digits: Option<i32>,
 }
 
 impl From<rustygod_core::money::Money> for Money {
     fn from(m: rustygod_core::money::Money) -> Self {
-        Self { amount: m.amount.to_string(), currency: m.currency }
+        Self { amount: m.amount.to_string(), currency: m.currency, fraction_digits: None }
     }
+}
+
+#[derive(SimpleObject, Clone)]
+#[graphql(name = "MetadataItem")]
+pub struct MetadataItem { pub key: String, pub value: String }
+
+#[derive(InputObject, Clone, Debug)]
+pub struct MetadataInput {
+    pub key: String,
+    pub value: String,
+}
+
+/// `metadata` JSON (`JsonBinary` dict) → `[MetadataItem]`. Saleor stores
+/// metadata as a JSON object; empty/missing → `[]`.
+pub fn json_to_metadata_items(v: &serde_json::Value) -> Vec<MetadataItem> {
+    v.as_object().map(|m| m.iter().map(|(k, val)| MetadataItem {
+        key: k.clone(),
+        value: val.as_str().map(|s| s.to_string()).unwrap_or_else(|| val.to_string()),
+    }).collect()).unwrap_or_default()
+}
+
+/// Merge `[{key, value}]` inputs into a metadata JSON object (upsert by key).
+pub fn merge_metadata(base: &serde_json::Value, inputs: &[MetadataInput]) -> serde_json::Value {
+    let mut map = base.as_object().cloned().unwrap_or_default();
+    for i in inputs {
+        map.insert(i.key.clone(), serde_json::Value::String(i.value.clone()));
+    }
+    serde_json::Value::Object(map)
 }
 
 #[derive(SimpleObject, Clone)]

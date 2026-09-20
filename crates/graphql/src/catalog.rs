@@ -2,24 +2,22 @@
 
 use async_graphql::*;
 
-use crate::{common::*, context::GqlContext};
+use crate::{common::*, context::GqlContext, gen};
 
 #[derive(SimpleObject, Clone)]
-pub struct GqlVariant {
-    pub id: ID,
-    pub name: String,
-    pub sku: String,
-    pub price: Money,
-    /// Free units on the shelf (sum quantity - allocated, clamped ≥0).
-    pub quantity_available: i32,
+pub struct GqlProductEdge {
+    pub node: gen::Product,
+    pub cursor: String,
 }
 
 #[derive(SimpleObject, Clone)]
-pub struct GqlProduct {
-    pub id: ID,
-    pub name: String,
-    pub slug: String,
-    pub variants: Vec<GqlVariant>,
+#[graphql(name = "ProductCountableConnection")]
+pub struct GqlProductConnection {
+    #[graphql(name = "totalCount")]
+    pub total_count: Option<i32>,
+    pub edges: Vec<GqlProductEdge>,
+    #[graphql(name = "pageInfo")]
+    pub page_info: crate::common::PageInfo,
 }
 
 #[derive(Default)]
@@ -27,46 +25,80 @@ pub struct CatalogQuery;
 
 #[Object]
 impl CatalogQuery {
-    /// Mirrors dashboard `products(first, channel)` — channel defaults to
-    /// `default-channel` (populatedb).
+    /// Mirrors dashboard `ProductList` — channel defaults to
+    /// `default-channel` (populatedb). Filter/sort inputs accepted for
+    /// shape-compat (server-side filtering is a documented gap).
     async fn products(
         &self,
         ctx: &Context<'_>,
         channel: Option<String>,
         first: Option<i32>,
         after: Option<String>,
-    ) -> Result<Vec<GqlProduct>> {
+        before: Option<String>,
+        last: Option<i32>,
+        filter: Option<gen::ProductFilterInput>,
+        #[graphql(name = "sortBy")] sort_by: Option<gen::ProductOrder>,
+        #[graphql(name = "where")] where_input: Option<gen::ProductWhereInput>,
+        search: Option<String>,
+    ) -> Result<GqlProductConnection> {
+        let _ = (before, last, filter, sort_by, where_input, search);
         let g = ctx.data::<GqlContext>()?;
         let db = g.db()?;
         let ch = channel.unwrap_or_else(|| "default-channel".into());
         let off = after.and_then(|c| decode_cursor(&c)).unwrap_or(0);
         let lim = first.unwrap_or(20).clamp(1, 100) as usize;
         let all = rustygod_db::catalog::list_products(db, &ch, None, 200).await.map_err(|e| Error::new(e.to_string()))?;
-        Ok(all.into_iter().skip(off).take(lim).map(|p| GqlProduct {
-            id: ID(p.id),
-            name: p.name,
-            slug: p.slug,
-            variants: p.variants.into_iter().map(|v| GqlVariant {
-                id: ID(v.id),
-                name: v.name,
-                sku: v.sku,
-                price: Money { amount: v.price.amount.to_string(), currency: v.price.currency },
-                quantity_available: v.quantity_available,
-            }).collect(),
-        }).collect())
+        let total = all.len() as i32;
+        let page: Vec<gen::Product> = all.into_iter().skip(off).take(lim).map(|p| gen::Product {
+            id: Some(ID(p.id)),
+            name: Some(p.name),
+            slug: Some(p.slug),
+            default_variant: p.variants.into_iter().next().map(|v| gen::ProductVariant {
+                id: Some(ID(v.id)),
+                name: Some(v.name),
+                sku: Some(v.sku),
+                quantity_available: Some(v.quantity_available),
+                private_metadata: vec![],
+                metadata: vec![],
+                track_inventory: None,
+                quantity_limit_per_customer: None,
+                weight: None,
+                channel_listings: vec![],
+                media: vec![],
+                stocks: vec![],
+                updated_at: None,
+                product: None,
+            }),
+            private_metadata: vec![],
+            metadata: vec![],
+            seo_title: None,
+            seo_description: None,
+            description: None,
+            product_type: None,
+            category: None,
+            created: None,
+            updated_at: None,
+            weight: None,
+            rating: None,
+            is_available: None,
+            attributes: vec![],
+            channel_listings: vec![],
+            media: vec![],
+            collections: vec![],
+            is_available_for_purchase: None,
+            tax_class: None,
+        }).collect();
+        let edges = page.into_iter().enumerate().map(|(i, node)| GqlProductEdge { node, cursor: encode_cursor(off + i) }).collect();
+        Ok(GqlProductConnection { total_count: Some(total), edges, page_info: crate::common::PageInfo { has_next_page: off + lim < total as usize, has_previous_page: off > 0, start_cursor: None, end_cursor: None } })
     }
 }
 
+/// Dashboard `ProductCreate` payload shape (`product { id }`, `errors`).
 #[derive(SimpleObject, Clone)]
-pub struct GqlProductCreated { pub id: ID }
-
-#[derive(InputObject)]
-pub struct ProductCreateInput {
-    pub name: String,
-    pub slug: Option<String>,
-    #[graphql(name = "productType")]
-    pub product_type: Option<ID>,
-    pub category: Option<ID>,
+#[graphql(name = "ProductCreate")]
+pub struct GqlProductCreate {
+    pub product: Option<gen::Product>,
+    pub errors: Vec<gen::ProductError>,
 }
 
 #[derive(Default)]
@@ -74,28 +106,57 @@ pub struct CatalogMutation;
 
 #[Object]
 impl CatalogMutation {
-    /// Minimal `productCreate` for Dashboard quick-create. Requires
-    /// `manage_products` (staff). Creates product row + picks first
-    /// productType if not given. Returns product id (plain, not global).
-    async fn product_create(&self, ctx: &Context<'_>, input: ProductCreateInput) -> Result<GqlProductCreated> {
+    /// Dashboard quick-create (`ProductCreate`). Requires `manage_products`
+    /// (staff). Creates product row + picks first productType if not given.
+    /// Accepts the full Saleor `ProductCreateInput`; only identity fields
+    /// are persisted (documented gap).
+    async fn product_create(&self, ctx: &Context<'_>, input: gen::ProductCreateInput) -> Result<GqlProductCreate> {
         let bearer = ctx.data_opt::<crate::context::Bearer>().map(|b| b.0.as_str().to_string())
             .or_else(|| ctx.data_opt::<GqlContext>().and_then(|g| g.bearer.clone()));
         if bearer.is_none() { return Err(Error::new("authentication required")); }
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
-        if input.name.trim().is_empty() { return Err(Error::new("name is required")); }
-        let slug = input.slug.unwrap_or_else(|| input.name.to_lowercase().replace(' ', "-"));
+        let name = input.name.clone().unwrap_or_default();
+        if name.trim().is_empty() { return Err(Error::new("name is required")); }
+        let slug = input.slug.clone().unwrap_or_else(|| name.to_lowercase().replace(' ', "-"));
         // Resolve product_type: use given or first existing.
-        let pt_id: i32 = if let Some(pid) = input.product_type {
-            pid.0.parse::<i32>().unwrap_or(0)
-        } else {
-            use sea_orm::EntityTrait;
-            let pt = rustygod_db::entities::product_producttype::Entity::find().one(db).await.map_err(|e| Error::new(e.to_string()))?
-                .ok_or_else(|| Error::new("no product type found"))?;
-            pt.id
+        let pt_id: i32 = {
+            let parsed = input.product_type.0.parse::<i32>().unwrap_or(0);
+            if parsed != 0 { parsed } else {
+                use sea_orm::EntityTrait;
+                let pt = rustygod_db::entities::product_producttype::Entity::find().one(db).await.map_err(|e| Error::new(e.to_string()))?
+                    .ok_or_else(|| Error::new("no product type found"))?;
+                pt.id
+            }
         };
-        let cat_id: Option<i32> = input.category.and_then(|c| c.0.parse::<i32>().ok());
-        let id = create_product_row(db, &input.name, &slug, pt_id, cat_id).await.map_err(|e| Error::new(e.to_string()))?;
-        Ok(GqlProductCreated { id: ID(id.to_string()) })
+        let cat_id: Option<i32> = input.category.as_ref().and_then(|c| c.0.parse::<i32>().ok());
+        let id = create_product_row(db, &name, &slug, pt_id, cat_id).await.map_err(|e| Error::new(e.to_string()))?;
+        Ok(GqlProductCreate {
+            product: Some(gen::Product {
+                id: Some(ID(id.to_string())),
+                name: Some(name),
+                slug: Some(slug),
+                private_metadata: vec![],
+                metadata: vec![],
+                seo_title: None,
+                seo_description: None,
+                description: None,
+                product_type: None,
+                category: None,
+                created: None,
+                updated_at: None,
+                weight: None,
+                default_variant: None,
+                rating: None,
+                is_available: None,
+                attributes: vec![],
+                channel_listings: vec![],
+                media: vec![],
+                collections: vec![],
+                is_available_for_purchase: None,
+                tax_class: None,
+            }),
+            errors: vec![],
+        })
     }
 }
 

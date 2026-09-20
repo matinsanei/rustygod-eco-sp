@@ -32,7 +32,7 @@ fn to_gql_checkout(
     channel: &str,
 ) -> GqlCheckout {
     let d = rustygod_db::checkout_store::to_domain(co, lines, channel);
-    let total = Money { amount: co.total_gross_amount.to_string(), currency: co.currency.clone() };
+    let total = Money { amount: co.total_gross_amount.to_string(), currency: co.currency.clone(), fraction_digits: None };
     GqlCheckout {
         id: ID(d.id),
         channel: d.channel,
@@ -46,7 +46,7 @@ fn to_gql_checkout(
                 variant_id: ID(l.variant_id),
                 quantity: l.quantity,
                 unit_price: l.unit_price.into(),
-                total_price: Money { amount: tot.to_string(), currency },
+                total_price: Money { amount: tot.to_string(), currency, fraction_digits: None },
                 is_gift: l.is_gift,
             }
         }).collect(),

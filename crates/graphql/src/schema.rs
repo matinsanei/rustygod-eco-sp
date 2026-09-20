@@ -2,13 +2,13 @@
 
 use async_graphql::*;
 
-use crate::{account::{AccountMutation, AccountQuery}, catalog::{CatalogMutation, CatalogQuery}, checkout::{CheckoutMutation, CheckoutQuery}, commerce::CommerceQuery, context::GqlContext, order::{OrderMutation, OrderQuery}, payment::{PaymentMutation, PaymentQuery}};
+use crate::{account::{AccountMutation, AccountQuery}, apps::AppsQuery, catalog::{CatalogMutation, CatalogQuery}, checkout::{CheckoutMutation, CheckoutQuery}, commerce::{CommerceMutation, CommerceQuery}, context::GqlContext, gen::{GenMutation, GenQuery}, order::{OrderMutation, OrderQuery}, payment::{PaymentMutation, PaymentQuery}};
 
 #[derive(MergedObject, Default)]
-pub struct Query(CatalogQuery, CheckoutQuery, OrderQuery, PaymentQuery, CommerceQuery, AccountQuery);
+pub struct Query(CatalogQuery, CheckoutQuery, OrderQuery, PaymentQuery, CommerceQuery, AccountQuery, AppsQuery, GenQuery);
 
 #[derive(MergedObject, Default)]
-pub struct Mutation(CatalogMutation, CheckoutMutation, OrderMutation, PaymentMutation, AccountMutation);
+pub struct Mutation(CatalogMutation, CheckoutMutation, OrderMutation, PaymentMutation, AccountMutation, CommerceMutation, GenMutation);
 
 pub type AppSchema = Schema<Query, Mutation, EmptySubscription>;
 

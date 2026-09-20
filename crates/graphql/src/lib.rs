@@ -19,6 +19,8 @@
 //!   commerce). Each section is one file; shared scalars/types live here.
 
 pub mod account;
+pub mod apps;
+pub mod gen;
 pub mod catalog;
 pub mod checkout;
 pub mod commerce;

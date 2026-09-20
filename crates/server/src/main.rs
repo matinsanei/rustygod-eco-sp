@@ -112,6 +112,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             headers: axum::http::HeaderMap,
             Json(mut req): Json<async_graphql::Request>,
         ) -> Json<async_graphql::Response> {
+            // Debug log: first 500 chars of query so Dashboard mismatches are visible
+            // in backend logs (RUST_LOG=info).
+            tracing::info!(query = %req.query.chars().take(500).collect::<String>(), op = ?req.operation_name);
             if let Some(bearer) = headers.get(axum::http::header::AUTHORIZATION)
                 .and_then(|v| v.to_str().ok())
                 .and_then(|s| s.strip_prefix("Bearer ").or_else(|| s.strip_prefix("bearer ")))
