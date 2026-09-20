@@ -9,12 +9,15 @@ use sea_orm::EntityTrait;
 use crate::context::{Bearer, GqlContext};
 
 #[derive(SimpleObject, Clone)]
+#[graphql(name = "CountryDisplay")]
 pub struct GqlCountryDisplay { pub code: String, pub country: String }
 
 #[derive(SimpleObject, Clone)]
+#[graphql(name = "StockSettings")]
 pub struct GqlStockSettings { pub allocation_strategy: String }
 
 #[derive(SimpleObject, Clone)]
+#[graphql(name = "Channel")]
 pub struct GqlChannelForUser {
     pub id: ID,
     pub is_active: bool,
@@ -26,9 +29,11 @@ pub struct GqlChannelForUser {
 }
 
 #[derive(SimpleObject, Clone)]
+#[graphql(name = "UserPermission")]
 pub struct GqlUserPermission { pub code: String, pub name: String }
 
 #[derive(SimpleObject, Clone)]
+#[graphql(name = "User", complex)]
 pub struct GqlUser {
     pub id: ID,
     pub email: String,
@@ -47,15 +52,26 @@ pub struct GqlUser {
     pub metadata: Vec<GqlMetadataItem>,
     #[graphql(name = "userPermissions")]
     pub user_permissions: Option<Vec<GqlUserPermission>>,
+    #[graphql(skip)]
     pub avatar: Option<GqlImage>,
     #[graphql(name = "accessibleChannels")]
     pub accessible_channels: Option<Vec<GqlChannelForUser>>,
 }
 
+#[ComplexObject]
+impl GqlUser {
+    async fn avatar(&self, size: Option<i32>) -> Option<GqlImage> {
+        let _ = size;
+        self.avatar.clone()
+    }
+}
+
 #[derive(SimpleObject, Clone)]
+#[graphql(name = "MetadataItem")]
 pub struct GqlMetadataItem { pub key: String, pub value: String }
 
 #[derive(SimpleObject, Clone)]
+#[graphql(name = "Image")]
 pub struct GqlImage { pub url: String }
 
 #[derive(Default)]
@@ -105,18 +121,24 @@ impl AccountQuery {
 }
 
 #[derive(SimpleObject, Clone)]
+#[graphql(name = "CreateToken")]
 pub struct GqlTokenCreate {
     pub token: String,
     #[graphql(name = "refreshToken")]
     pub refresh_token: String,
+    pub user: Option<GqlUser>,
     pub errors: Vec<GqlAccountError>,
 }
 
 #[derive(SimpleObject, Clone)]
+#[graphql(name = "AccountError")]
 pub struct GqlAccountError {
     pub field: Option<String>,
     pub message: String,
     pub code: String,
+    #[graphql(name = "addressType")]
+    pub address_type: Option<String>,
+    pub attributes: Option<Vec<String>>,
 }
 
 #[derive(Default)]
@@ -129,37 +151,69 @@ impl AccountMutation {
     async fn token_create(&self, ctx: &Context<'_>, email: String, password: String) -> Result<GqlTokenCreate> {
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
         let Some((user, hash)) = rustygod_db::auth::find_for_login(db, &email).await.map_err(|e| Error::new(e.to_string()))? else {
-            return Ok(GqlTokenCreate { token: String::new(), refresh_token: String::new(), errors: vec![GqlAccountError { field: Some("email".into()), message: "Invalid credentials".into(), code: "INVALID_CREDENTIALS".into() }] });
+            return Ok(GqlTokenCreate { token: String::new(), refresh_token: String::new(), user: None, errors: vec![GqlAccountError { address_type: None, attributes: None, field: Some("email".into()), message: "Invalid credentials".into(), code: "INVALID_CREDENTIALS".into() }] });
         };
         if !user.is_active {
-            return Ok(GqlTokenCreate { token: String::new(), refresh_token: String::new(), errors: vec![GqlAccountError { field: None, message: "User is inactive".into(), code: "INACTIVE".into() }] });
+            return Ok(GqlTokenCreate { token: String::new(), refresh_token: String::new(), user: None, errors: vec![GqlAccountError { address_type: None, attributes: None, field: None, message: "User is inactive".into(), code: "INACTIVE".into() }] });
         }
         let ok = match rustygod_core::auth::verify_password(&password, &hash) {
             rustygod_core::auth::PasswordCheck::Ok => true,
             _ => false,
         };
         if !ok {
-            return Ok(GqlTokenCreate { token: String::new(), refresh_token: String::new(), errors: vec![GqlAccountError { field: Some("password".into()), message: "Invalid credentials".into(), code: "INVALID_CREDENTIALS".into() }] });
+            return Ok(GqlTokenCreate { token: String::new(), refresh_token: String::new(), user: None, errors: vec![GqlAccountError { address_type: None, attributes: None, field: Some("password".into()), message: "Invalid credentials".into(), code: "INVALID_CREDENTIALS".into() }] });
         }
         let pair = rustygod_core::auth::mint_tokens("http://localhost:8000/graphql/", &user.email, user.id, user.is_staff, &user.jwt_token_key).map_err(|e| Error::new(format!("mint: {e}")))?;
-        Ok(GqlTokenCreate { token: pair.access, refresh_token: pair.refresh, errors: vec![] })
+        let claims = rustygod_core::auth::decode(&pair.access).map_err(|e| Error::new(format!("decode: {e}")))?;
+        let gql_user = load_gql_user(db, user.id, &claims.user_id).await.map_err(|e| Error::new(e.to_string()))?;
+        Ok(GqlTokenCreate { token: pair.access, refresh_token: pair.refresh, user: Some(gql_user), errors: vec![] })
     }
 
     async fn token_refresh(&self, ctx: &Context<'_>, refresh_token: String) -> Result<GqlTokenCreate> {
         let claims = rustygod_core::auth::decode(&refresh_token).map_err(|e| Error::new(format!("auth: {e}")))?;
         if claims.token_type != rustygod_core::auth::TOKEN_TYPE_REFRESH {
-            return Ok(GqlTokenCreate { token: String::new(), refresh_token: String::new(), errors: vec![GqlAccountError { field: None, message: "Invalid refresh token".into(), code: "INVALID".into() }] });
+            return Ok(GqlTokenCreate { token: String::new(), refresh_token: String::new(), user: None, errors: vec![GqlAccountError { address_type: None, attributes: None, field: None, message: "Invalid refresh token".into(), code: "INVALID".into() }] });
         }
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
         let uid = rustygod_core::auth::parse_user_global_id(&claims.user_id).unwrap_or(0);
         let user = rustygod_db::entities::account_user::Entity::find_by_id(uid).one(db).await.map_err(|e| Error::new(e.to_string()))?.ok_or_else(|| Error::new("user not found"))?;
         // Rotate check: Django invalidates refresh if jwt_token_key changed.
         if user.jwt_token_key != claims.token {
-            return Ok(GqlTokenCreate { token: String::new(), refresh_token: String::new(), errors: vec![GqlAccountError { field: None, message: "Token expired".into(), code: "EXPIRED".into() }] });
+            return Ok(GqlTokenCreate { token: String::new(), refresh_token: String::new(), user: None, errors: vec![GqlAccountError { address_type: None, attributes: None, field: None, message: "Token expired".into(), code: "EXPIRED".into() }] });
         }
         let pair = rustygod_core::auth::mint_tokens("http://localhost:8000/graphql/", &user.email, user.id, user.is_staff, &user.jwt_token_key).map_err(|e| Error::new(format!("mint: {e}")))?;
-        Ok(GqlTokenCreate { token: pair.access, refresh_token: pair.refresh, errors: vec![] })
+        let new_claims = rustygod_core::auth::decode(&pair.access).map_err(|e| Error::new(format!("decode: {e}")))?;
+        let gql_user = load_gql_user(db, user.id, &new_claims.user_id).await.map_err(|e| Error::new(e.to_string()))?;
+        Ok(GqlTokenCreate { token: pair.access, refresh_token: pair.refresh, user: Some(gql_user), errors: vec![] })
     }
+}
+
+async fn load_gql_user(db: &sea_orm::DatabaseConnection, uid: i32, claims_user_id: &str) -> Result<GqlUser, sea_orm::DbErr> {
+    let user = rustygod_db::entities::account_user::Entity::find_by_id(uid).one(db).await?.ok_or_else(|| sea_orm::DbErr::RecordNotFound("user".into()))?;
+    let perms = collect_permissions(db, uid).await.unwrap_or_default();
+    let channels = rustygod_db::commerce::list_channels(db).await.unwrap_or_default();
+    Ok(GqlUser {
+        id: async_graphql::ID(claims_user_id.to_string()),
+        email: user.email,
+        first_name: user.first_name,
+        last_name: user.last_name,
+        is_active: user.is_active,
+        is_staff: user.is_staff,
+        date_joined: user.date_joined.into(),
+        restricted_access_to_channels: false,
+        metadata: vec![],
+        user_permissions: Some(perms.into_iter().map(|code| GqlUserPermission { code: code.clone(), name: code }).collect()),
+        avatar: None,
+        accessible_channels: Some(channels.into_iter().map(|c| GqlChannelForUser {
+            id: async_graphql::ID(format!("Channel:{}", c.id)),
+            is_active: c.is_active,
+            name: c.slug.clone(),
+            slug: c.slug,
+            currency_code: c.currency_code,
+            default_country: GqlCountryDisplay { code: "US".into(), country: "United States".into() },
+            stock_settings: GqlStockSettings { allocation_strategy: "prioritize-sorting-order".into() },
+        }).collect()),
+    })
 }
 
 async fn collect_permissions(db: &sea_orm::DatabaseConnection, user_id: i32) -> Result<Vec<String>, sea_orm::DbErr> {
