@@ -21,7 +21,7 @@ Saleor's Python, no backend slowdown.
 | Auth | staff JWT RS256, `RSA_PRIVATE_KEY` = `crates/db/tests/testdata/test_rsa.pem`; login `admin@example.com` / `admin` |
 | Server management | kill by PID file (`kill -9 $(cat /tmp/rust.pid)`); **NEVER `pkill -f`** (kills your own shell). Start: `RUST_LOG=info RUSTYGOD_DATABASE_URL=... RSA_PRIVATE_KEY="$(cat ...)" setsid ./target/debug/rustygod-server </dev/null >/tmp/rust.log 2>&1 < /dev/null & disown` (the `&` + setsid + stdin redirect is required or the tool hangs) |
 | Query logging | `server/src/main.rs` logs first 500 chars of every GraphQL query at info level (`RUST_LOG=info` required; without it `/tmp/rust.log` stays empty) |
-| Seed data | DB **already fully seeded** by Saleor `populatedb` (29 products, 81 variants, 168 orders, 45 users, 9 channels, 8 warehouses). **Never re-run populatedb** (would duplicate). Empty admin first/last name is **upstream Saleor behavior** (`dangerously_get_or_create_superuser` sets no names) — Django shows the same blank profile, not our bug |
+| Seed data | DB wiped 2026-09-20 and rebuilt purely from Saleor (`DROP SCHEMA public CASCADE` → `migrate` → `seed --createsuperuser`; backup `/tmp/saleor_backup_full.dump`): 145 tables, 29 products, 20 orders, 45 users, 2 channels. **Never re-run populatedb** (would duplicate). Empty admin first/last name is **upstream Saleor behavior** (`dangerously_get_or_create_superuser` sets no names) — Django shows the same blank profile, not our bug |
 | Dashboard schema mode | Release build defaults to **main-schema mode** (`FF_USE_STAGING_SCHEMA` unset). Our backend mimics 3.24, so we support the **superset** (see `LEGACY_FIELDS`) |
 
 ## 2. Architecture (unchanged)
