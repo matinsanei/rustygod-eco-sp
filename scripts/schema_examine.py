@@ -199,19 +199,20 @@ def parse_dashboard():
                 except (AssertionError, IndexError):
                     continue
                 frags[fname] = (ftype, sels)
-            om = re.search(r"^\s*(query|mutation|subscription)\s+(\w+)", doc, re.M)
-            if not om:
-                continue
-            kind, name = om.groups()
-            j = doc.find("{", om.end())
-            toks = tokenize(doc[j:])
-            try:
-                sels, _ = parse_selection(toks)
-            except (AssertionError, IndexError):
-                continue
+            # NOTE: one gql block can hold MANY operations (ConditionalFilter
+            # packs ~25 queries per block). Taking only the first silently
+            # dropped 24 ops (warehouse/page-type slugs, pages search, ...).
             page = f.split("dashboard/src/")[-1].split("/")[0]
-            ops.append({"kind": kind, "name": name, "root": sels[0][0] if sels else None,
-                        "sel": sels, "page": page})
+            for om in re.finditer(r"^\s*(query|mutation|subscription)\s+(\w+)", doc, re.M):
+                kind, name = om.groups()
+                j = doc.find("{", om.end())
+                toks = tokenize(doc[j:])
+                try:
+                    sels, _ = parse_selection(toks)
+                except (AssertionError, IndexError):
+                    continue
+                ops.append({"kind": kind, "name": name, "root": sels[0][0] if sels else None,
+                            "sel": sels, "page": page})
     return ops, frags
 
 

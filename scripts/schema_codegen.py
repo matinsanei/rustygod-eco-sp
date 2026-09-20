@@ -184,19 +184,19 @@ def load_docs():
                         frags[fname] = (ftype, sels)
                     except (AssertionError, IndexError):
                         pass
-                om = re.search(r"^\s*(query|mutation|subscription)\s+(\w+)", doc, re.M)
-                if not om:
-                    continue
-                kind, name = om.groups()
-                j = doc.find("{", om.end())
-                # variable declarations: $v: Type
-                var_types = dict(re.findall(r"\$(\w+)\s*:\s*([A-Za-z_][A-Za-z0-9_\[\]!]*)", doc[:j]))
-                try:
-                    sels, _ = parse_selection(tokenize(doc[j:]))
-                except (AssertionError, IndexError):
-                    continue
-                ops.append({"kind": kind, "name": name, "sel": sels,
-                            "vars": var_types, "page": f.split("dashboard/src/")[-1].split("/")[0]})
+                # NOTE: one gql block can hold MANY operations (ConditionalFilter
+                # packs ~25 queries per block); parse them all.
+                for om in re.finditer(r"^\s*(query|mutation|subscription)\s+(\w+)", doc, re.M):
+                    kind, name = om.groups()
+                    j = doc.find("{", om.end())
+                    # variable declarations: $v: Type
+                    var_types = dict(re.findall(r"\$(\w+)\s*:\s*([A-Za-z_][A-Za-z0-9_\[\]!]*)", doc[:j]))
+                    try:
+                        sels, _ = parse_selection(tokenize(doc[j:]))
+                    except (AssertionError, IndexError):
+                        continue
+                    ops.append({"kind": kind, "name": name, "sel": sels,
+                                "vars": var_types, "page": f.split("dashboard/src/")[-1].split("/")[0]})
     return ops, frags
 
 
@@ -511,6 +511,17 @@ def build_model(g, reg, ops):
                     use_in_ty(at)
     M["inputs"] = {k: inputs[k] for k in sorted(need_inputs)}
     M["enums"] = {k: enums[k] for k in sorted(need_enums)}
+    # Emit EVERY Saleor input/enum (not just referenced): dashboard sends
+    # deprecated/rare ones (OrderFilterInput, MenuFilterInput) that usage
+    # analysis can miss when an op fails to parse, and hand roots need them
+    # to exist for exact Saleor signatures. Unreachable ones cost nothing
+    # (async-graphql prunes them from the SDL).
+    for _k in sorted(inputs):
+        if _k not in M["inputs"]:
+            M["inputs"][_k] = inputs[_k]
+    for _k in sorted(enums):
+        if _k not in M["enums"]:
+            M["enums"][_k] = enums[_k]
 
     # ---- boxes ----
     gen_names = set(M["structs"])
@@ -637,7 +648,11 @@ def emit_all(reg, g, M):
             r = "serde_json::Value"
         if lst:
             inner = r
-            return f"Vec<{inner}>" if nn or True else f"Vec<{inner}>"
+            # Saleor `[X!]` (nullable list) -> Option<Vec<..>>; only a trailing
+            # `!` (`[X!]!`) is a required Vec. (A leftover `nn or True` once
+            # forced every list input required — hiding behind "field X of
+            # type [..]! is required but not provided".)
+            return f"Vec<{inner}>" if nn else f"Option<Vec<{inner}>>"
         return r if nn else f"Option<{r}>"
 
     def out_rust(parent, field, gql):

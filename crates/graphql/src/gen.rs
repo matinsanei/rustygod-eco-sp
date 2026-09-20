@@ -66,6 +66,126 @@ pub enum AccountConfirmModeEnum {
 
 
 #[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum AccountErrorCode {
+
+    #[graphql(name = "ACTIVATE_OWN_ACCOUNT")]
+    ACTIVATEOWNACCOUNT,
+
+    #[graphql(name = "ACTIVATE_SUPERUSER_ACCOUNT")]
+    ACTIVATESUPERUSERACCOUNT,
+
+    #[graphql(name = "DUPLICATED_INPUT_ITEM")]
+    DUPLICATEDINPUTITEM,
+
+    #[graphql(name = "DEACTIVATE_OWN_ACCOUNT")]
+    DEACTIVATEOWNACCOUNT,
+
+    #[graphql(name = "DEACTIVATE_SUPERUSER_ACCOUNT")]
+    DEACTIVATESUPERUSERACCOUNT,
+
+    #[graphql(name = "DELETE_NON_STAFF_USER")]
+    DELETENONSTAFFUSER,
+
+    #[graphql(name = "DELETE_OWN_ACCOUNT")]
+    DELETEOWNACCOUNT,
+
+    #[graphql(name = "DELETE_STAFF_ACCOUNT")]
+    DELETESTAFFACCOUNT,
+
+    #[graphql(name = "DELETE_SUPERUSER_ACCOUNT")]
+    DELETESUPERUSERACCOUNT,
+
+    #[graphql(name = "GRAPHQL_ERROR")]
+    GRAPHQLERROR,
+
+    #[graphql(name = "INACTIVE")]
+    INACTIVE,
+
+    #[graphql(name = "INVALID")]
+    INVALID,
+
+    #[graphql(name = "INVALID_PASSWORD")]
+    INVALIDPASSWORD,
+
+    #[graphql(name = "LEFT_NOT_MANAGEABLE_PERMISSION")]
+    LEFTNOTMANAGEABLEPERMISSION,
+
+    #[graphql(name = "INVALID_CREDENTIALS")]
+    INVALIDCREDENTIALS,
+
+    #[graphql(name = "NOT_FOUND")]
+    NOTFOUND,
+
+    #[graphql(name = "OUT_OF_SCOPE_USER")]
+    OUTOFSCOPEUSER,
+
+    #[graphql(name = "OUT_OF_SCOPE_GROUP")]
+    OUTOFSCOPEGROUP,
+
+    #[graphql(name = "OUT_OF_SCOPE_PERMISSION")]
+    OUTOFSCOPEPERMISSION,
+
+    #[graphql(name = "PASSWORD_ENTIRELY_NUMERIC")]
+    PASSWORDENTIRELYNUMERIC,
+
+    #[graphql(name = "PASSWORD_TOO_COMMON")]
+    PASSWORDTOOCOMMON,
+
+    #[graphql(name = "PASSWORD_TOO_SHORT")]
+    PASSWORDTOOSHORT,
+
+    #[graphql(name = "PASSWORD_TOO_SIMILAR")]
+    PASSWORDTOOSIMILAR,
+
+    #[graphql(name = "PASSWORD_RESET_ALREADY_REQUESTED")]
+    PASSWORDRESETALREADYREQUESTED,
+
+    #[graphql(name = "REQUIRED")]
+    REQUIRED,
+
+    #[graphql(name = "UNIQUE")]
+    UNIQUE,
+
+    #[graphql(name = "JWT_SIGNATURE_EXPIRED")]
+    JWTSIGNATUREEXPIRED,
+
+    #[graphql(name = "JWT_INVALID_TOKEN")]
+    JWTINVALIDTOKEN,
+
+    #[graphql(name = "JWT_DECODE_ERROR")]
+    JWTDECODEERROR,
+
+    #[graphql(name = "JWT_MISSING_TOKEN")]
+    JWTMISSINGTOKEN,
+
+    #[graphql(name = "JWT_INVALID_CSRF_TOKEN")]
+    JWTINVALIDCSRFTOKEN,
+
+    #[graphql(name = "CHANNEL_INACTIVE")]
+    CHANNELINACTIVE,
+
+    #[graphql(name = "MISSING_CHANNEL_SLUG")]
+    MISSINGCHANNELSLUG,
+
+    #[graphql(name = "ACCOUNT_NOT_CONFIRMED")]
+    ACCOUNTNOTCONFIRMED,
+
+    #[graphql(name = "LOGIN_ATTEMPT_DELAYED")]
+    LOGINATTEMPTDELAYED,
+
+    #[graphql(name = "DISABLED_AUTHENTICATION_METHOD")]
+    DISABLEDAUTHENTICATIONMETHOD,
+
+    #[graphql(name = "UNKNOWN_IP_ADDRESS")]
+    UNKNOWNIPADDRESS,
+
+    #[graphql(name = "FILE_SIZE_LIMIT_EXCEEDED")]
+    FILESIZELIMITEXCEEDED,
+
+}
+
+
+#[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
 pub enum AddressTypeEnum {
 
     #[graphql(name = "BILLING")]
@@ -90,6 +210,135 @@ pub enum AllocationStrategyEnum {
 
 
 #[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum AnnouncementImportanceEnum {
+
+    #[graphql(name = "CRITICAL")]
+    CRITICAL,
+
+    #[graphql(name = "HIGH")]
+    HIGH,
+
+    #[graphql(name = "MODERATE")]
+    MODERATE,
+
+    #[graphql(name = "LOW")]
+    LOW,
+
+    #[graphql(name = "UNSET")]
+    UNSET,
+
+}
+
+
+#[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum AppErrorCode {
+
+    #[graphql(name = "FORBIDDEN")]
+    FORBIDDEN,
+
+    #[graphql(name = "GRAPHQL_ERROR")]
+    GRAPHQLERROR,
+
+    #[graphql(name = "INVALID")]
+    INVALID,
+
+    #[graphql(name = "INVALID_STATUS")]
+    INVALIDSTATUS,
+
+    #[graphql(name = "INVALID_PERMISSION")]
+    INVALIDPERMISSION,
+
+    #[graphql(name = "INVALID_URL_FORMAT")]
+    INVALIDURLFORMAT,
+
+    #[graphql(name = "INVALID_MANIFEST_FORMAT")]
+    INVALIDMANIFESTFORMAT,
+
+    #[graphql(name = "INVALID_CUSTOM_HEADERS")]
+    INVALIDCUSTOMHEADERS,
+
+    #[graphql(name = "DUPLICATED_EXTENSION_IDENTIFIER")]
+    DUPLICATEDEXTENSIONIDENTIFIER,
+
+    #[graphql(name = "DUPLICATED_WEBHOOK_IDENTIFIER")]
+    DUPLICATEDWEBHOOKIDENTIFIER,
+
+    #[graphql(name = "MANIFEST_URL_CANT_CONNECT")]
+    MANIFESTURLCANTCONNECT,
+
+    #[graphql(name = "NOT_FOUND")]
+    NOTFOUND,
+
+    #[graphql(name = "REQUIRED")]
+    REQUIRED,
+
+    #[graphql(name = "UNIQUE")]
+    UNIQUE,
+
+    #[graphql(name = "OUT_OF_SCOPE_APP")]
+    OUTOFSCOPEAPP,
+
+    #[graphql(name = "OUT_OF_SCOPE_PERMISSION")]
+    OUTOFSCOPEPERMISSION,
+
+    #[graphql(name = "UNSUPPORTED_SALEOR_VERSION")]
+    UNSUPPORTEDSALEORVERSION,
+
+}
+
+
+#[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum AppProblemCreateErrorCode {
+
+    #[graphql(name = "GRAPHQL_ERROR")]
+    GRAPHQLERROR,
+
+    #[graphql(name = "INVALID")]
+    INVALID,
+
+    #[graphql(name = "REQUIRED")]
+    REQUIRED,
+
+    #[graphql(name = "NOT_FOUND")]
+    NOTFOUND,
+
+}
+
+
+#[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum AppProblemDismissErrorCode {
+
+    #[graphql(name = "GRAPHQL_ERROR")]
+    GRAPHQLERROR,
+
+    #[graphql(name = "INVALID")]
+    INVALID,
+
+    #[graphql(name = "REQUIRED")]
+    REQUIRED,
+
+    #[graphql(name = "NOT_FOUND")]
+    NOTFOUND,
+
+    #[graphql(name = "OUT_OF_SCOPE_APP")]
+    OUTOFSCOPEAPP,
+
+}
+
+
+#[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum AppProblemDismissedByEnum {
+
+    #[graphql(name = "APP")]
+    APP,
+
+    #[graphql(name = "USER")]
+    USER,
+
+}
+
+
+#[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
 pub enum AppSortField {
 
     #[graphql(name = "NAME")]
@@ -97,6 +346,102 @@ pub enum AppSortField {
 
     #[graphql(name = "CREATION_DATE")]
     CREATIONDATE,
+
+}
+
+
+#[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum AreaUnitsEnum {
+
+    #[graphql(name = "SQ_MM")]
+    SQMM,
+
+    #[graphql(name = "SQ_CM")]
+    SQCM,
+
+    #[graphql(name = "SQ_DM")]
+    SQDM,
+
+    #[graphql(name = "SQ_M")]
+    SQM,
+
+    #[graphql(name = "SQ_KM")]
+    SQKM,
+
+    #[graphql(name = "SQ_FT")]
+    SQFT,
+
+    #[graphql(name = "SQ_YD")]
+    SQYD,
+
+    #[graphql(name = "SQ_INCH")]
+    SQINCH,
+
+}
+
+
+#[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum AttributeBulkCreateErrorCode {
+
+    #[graphql(name = "ALREADY_EXISTS")]
+    ALREADYEXISTS,
+
+    #[graphql(name = "BLANK")]
+    BLANK,
+
+    #[graphql(name = "GRAPHQL_ERROR")]
+    GRAPHQLERROR,
+
+    #[graphql(name = "INVALID")]
+    INVALID,
+
+    #[graphql(name = "NOT_FOUND")]
+    NOTFOUND,
+
+    #[graphql(name = "REQUIRED")]
+    REQUIRED,
+
+    #[graphql(name = "UNIQUE")]
+    UNIQUE,
+
+    #[graphql(name = "DUPLICATED_INPUT_ITEM")]
+    DUPLICATEDINPUTITEM,
+
+    #[graphql(name = "MAX_LENGTH")]
+    MAXLENGTH,
+
+}
+
+
+#[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum AttributeBulkUpdateErrorCode {
+
+    #[graphql(name = "ALREADY_EXISTS")]
+    ALREADYEXISTS,
+
+    #[graphql(name = "BLANK")]
+    BLANK,
+
+    #[graphql(name = "GRAPHQL_ERROR")]
+    GRAPHQLERROR,
+
+    #[graphql(name = "INVALID")]
+    INVALID,
+
+    #[graphql(name = "NOT_FOUND")]
+    NOTFOUND,
+
+    #[graphql(name = "REQUIRED")]
+    REQUIRED,
+
+    #[graphql(name = "UNIQUE")]
+    UNIQUE,
+
+    #[graphql(name = "DUPLICATED_INPUT_ITEM")]
+    DUPLICATEDINPUTITEM,
+
+    #[graphql(name = "MAX_LENGTH")]
+    MAXLENGTH,
 
 }
 
@@ -130,6 +475,30 @@ pub enum AttributeEntityTypeEnum {
 
     #[graphql(name = "COLLECTION")]
     COLLECTION,
+
+}
+
+
+#[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum AttributeErrorCode {
+
+    #[graphql(name = "ALREADY_EXISTS")]
+    ALREADYEXISTS,
+
+    #[graphql(name = "GRAPHQL_ERROR")]
+    GRAPHQLERROR,
+
+    #[graphql(name = "INVALID")]
+    INVALID,
+
+    #[graphql(name = "NOT_FOUND")]
+    NOTFOUND,
+
+    #[graphql(name = "REQUIRED")]
+    REQUIRED,
+
+    #[graphql(name = "UNIQUE")]
+    UNIQUE,
 
 }
 
@@ -198,6 +567,24 @@ pub enum AttributeSortField {
 
 
 #[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum AttributeTranslateErrorCode {
+
+    #[graphql(name = "GRAPHQL_ERROR")]
+    GRAPHQLERROR,
+
+    #[graphql(name = "INVALID")]
+    INVALID,
+
+    #[graphql(name = "NOT_FOUND")]
+    NOTFOUND,
+
+    #[graphql(name = "REQUIRED")]
+    REQUIRED,
+
+}
+
+
+#[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
 pub enum AttributeTypeEnum {
 
     #[graphql(name = "PRODUCT_TYPE")]
@@ -213,6 +600,24 @@ pub enum AttributeTypeEnum {
 
 
 #[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum AttributeValueTranslateErrorCode {
+
+    #[graphql(name = "GRAPHQL_ERROR")]
+    GRAPHQLERROR,
+
+    #[graphql(name = "INVALID")]
+    INVALID,
+
+    #[graphql(name = "NOT_FOUND")]
+    NOTFOUND,
+
+    #[graphql(name = "REQUIRED")]
+    REQUIRED,
+
+}
+
+
+#[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
 pub enum CategorySortField {
 
     #[graphql(name = "NAME")]
@@ -223,6 +628,39 @@ pub enum CategorySortField {
 
     #[graphql(name = "SUBCATEGORY_COUNT")]
     SUBCATEGORYCOUNT,
+
+}
+
+
+#[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum ChannelErrorCode {
+
+    #[graphql(name = "ALREADY_EXISTS")]
+    ALREADYEXISTS,
+
+    #[graphql(name = "GRAPHQL_ERROR")]
+    GRAPHQLERROR,
+
+    #[graphql(name = "INVALID")]
+    INVALID,
+
+    #[graphql(name = "NOT_FOUND")]
+    NOTFOUND,
+
+    #[graphql(name = "REQUIRED")]
+    REQUIRED,
+
+    #[graphql(name = "UNIQUE")]
+    UNIQUE,
+
+    #[graphql(name = "CHANNELS_CURRENCY_MUST_BE_THE_SAME")]
+    CHANNELSCURRENCYMUSTBETHESAME,
+
+    #[graphql(name = "CHANNEL_WITH_ORDERS")]
+    CHANNELWITHORDERS,
+
+    #[graphql(name = "DUPLICATED_INPUT_ITEM")]
+    DUPLICATEDINPUTITEM,
 
 }
 
@@ -261,6 +699,156 @@ pub enum CheckoutChargeStatusEnum {
 
 
 #[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum CheckoutCreateFromOrderErrorCode {
+
+    #[graphql(name = "GRAPHQL_ERROR")]
+    GRAPHQLERROR,
+
+    #[graphql(name = "INVALID")]
+    INVALID,
+
+    #[graphql(name = "ORDER_NOT_FOUND")]
+    ORDERNOTFOUND,
+
+    #[graphql(name = "CHANNEL_INACTIVE")]
+    CHANNELINACTIVE,
+
+    #[graphql(name = "TAX_ERROR")]
+    TAXERROR,
+
+}
+
+
+#[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum CheckoutCreateFromOrderUnavailableVariantErrorCode {
+
+    #[graphql(name = "NOT_FOUND")]
+    NOTFOUND,
+
+    #[graphql(name = "PRODUCT_UNAVAILABLE_FOR_PURCHASE")]
+    PRODUCTUNAVAILABLEFORPURCHASE,
+
+    #[graphql(name = "UNAVAILABLE_VARIANT_IN_CHANNEL")]
+    UNAVAILABLEVARIANTINCHANNEL,
+
+    #[graphql(name = "PRODUCT_NOT_PUBLISHED")]
+    PRODUCTNOTPUBLISHED,
+
+    #[graphql(name = "QUANTITY_GREATER_THAN_LIMIT")]
+    QUANTITYGREATERTHANLIMIT,
+
+    #[graphql(name = "INSUFFICIENT_STOCK")]
+    INSUFFICIENTSTOCK,
+
+}
+
+
+#[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum CheckoutErrorCode {
+
+    #[graphql(name = "BILLING_ADDRESS_NOT_SET")]
+    BILLINGADDRESSNOTSET,
+
+    #[graphql(name = "CHECKOUT_NOT_FULLY_PAID")]
+    CHECKOUTNOTFULLYPAID,
+
+    #[graphql(name = "GRAPHQL_ERROR")]
+    GRAPHQLERROR,
+
+    #[graphql(name = "PRODUCT_NOT_PUBLISHED")]
+    PRODUCTNOTPUBLISHED,
+
+    #[graphql(name = "PRODUCT_UNAVAILABLE_FOR_PURCHASE")]
+    PRODUCTUNAVAILABLEFORPURCHASE,
+
+    #[graphql(name = "INSUFFICIENT_STOCK")]
+    INSUFFICIENTSTOCK,
+
+    #[graphql(name = "INVALID")]
+    INVALID,
+
+    #[graphql(name = "INVALID_SHIPPING_METHOD")]
+    INVALIDSHIPPINGMETHOD,
+
+    #[graphql(name = "NOT_FOUND")]
+    NOTFOUND,
+
+    #[graphql(name = "PAYMENT_ERROR")]
+    PAYMENTERROR,
+
+    #[graphql(name = "PRICE_OVERRIDE_REASON_WITHOUT_OVERRIDE")]
+    PRICEOVERRIDEREASONWITHOUTOVERRIDE,
+
+    #[graphql(name = "QUANTITY_GREATER_THAN_LIMIT")]
+    QUANTITYGREATERTHANLIMIT,
+
+    #[graphql(name = "REQUIRED")]
+    REQUIRED,
+
+    #[graphql(name = "SHIPPING_ADDRESS_NOT_SET")]
+    SHIPPINGADDRESSNOTSET,
+
+    #[graphql(name = "SHIPPING_METHOD_NOT_APPLICABLE")]
+    SHIPPINGMETHODNOTAPPLICABLE,
+
+    #[graphql(name = "DELIVERY_METHOD_NOT_APPLICABLE")]
+    DELIVERYMETHODNOTAPPLICABLE,
+
+    #[graphql(name = "SHIPPING_METHOD_NOT_SET")]
+    SHIPPINGMETHODNOTSET,
+
+    #[graphql(name = "SHIPPING_NOT_REQUIRED")]
+    SHIPPINGNOTREQUIRED,
+
+    #[graphql(name = "TAX_ERROR")]
+    TAXERROR,
+
+    #[graphql(name = "UNIQUE")]
+    UNIQUE,
+
+    #[graphql(name = "VOUCHER_NOT_APPLICABLE")]
+    VOUCHERNOTAPPLICABLE,
+
+    #[graphql(name = "GIFT_CARD_NOT_APPLICABLE")]
+    GIFTCARDNOTAPPLICABLE,
+
+    #[graphql(name = "ZERO_QUANTITY")]
+    ZEROQUANTITY,
+
+    #[graphql(name = "MISSING_CHANNEL_SLUG")]
+    MISSINGCHANNELSLUG,
+
+    #[graphql(name = "CHANNEL_INACTIVE")]
+    CHANNELINACTIVE,
+
+    #[graphql(name = "UNAVAILABLE_VARIANT_IN_CHANNEL")]
+    UNAVAILABLEVARIANTINCHANNEL,
+
+    #[graphql(name = "EMAIL_NOT_SET")]
+    EMAILNOTSET,
+
+    #[graphql(name = "NO_LINES")]
+    NOLINES,
+
+    #[graphql(name = "INACTIVE_PAYMENT")]
+    INACTIVEPAYMENT,
+
+    #[graphql(name = "NON_EDITABLE_GIFT_LINE")]
+    NONEDITABLEGIFTLINE,
+
+    #[graphql(name = "NON_REMOVABLE_GIFT_LINE")]
+    NONREMOVABLEGIFTLINE,
+
+    #[graphql(name = "SHIPPING_CHANGE_FORBIDDEN")]
+    SHIPPINGCHANGEFORBIDDEN,
+
+    #[graphql(name = "MISSING_ADDRESS_DATA")]
+    MISSINGADDRESSDATA,
+
+}
+
+
+#[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
 pub enum CheckoutSortField {
 
     #[graphql(name = "CREATION_DATE")]
@@ -274,6 +862,51 @@ pub enum CheckoutSortField {
 
     #[graphql(name = "RANK")]
     RANK,
+
+}
+
+
+#[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum CircuitBreakerStateEnum {
+
+    #[graphql(name = "CLOSED")]
+    CLOSED,
+
+    #[graphql(name = "HALF_OPEN")]
+    HALFOPEN,
+
+    #[graphql(name = "OPEN")]
+    OPEN,
+
+}
+
+
+#[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum CollectionErrorCode {
+
+    #[graphql(name = "DUPLICATED_INPUT_ITEM")]
+    DUPLICATEDINPUTITEM,
+
+    #[graphql(name = "GRAPHQL_ERROR")]
+    GRAPHQLERROR,
+
+    #[graphql(name = "INVALID")]
+    INVALID,
+
+    #[graphql(name = "NOT_FOUND")]
+    NOTFOUND,
+
+    #[graphql(name = "REQUIRED")]
+    REQUIRED,
+
+    #[graphql(name = "UNIQUE")]
+    UNIQUE,
+
+    #[graphql(name = "CANNOT_MANAGE_PRODUCT_WITHOUT_VARIANT")]
+    CANNOTMANAGEPRODUCTWITHOUTVARIANT,
+
+    #[graphql(name = "FILE_SIZE_LIMIT_EXCEEDED")]
+    FILESIZELIMITEXCEEDED,
 
 }
 
@@ -307,6 +940,33 @@ pub enum CollectionSortField {
 
     #[graphql(name = "PUBLISHED_AT")]
     PUBLISHEDAT,
+
+}
+
+
+#[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum ConfigurationTypeFieldEnum {
+
+    #[graphql(name = "STRING")]
+    STRING,
+
+    #[graphql(name = "MULTILINE")]
+    MULTILINE,
+
+    #[graphql(name = "BOOLEAN")]
+    BOOLEAN,
+
+    #[graphql(name = "SECRET")]
+    SECRET,
+
+    #[graphql(name = "PASSWORD")]
+    PASSWORD,
+
+    #[graphql(name = "SECRETMULTILINE")]
+    SECRETMULTILINE,
+
+    #[graphql(name = "OUTPUT")]
+    OUTPUT,
 
 }
 
@@ -1071,6 +1731,156 @@ pub enum CountryCode {
 
 
 #[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum CustomerBulkUpdateErrorCode {
+
+    #[graphql(name = "BLANK")]
+    BLANK,
+
+    #[graphql(name = "DUPLICATED_INPUT_ITEM")]
+    DUPLICATEDINPUTITEM,
+
+    #[graphql(name = "GRAPHQL_ERROR")]
+    GRAPHQLERROR,
+
+    #[graphql(name = "INVALID")]
+    INVALID,
+
+    #[graphql(name = "REQUIRED")]
+    REQUIRED,
+
+    #[graphql(name = "UNIQUE")]
+    UNIQUE,
+
+    #[graphql(name = "NOT_FOUND")]
+    NOTFOUND,
+
+    #[graphql(name = "MAX_LENGTH")]
+    MAXLENGTH,
+
+}
+
+
+#[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum CustomerEventsEnum {
+
+    #[graphql(name = "ACCOUNT_CREATED")]
+    ACCOUNTCREATED,
+
+    #[graphql(name = "ACCOUNT_ACTIVATED")]
+    ACCOUNTACTIVATED,
+
+    #[graphql(name = "ACCOUNT_DEACTIVATED")]
+    ACCOUNTDEACTIVATED,
+
+    #[graphql(name = "PASSWORD_RESET_LINK_SENT")]
+    PASSWORDRESETLINKSENT,
+
+    #[graphql(name = "PASSWORD_RESET")]
+    PASSWORDRESET,
+
+    #[graphql(name = "EMAIL_CHANGED_REQUEST")]
+    EMAILCHANGEDREQUEST,
+
+    #[graphql(name = "PASSWORD_CHANGED")]
+    PASSWORDCHANGED,
+
+    #[graphql(name = "EMAIL_CHANGED")]
+    EMAILCHANGED,
+
+    #[graphql(name = "PLACED_ORDER")]
+    PLACEDORDER,
+
+    #[graphql(name = "NOTE_ADDED_TO_ORDER")]
+    NOTEADDEDTOORDER,
+
+    #[graphql(name = "CUSTOMER_DELETED")]
+    CUSTOMERDELETED,
+
+    #[graphql(name = "NAME_ASSIGNED")]
+    NAMEASSIGNED,
+
+    #[graphql(name = "EMAIL_ASSIGNED")]
+    EMAILASSIGNED,
+
+    #[graphql(name = "NOTE_ADDED")]
+    NOTEADDED,
+
+}
+
+
+#[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum CustomerTypeAssignAttributesErrorCode {
+
+    #[graphql(name = "ATTRIBUTE_ALREADY_ASSIGNED")]
+    ATTRIBUTEALREADYASSIGNED,
+
+    #[graphql(name = "GRAPHQL_ERROR")]
+    GRAPHQLERROR,
+
+    #[graphql(name = "INVALID")]
+    INVALID,
+
+    #[graphql(name = "NOT_FOUND")]
+    NOTFOUND,
+
+}
+
+
+#[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum CustomerTypeCreateErrorCode {
+
+    #[graphql(name = "GRAPHQL_ERROR")]
+    GRAPHQLERROR,
+
+    #[graphql(name = "INVALID")]
+    INVALID,
+
+    #[graphql(name = "NOT_FOUND")]
+    NOTFOUND,
+
+    #[graphql(name = "REQUIRED")]
+    REQUIRED,
+
+    #[graphql(name = "UNIQUE")]
+    UNIQUE,
+
+}
+
+
+#[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum CustomerTypeDeleteErrorCode {
+
+    #[graphql(name = "CANNOT_DELETE_DEFAULT")]
+    CANNOTDELETEDEFAULT,
+
+    #[graphql(name = "GRAPHQL_ERROR")]
+    GRAPHQLERROR,
+
+    #[graphql(name = "INVALID")]
+    INVALID,
+
+    #[graphql(name = "NOT_FOUND")]
+    NOTFOUND,
+
+}
+
+
+#[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum CustomerTypeReorderAttributesErrorCode {
+
+    #[graphql(name = "GRAPHQL_ERROR")]
+    GRAPHQLERROR,
+
+    #[graphql(name = "INVALID")]
+    INVALID,
+
+    #[graphql(name = "NOT_FOUND")]
+    NOTFOUND,
+
+}
+
+
+#[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
 pub enum CustomerTypeSortField {
 
     #[graphql(name = "NAME")]
@@ -1078,6 +1888,93 @@ pub enum CustomerTypeSortField {
 
     #[graphql(name = "SLUG")]
     SLUG,
+
+}
+
+
+#[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum CustomerTypeUnassignAttributesErrorCode {
+
+    #[graphql(name = "GRAPHQL_ERROR")]
+    GRAPHQLERROR,
+
+    #[graphql(name = "INVALID")]
+    INVALID,
+
+    #[graphql(name = "NOT_FOUND")]
+    NOTFOUND,
+
+}
+
+
+#[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum CustomerTypeUpdateErrorCode {
+
+    #[graphql(name = "CANNOT_UNSET_DEFAULT")]
+    CANNOTUNSETDEFAULT,
+
+    #[graphql(name = "GRAPHQL_ERROR")]
+    GRAPHQLERROR,
+
+    #[graphql(name = "INVALID")]
+    INVALID,
+
+    #[graphql(name = "NOT_FOUND")]
+    NOTFOUND,
+
+    #[graphql(name = "REQUIRED")]
+    REQUIRED,
+
+    #[graphql(name = "UNIQUE")]
+    UNIQUE,
+
+}
+
+
+#[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum DeliveryOptionsCalculateErrorCode {
+
+    #[graphql(name = "GRAPHQL_ERROR")]
+    GRAPHQLERROR,
+
+    #[graphql(name = "NOT_FOUND")]
+    NOTFOUND,
+
+    #[graphql(name = "INVALID")]
+    INVALID,
+
+}
+
+
+#[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum DiscountErrorCode {
+
+    #[graphql(name = "ALREADY_EXISTS")]
+    ALREADYEXISTS,
+
+    #[graphql(name = "GRAPHQL_ERROR")]
+    GRAPHQLERROR,
+
+    #[graphql(name = "INVALID")]
+    INVALID,
+
+    #[graphql(name = "NOT_FOUND")]
+    NOTFOUND,
+
+    #[graphql(name = "REQUIRED")]
+    REQUIRED,
+
+    #[graphql(name = "UNIQUE")]
+    UNIQUE,
+
+    #[graphql(name = "CANNOT_MANAGE_PRODUCT_WITHOUT_VARIANT")]
+    CANNOTMANAGEPRODUCTWITHOUTVARIANT,
+
+    #[graphql(name = "DUPLICATED_INPUT_ITEM")]
+    DUPLICATEDINPUTITEM,
+
+    #[graphql(name = "VOUCHER_ALREADY_USED")]
+    VOUCHERALREADYUSED,
 
 }
 
@@ -1105,6 +2002,36 @@ pub enum DiscountValueTypeEnum {
 
     #[graphql(name = "PERCENTAGE")]
     PERCENTAGE,
+
+}
+
+
+#[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum DistanceUnitsEnum {
+
+    #[graphql(name = "MM")]
+    MM,
+
+    #[graphql(name = "CM")]
+    CM,
+
+    #[graphql(name = "DM")]
+    DM,
+
+    #[graphql(name = "M")]
+    M,
+
+    #[graphql(name = "KM")]
+    KM,
+
+    #[graphql(name = "FT")]
+    FT,
+
+    #[graphql(name = "YD")]
+    YD,
+
+    #[graphql(name = "INCH")]
+    INCH,
 
 }
 
@@ -1158,6 +2085,66 @@ pub enum EventDeliveryStatusEnum {
 
 
 #[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum ExportErrorCode {
+
+    #[graphql(name = "GRAPHQL_ERROR")]
+    GRAPHQLERROR,
+
+    #[graphql(name = "INVALID")]
+    INVALID,
+
+    #[graphql(name = "NOT_FOUND")]
+    NOTFOUND,
+
+    #[graphql(name = "REQUIRED")]
+    REQUIRED,
+
+}
+
+
+#[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum ExportEventsEnum {
+
+    #[graphql(name = "EXPORT_PENDING")]
+    EXPORTPENDING,
+
+    #[graphql(name = "EXPORT_SUCCESS")]
+    EXPORTSUCCESS,
+
+    #[graphql(name = "EXPORT_FAILED")]
+    EXPORTFAILED,
+
+    #[graphql(name = "EXPORT_DELETED")]
+    EXPORTDELETED,
+
+    #[graphql(name = "EXPORTED_FILE_SENT")]
+    EXPORTEDFILESENT,
+
+    #[graphql(name = "EXPORT_FAILED_INFO_SENT")]
+    EXPORTFAILEDINFOSENT,
+
+}
+
+
+#[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum ExportFileSortField {
+
+    #[graphql(name = "STATUS")]
+    STATUS,
+
+    #[graphql(name = "CREATED_AT")]
+    CREATEDAT,
+
+    #[graphql(name = "UPDATED_AT")]
+    UPDATEDAT,
+
+    #[graphql(name = "LAST_MODIFIED_AT")]
+    LASTMODIFIEDAT,
+
+}
+
+
+#[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
 pub enum ExportScope {
 
     #[graphql(name = "ALL")]
@@ -1168,6 +2155,24 @@ pub enum ExportScope {
 
     #[graphql(name = "FILTER")]
     FILTER,
+
+}
+
+
+#[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum ExternalNotificationErrorCodes {
+
+    #[graphql(name = "REQUIRED")]
+    REQUIRED,
+
+    #[graphql(name = "INVALID_MODEL_TYPE")]
+    INVALIDMODELTYPE,
+
+    #[graphql(name = "NOT_FOUND")]
+    NOTFOUND,
+
+    #[graphql(name = "CHANNEL_INACTIVE")]
+    CHANNELINACTIVE,
 
 }
 
@@ -1212,6 +2217,108 @@ pub enum FulfillmentStatus {
 
 
 #[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum GiftCardErrorCode {
+
+    #[graphql(name = "ALREADY_EXISTS")]
+    ALREADYEXISTS,
+
+    #[graphql(name = "GRAPHQL_ERROR")]
+    GRAPHQLERROR,
+
+    #[graphql(name = "INVALID")]
+    INVALID,
+
+    #[graphql(name = "NOT_FOUND")]
+    NOTFOUND,
+
+    #[graphql(name = "REQUIRED")]
+    REQUIRED,
+
+    #[graphql(name = "UNIQUE")]
+    UNIQUE,
+
+    #[graphql(name = "EXPIRED_GIFT_CARD")]
+    EXPIREDGIFTCARD,
+
+    #[graphql(name = "DUPLICATED_INPUT_ITEM")]
+    DUPLICATEDINPUTITEM,
+
+    #[graphql(name = "CANNOT_ASSIGN")]
+    CANNOTASSIGN,
+
+}
+
+
+#[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum GiftCardEventsEnum {
+
+    #[graphql(name = "ISSUED")]
+    ISSUED,
+
+    #[graphql(name = "BOUGHT")]
+    BOUGHT,
+
+    #[graphql(name = "UPDATED")]
+    UPDATED,
+
+    #[graphql(name = "ACTIVATED")]
+    ACTIVATED,
+
+    #[graphql(name = "DEACTIVATED")]
+    DEACTIVATED,
+
+    #[graphql(name = "BALANCE_RESET")]
+    BALANCERESET,
+
+    #[graphql(name = "EXPIRY_DATE_UPDATED")]
+    EXPIRYDATEUPDATED,
+
+    #[graphql(name = "TAGS_UPDATED")]
+    TAGSUPDATED,
+
+    #[graphql(name = "SENT_TO_CUSTOMER")]
+    SENTTOCUSTOMER,
+
+    #[graphql(name = "RESENT")]
+    RESENT,
+
+    #[graphql(name = "NOTE_ADDED")]
+    NOTEADDED,
+
+    #[graphql(name = "USED_IN_ORDER")]
+    USEDINORDER,
+
+    #[graphql(name = "REFUNDED_IN_ORDER")]
+    REFUNDEDINORDER,
+
+    #[graphql(name = "BALANCE_ADJUSTED")]
+    BALANCEADJUSTED,
+
+    #[graphql(name = "ASSIGNED_TO_USER")]
+    ASSIGNEDTOUSER,
+
+    #[graphql(name = "UNASSIGNED_FROM_USER")]
+    UNASSIGNEDFROMUSER,
+
+}
+
+
+#[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum GiftCardSettingsErrorCode {
+
+    #[graphql(name = "INVALID")]
+    INVALID,
+
+    #[graphql(name = "REQUIRED")]
+    REQUIRED,
+
+    #[graphql(name = "GRAPHQL_ERROR")]
+    GRAPHQLERROR,
+
+}
+
+
+#[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
 pub enum GiftCardSettingsExpiryTypeEnum {
 
     #[graphql(name = "NEVER_EXPIRE")]
@@ -1240,6 +2347,54 @@ pub enum GiftCardSortField {
 
     #[graphql(name = "RANK")]
     RANK,
+
+}
+
+
+#[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum InvoiceErrorCode {
+
+    #[graphql(name = "REQUIRED")]
+    REQUIRED,
+
+    #[graphql(name = "NOT_READY")]
+    NOTREADY,
+
+    #[graphql(name = "URL_NOT_SET")]
+    URLNOTSET,
+
+    #[graphql(name = "EMAIL_NOT_SET")]
+    EMAILNOTSET,
+
+    #[graphql(name = "NUMBER_NOT_SET")]
+    NUMBERNOTSET,
+
+    #[graphql(name = "NOT_FOUND")]
+    NOTFOUND,
+
+    #[graphql(name = "INVALID_STATUS")]
+    INVALIDSTATUS,
+
+    #[graphql(name = "NO_INVOICE_PLUGIN")]
+    NOINVOICEPLUGIN,
+
+}
+
+
+#[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum JobStatusEnum {
+
+    #[graphql(name = "PENDING")]
+    PENDING,
+
+    #[graphql(name = "SUCCESS")]
+    SUCCESS,
+
+    #[graphql(name = "FAILED")]
+    FAILED,
+
+    #[graphql(name = "DELETED")]
+    DELETED,
 
 }
 
@@ -3708,6 +4863,57 @@ pub enum MeasurementUnitsEnum {
 
 
 #[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum MediaChoicesSortField {
+
+    #[graphql(name = "ID")]
+    ID,
+
+}
+
+
+#[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum MenuErrorCode {
+
+    #[graphql(name = "CANNOT_ASSIGN_NODE")]
+    CANNOTASSIGNNODE,
+
+    #[graphql(name = "GRAPHQL_ERROR")]
+    GRAPHQLERROR,
+
+    #[graphql(name = "INVALID")]
+    INVALID,
+
+    #[graphql(name = "INVALID_MENU_ITEM")]
+    INVALIDMENUITEM,
+
+    #[graphql(name = "NO_MENU_ITEM_PROVIDED")]
+    NOMENUITEMPROVIDED,
+
+    #[graphql(name = "NOT_FOUND")]
+    NOTFOUND,
+
+    #[graphql(name = "REQUIRED")]
+    REQUIRED,
+
+    #[graphql(name = "TOO_MANY_MENU_ITEMS")]
+    TOOMANYMENUITEMS,
+
+    #[graphql(name = "UNIQUE")]
+    UNIQUE,
+
+}
+
+
+#[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum MenuItemsSortField {
+
+    #[graphql(name = "NAME")]
+    NAME,
+
+}
+
+
+#[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
 pub enum MenuSortField {
 
     #[graphql(name = "NAME")]
@@ -3715,6 +4921,57 @@ pub enum MenuSortField {
 
     #[graphql(name = "ITEMS_COUNT")]
     ITEMSCOUNT,
+
+}
+
+
+#[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum MetadataErrorCode {
+
+    #[graphql(name = "GRAPHQL_ERROR")]
+    GRAPHQLERROR,
+
+    #[graphql(name = "INVALID")]
+    INVALID,
+
+    #[graphql(name = "NOT_FOUND")]
+    NOTFOUND,
+
+    #[graphql(name = "REQUIRED")]
+    REQUIRED,
+
+    #[graphql(name = "NOT_UPDATED")]
+    NOTUPDATED,
+
+}
+
+
+#[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum NavigationType {
+
+    #[graphql(name = "MAIN")]
+    MAIN,
+
+    #[graphql(name = "SECONDARY")]
+    SECONDARY,
+
+}
+
+
+#[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum OrderAction {
+
+    #[graphql(name = "CAPTURE")]
+    CAPTURE,
+
+    #[graphql(name = "MARK_AS_PAID")]
+    MARKASPAID,
+
+    #[graphql(name = "REFUND")]
+    REFUND,
+
+    #[graphql(name = "VOID")]
+    VOID,
 
 }
 
@@ -3730,6 +4987,66 @@ pub enum OrderAuthorizeStatusEnum {
 
     #[graphql(name = "FULL")]
     FULL,
+
+}
+
+
+#[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum OrderBulkCreateErrorCode {
+
+    #[graphql(name = "GRAPHQL_ERROR")]
+    GRAPHQLERROR,
+
+    #[graphql(name = "REQUIRED")]
+    REQUIRED,
+
+    #[graphql(name = "INVALID")]
+    INVALID,
+
+    #[graphql(name = "NOT_FOUND")]
+    NOTFOUND,
+
+    #[graphql(name = "UNIQUE")]
+    UNIQUE,
+
+    #[graphql(name = "BULK_LIMIT")]
+    BULKLIMIT,
+
+    #[graphql(name = "TOO_MANY_IDENTIFIERS")]
+    TOOMANYIDENTIFIERS,
+
+    #[graphql(name = "FUTURE_DATE")]
+    FUTUREDATE,
+
+    #[graphql(name = "INVALID_QUANTITY")]
+    INVALIDQUANTITY,
+
+    #[graphql(name = "PRICE_ERROR")]
+    PRICEERROR,
+
+    #[graphql(name = "NOTE_LENGTH")]
+    NOTELENGTH,
+
+    #[graphql(name = "INSUFFICIENT_STOCK")]
+    INSUFFICIENTSTOCK,
+
+    #[graphql(name = "NON_EXISTING_STOCK")]
+    NONEXISTINGSTOCK,
+
+    #[graphql(name = "NO_RELATED_ORDER_LINE")]
+    NORELATEDORDERLINE,
+
+    #[graphql(name = "NEGATIVE_INDEX")]
+    NEGATIVEINDEX,
+
+    #[graphql(name = "ORDER_LINE_FULFILLMENT_LINE_MISMATCH")]
+    ORDERLINEFULFILLMENTLINEMISMATCH,
+
+    #[graphql(name = "METADATA_KEY_REQUIRED")]
+    METADATAKEYREQUIRED,
+
+    #[graphql(name = "INCORRECT_CURRENCY")]
+    INCORRECTCURRENCY,
 
 }
 
@@ -3753,6 +5070,54 @@ pub enum OrderChargeStatusEnum {
 
 
 #[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum OrderCreateFromCheckoutErrorCode {
+
+    #[graphql(name = "GRAPHQL_ERROR")]
+    GRAPHQLERROR,
+
+    #[graphql(name = "CHECKOUT_NOT_FOUND")]
+    CHECKOUTNOTFOUND,
+
+    #[graphql(name = "CHANNEL_INACTIVE")]
+    CHANNELINACTIVE,
+
+    #[graphql(name = "INSUFFICIENT_STOCK")]
+    INSUFFICIENTSTOCK,
+
+    #[graphql(name = "VOUCHER_NOT_APPLICABLE")]
+    VOUCHERNOTAPPLICABLE,
+
+    #[graphql(name = "GIFT_CARD_NOT_APPLICABLE")]
+    GIFTCARDNOTAPPLICABLE,
+
+    #[graphql(name = "TAX_ERROR")]
+    TAXERROR,
+
+    #[graphql(name = "SHIPPING_METHOD_NOT_SET")]
+    SHIPPINGMETHODNOTSET,
+
+    #[graphql(name = "BILLING_ADDRESS_NOT_SET")]
+    BILLINGADDRESSNOTSET,
+
+    #[graphql(name = "SHIPPING_ADDRESS_NOT_SET")]
+    SHIPPINGADDRESSNOTSET,
+
+    #[graphql(name = "INVALID_SHIPPING_METHOD")]
+    INVALIDSHIPPINGMETHOD,
+
+    #[graphql(name = "NO_LINES")]
+    NOLINES,
+
+    #[graphql(name = "EMAIL_NOT_SET")]
+    EMAILNOTSET,
+
+    #[graphql(name = "UNAVAILABLE_VARIANT_IN_CHANNEL")]
+    UNAVAILABLEVARIANTINCHANNEL,
+
+}
+
+
+#[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
 pub enum OrderDirection {
 
     #[graphql(name = "ASC")]
@@ -3760,6 +5125,174 @@ pub enum OrderDirection {
 
     #[graphql(name = "DESC")]
     DESC,
+
+}
+
+
+#[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum OrderDiscountType {
+
+    #[graphql(name = "SALE")]
+    SALE,
+
+    #[graphql(name = "VOUCHER")]
+    VOUCHER,
+
+    #[graphql(name = "MANUAL")]
+    MANUAL,
+
+    #[graphql(name = "PROMOTION")]
+    PROMOTION,
+
+    #[graphql(name = "ORDER_PROMOTION")]
+    ORDERPROMOTION,
+
+}
+
+
+#[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum OrderErrorCode {
+
+    #[graphql(name = "BILLING_ADDRESS_NOT_SET")]
+    BILLINGADDRESSNOTSET,
+
+    #[graphql(name = "CANNOT_CANCEL_FULFILLMENT")]
+    CANNOTCANCELFULFILLMENT,
+
+    #[graphql(name = "CANNOT_CANCEL_ORDER")]
+    CANNOTCANCELORDER,
+
+    #[graphql(name = "CANNOT_DELETE")]
+    CANNOTDELETE,
+
+    #[graphql(name = "CANNOT_DISCOUNT")]
+    CANNOTDISCOUNT,
+
+    #[graphql(name = "CANNOT_REFUND")]
+    CANNOTREFUND,
+
+    #[graphql(name = "CANNOT_FULFILL_UNPAID_ORDER")]
+    CANNOTFULFILLUNPAIDORDER,
+
+    #[graphql(name = "CAPTURE_INACTIVE_PAYMENT")]
+    CAPTUREINACTIVEPAYMENT,
+
+    #[graphql(name = "GIFT_CARD_LINE")]
+    GIFTCARDLINE,
+
+    #[graphql(name = "NOT_EDITABLE")]
+    NOTEDITABLE,
+
+    #[graphql(name = "FULFILL_ORDER_LINE")]
+    FULFILLORDERLINE,
+
+    #[graphql(name = "GRAPHQL_ERROR")]
+    GRAPHQLERROR,
+
+    #[graphql(name = "INVALID")]
+    INVALID,
+
+    #[graphql(name = "PRODUCT_NOT_PUBLISHED")]
+    PRODUCTNOTPUBLISHED,
+
+    #[graphql(name = "PRODUCT_UNAVAILABLE_FOR_PURCHASE")]
+    PRODUCTUNAVAILABLEFORPURCHASE,
+
+    #[graphql(name = "NOT_FOUND")]
+    NOTFOUND,
+
+    #[graphql(name = "ORDER_NO_SHIPPING_ADDRESS")]
+    ORDERNOSHIPPINGADDRESS,
+
+    #[graphql(name = "PAYMENT_ERROR")]
+    PAYMENTERROR,
+
+    #[graphql(name = "PAYMENT_MISSING")]
+    PAYMENTMISSING,
+
+    #[graphql(name = "TRANSACTION_ERROR")]
+    TRANSACTIONERROR,
+
+    #[graphql(name = "REQUIRED")]
+    REQUIRED,
+
+    #[graphql(name = "SHIPPING_METHOD_NOT_APPLICABLE")]
+    SHIPPINGMETHODNOTAPPLICABLE,
+
+    #[graphql(name = "SHIPPING_METHOD_REQUIRED")]
+    SHIPPINGMETHODREQUIRED,
+
+    #[graphql(name = "TAX_ERROR")]
+    TAXERROR,
+
+    #[graphql(name = "UNIQUE")]
+    UNIQUE,
+
+    #[graphql(name = "VOID_INACTIVE_PAYMENT")]
+    VOIDINACTIVEPAYMENT,
+
+    #[graphql(name = "ZERO_QUANTITY")]
+    ZEROQUANTITY,
+
+    #[graphql(name = "INVALID_QUANTITY")]
+    INVALIDQUANTITY,
+
+    #[graphql(name = "INSUFFICIENT_STOCK")]
+    INSUFFICIENTSTOCK,
+
+    #[graphql(name = "DUPLICATED_INPUT_ITEM")]
+    DUPLICATEDINPUTITEM,
+
+    #[graphql(name = "NOT_AVAILABLE_IN_CHANNEL")]
+    NOTAVAILABLEINCHANNEL,
+
+    #[graphql(name = "CHANNEL_INACTIVE")]
+    CHANNELINACTIVE,
+
+    #[graphql(name = "INVALID_VOUCHER")]
+    INVALIDVOUCHER,
+
+    #[graphql(name = "INVALID_VOUCHER_CODE")]
+    INVALIDVOUCHERCODE,
+
+    #[graphql(name = "NON_EDITABLE_GIFT_LINE")]
+    NONEDITABLEGIFTLINE,
+
+    #[graphql(name = "NON_REMOVABLE_GIFT_LINE")]
+    NONREMOVABLEGIFTLINE,
+
+    #[graphql(name = "MISSING_ADDRESS_DATA")]
+    MISSINGADDRESSDATA,
+
+}
+
+
+#[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum OrderEventsEmailsEnum {
+
+    #[graphql(name = "PAYMENT_CONFIRMATION")]
+    PAYMENTCONFIRMATION,
+
+    #[graphql(name = "CONFIRMED")]
+    CONFIRMED,
+
+    #[graphql(name = "SHIPPING_CONFIRMATION")]
+    SHIPPINGCONFIRMATION,
+
+    #[graphql(name = "TRACKING_UPDATED")]
+    TRACKINGUPDATED,
+
+    #[graphql(name = "ORDER_CONFIRMATION")]
+    ORDERCONFIRMATION,
+
+    #[graphql(name = "ORDER_CANCEL")]
+    ORDERCANCEL,
+
+    #[graphql(name = "ORDER_REFUND")]
+    ORDERREFUND,
+
+    #[graphql(name = "FULFILLMENT_CONFIRMATION")]
+    FULFILLMENTCONFIRMATION,
 
 }
 
@@ -3921,6 +5454,165 @@ pub enum OrderEventsEnum {
 
 
 #[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum OrderGrantRefundCreateErrorCode {
+
+    #[graphql(name = "GRAPHQL_ERROR")]
+    GRAPHQLERROR,
+
+    #[graphql(name = "NOT_FOUND")]
+    NOTFOUND,
+
+    #[graphql(name = "NOT_CONFIGURED")]
+    NOTCONFIGURED,
+
+    #[graphql(name = "SHIPPING_COSTS_ALREADY_GRANTED")]
+    SHIPPINGCOSTSALREADYGRANTED,
+
+    #[graphql(name = "AMOUNT_GREATER_THAN_AVAILABLE")]
+    AMOUNTGREATERTHANAVAILABLE,
+
+    #[graphql(name = "REQUIRED")]
+    REQUIRED,
+
+    #[graphql(name = "INVALID")]
+    INVALID,
+
+}
+
+
+#[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum OrderGrantRefundCreateLineErrorCode {
+
+    #[graphql(name = "GRAPHQL_ERROR")]
+    GRAPHQLERROR,
+
+    #[graphql(name = "NOT_FOUND")]
+    NOTFOUND,
+
+    #[graphql(name = "QUANTITY_GREATER_THAN_AVAILABLE")]
+    QUANTITYGREATERTHANAVAILABLE,
+
+    #[graphql(name = "INVALID")]
+    INVALID,
+
+    #[graphql(name = "NOT_CONFIGURED")]
+    NOTCONFIGURED,
+
+}
+
+
+#[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum OrderGrantRefundUpdateErrorCode {
+
+    #[graphql(name = "GRAPHQL_ERROR")]
+    GRAPHQLERROR,
+
+    #[graphql(name = "NOT_FOUND")]
+    NOTFOUND,
+
+    #[graphql(name = "NOT_CONFIGURED")]
+    NOTCONFIGURED,
+
+    #[graphql(name = "REQUIRED")]
+    REQUIRED,
+
+    #[graphql(name = "INVALID")]
+    INVALID,
+
+    #[graphql(name = "AMOUNT_GREATER_THAN_AVAILABLE")]
+    AMOUNTGREATERTHANAVAILABLE,
+
+    #[graphql(name = "SHIPPING_COSTS_ALREADY_GRANTED")]
+    SHIPPINGCOSTSALREADYGRANTED,
+
+}
+
+
+#[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum OrderGrantRefundUpdateLineErrorCode {
+
+    #[graphql(name = "GRAPHQL_ERROR")]
+    GRAPHQLERROR,
+
+    #[graphql(name = "NOT_FOUND")]
+    NOTFOUND,
+
+    #[graphql(name = "QUANTITY_GREATER_THAN_AVAILABLE")]
+    QUANTITYGREATERTHANAVAILABLE,
+
+    #[graphql(name = "INVALID")]
+    INVALID,
+
+    #[graphql(name = "NOT_CONFIGURED")]
+    NOTCONFIGURED,
+
+}
+
+
+#[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum OrderGrantedRefundStatusEnum {
+
+    #[graphql(name = "NONE")]
+    NONE,
+
+    #[graphql(name = "PENDING")]
+    PENDING,
+
+    #[graphql(name = "SUCCESS")]
+    SUCCESS,
+
+    #[graphql(name = "FAILURE")]
+    FAILURE,
+
+}
+
+
+#[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum OrderNoteAddErrorCode {
+
+    #[graphql(name = "GRAPHQL_ERROR")]
+    GRAPHQLERROR,
+
+    #[graphql(name = "REQUIRED")]
+    REQUIRED,
+
+}
+
+
+#[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum OrderNoteUpdateErrorCode {
+
+    #[graphql(name = "GRAPHQL_ERROR")]
+    GRAPHQLERROR,
+
+    #[graphql(name = "NOT_FOUND")]
+    NOTFOUND,
+
+    #[graphql(name = "REQUIRED")]
+    REQUIRED,
+
+}
+
+
+#[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum OrderOriginEnum {
+
+    #[graphql(name = "CHECKOUT")]
+    CHECKOUT,
+
+    #[graphql(name = "DRAFT")]
+    DRAFT,
+
+    #[graphql(name = "REISSUE")]
+    REISSUE,
+
+    #[graphql(name = "BULK_CREATE")]
+    BULKCREATE,
+
+}
+
+
+#[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
 pub enum OrderSortField {
 
     #[graphql(name = "NUMBER")]
@@ -3987,6 +5679,60 @@ pub enum OrderStatus {
 
 
 #[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum OrderStatusFilter {
+
+    #[graphql(name = "READY_TO_FULFILL")]
+    READYTOFULFILL,
+
+    #[graphql(name = "READY_TO_CAPTURE")]
+    READYTOCAPTURE,
+
+    #[graphql(name = "UNFULFILLED")]
+    UNFULFILLED,
+
+    #[graphql(name = "UNCONFIRMED")]
+    UNCONFIRMED,
+
+    #[graphql(name = "PARTIALLY_FULFILLED")]
+    PARTIALLYFULFILLED,
+
+    #[graphql(name = "FULFILLED")]
+    FULFILLED,
+
+    #[graphql(name = "CANCELED")]
+    CANCELED,
+
+}
+
+
+#[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum PageErrorCode {
+
+    #[graphql(name = "GRAPHQL_ERROR")]
+    GRAPHQLERROR,
+
+    #[graphql(name = "INVALID")]
+    INVALID,
+
+    #[graphql(name = "NOT_FOUND")]
+    NOTFOUND,
+
+    #[graphql(name = "REQUIRED")]
+    REQUIRED,
+
+    #[graphql(name = "UNIQUE")]
+    UNIQUE,
+
+    #[graphql(name = "DUPLICATED_INPUT_ITEM")]
+    DUPLICATEDINPUTITEM,
+
+    #[graphql(name = "ATTRIBUTE_ALREADY_ASSIGNED")]
+    ATTRIBUTEALREADYASSIGNED,
+
+}
+
+
+#[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
 pub enum PageSortField {
 
     #[graphql(name = "TITLE")]
@@ -4039,6 +5785,228 @@ pub enum PasswordLoginModeEnum {
 
     #[graphql(name = "DISABLED")]
     DISABLED,
+
+}
+
+
+#[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum PaymentChargeStatusEnum {
+
+    #[graphql(name = "NOT_CHARGED")]
+    NOTCHARGED,
+
+    #[graphql(name = "PENDING")]
+    PENDING,
+
+    #[graphql(name = "PARTIALLY_CHARGED")]
+    PARTIALLYCHARGED,
+
+    #[graphql(name = "FULLY_CHARGED")]
+    FULLYCHARGED,
+
+    #[graphql(name = "PARTIALLY_REFUNDED")]
+    PARTIALLYREFUNDED,
+
+    #[graphql(name = "FULLY_REFUNDED")]
+    FULLYREFUNDED,
+
+    #[graphql(name = "REFUSED")]
+    REFUSED,
+
+    #[graphql(name = "CANCELLED")]
+    CANCELLED,
+
+}
+
+
+#[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum PaymentErrorCode {
+
+    #[graphql(name = "BILLING_ADDRESS_NOT_SET")]
+    BILLINGADDRESSNOTSET,
+
+    #[graphql(name = "GRAPHQL_ERROR")]
+    GRAPHQLERROR,
+
+    #[graphql(name = "INVALID")]
+    INVALID,
+
+    #[graphql(name = "NOT_FOUND")]
+    NOTFOUND,
+
+    #[graphql(name = "REQUIRED")]
+    REQUIRED,
+
+    #[graphql(name = "UNIQUE")]
+    UNIQUE,
+
+    #[graphql(name = "PARTIAL_PAYMENT_NOT_ALLOWED")]
+    PARTIALPAYMENTNOTALLOWED,
+
+    #[graphql(name = "SHIPPING_ADDRESS_NOT_SET")]
+    SHIPPINGADDRESSNOTSET,
+
+    #[graphql(name = "INVALID_SHIPPING_METHOD")]
+    INVALIDSHIPPINGMETHOD,
+
+    #[graphql(name = "SHIPPING_METHOD_NOT_SET")]
+    SHIPPINGMETHODNOTSET,
+
+    #[graphql(name = "PAYMENT_ERROR")]
+    PAYMENTERROR,
+
+    #[graphql(name = "NOT_SUPPORTED_GATEWAY")]
+    NOTSUPPORTEDGATEWAY,
+
+    #[graphql(name = "CHANNEL_INACTIVE")]
+    CHANNELINACTIVE,
+
+    #[graphql(name = "BALANCE_CHECK_ERROR")]
+    BALANCECHECKERROR,
+
+    #[graphql(name = "CHECKOUT_EMAIL_NOT_SET")]
+    CHECKOUTEMAILNOTSET,
+
+    #[graphql(name = "UNAVAILABLE_VARIANT_IN_CHANNEL")]
+    UNAVAILABLEVARIANTINCHANNEL,
+
+    #[graphql(name = "NO_CHECKOUT_LINES")]
+    NOCHECKOUTLINES,
+
+    #[graphql(name = "CHECKOUT_COMPLETION_IN_PROGRESS")]
+    CHECKOUTCOMPLETIONINPROGRESS,
+
+    #[graphql(name = "CHECKOUT_HAS_TRANSACTION")]
+    CHECKOUTHASTRANSACTION,
+
+}
+
+
+#[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum PaymentGatewayConfigErrorCode {
+
+    #[graphql(name = "GRAPHQL_ERROR")]
+    GRAPHQLERROR,
+
+    #[graphql(name = "INVALID")]
+    INVALID,
+
+    #[graphql(name = "NOT_FOUND")]
+    NOTFOUND,
+
+}
+
+
+#[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum PaymentGatewayInitializeErrorCode {
+
+    #[graphql(name = "GRAPHQL_ERROR")]
+    GRAPHQLERROR,
+
+    #[graphql(name = "INVALID")]
+    INVALID,
+
+    #[graphql(name = "NOT_FOUND")]
+    NOTFOUND,
+
+}
+
+
+#[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum PaymentGatewayInitializeTokenizationErrorCode {
+
+    #[graphql(name = "GRAPHQL_ERROR")]
+    GRAPHQLERROR,
+
+    #[graphql(name = "INVALID")]
+    INVALID,
+
+    #[graphql(name = "NOT_FOUND")]
+    NOTFOUND,
+
+    #[graphql(name = "CHANNEL_INACTIVE")]
+    CHANNELINACTIVE,
+
+    #[graphql(name = "GATEWAY_ERROR")]
+    GATEWAYERROR,
+
+}
+
+
+#[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum PaymentGatewayInitializeTokenizationResult {
+
+    #[graphql(name = "SUCCESSFULLY_INITIALIZED")]
+    SUCCESSFULLYINITIALIZED,
+
+    #[graphql(name = "FAILED_TO_INITIALIZE")]
+    FAILEDTOINITIALIZE,
+
+    #[graphql(name = "FAILED_TO_DELIVER")]
+    FAILEDTODELIVER,
+
+}
+
+
+#[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum PaymentMethodInitializeTokenizationErrorCode {
+
+    #[graphql(name = "GRAPHQL_ERROR")]
+    GRAPHQLERROR,
+
+    #[graphql(name = "INVALID")]
+    INVALID,
+
+    #[graphql(name = "NOT_FOUND")]
+    NOTFOUND,
+
+    #[graphql(name = "CHANNEL_INACTIVE")]
+    CHANNELINACTIVE,
+
+    #[graphql(name = "GATEWAY_ERROR")]
+    GATEWAYERROR,
+
+}
+
+
+#[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum PaymentMethodProcessTokenizationErrorCode {
+
+    #[graphql(name = "GRAPHQL_ERROR")]
+    GRAPHQLERROR,
+
+    #[graphql(name = "INVALID")]
+    INVALID,
+
+    #[graphql(name = "NOT_FOUND")]
+    NOTFOUND,
+
+    #[graphql(name = "CHANNEL_INACTIVE")]
+    CHANNELINACTIVE,
+
+    #[graphql(name = "GATEWAY_ERROR")]
+    GATEWAYERROR,
+
+}
+
+
+#[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum PaymentMethodTokenizationResult {
+
+    #[graphql(name = "SUCCESSFULLY_TOKENIZED")]
+    SUCCESSFULLYTOKENIZED,
+
+    #[graphql(name = "PENDING")]
+    PENDING,
+
+    #[graphql(name = "ADDITIONAL_ACTION_REQUIRED")]
+    ADDITIONALACTIONREQUIRED,
+
+    #[graphql(name = "FAILED_TO_TOKENIZE")]
+    FAILEDTOTOKENIZE,
+
+    #[graphql(name = "FAILED_TO_DELIVER")]
+    FAILEDTODELIVER,
 
 }
 
@@ -4140,6 +6108,39 @@ pub enum PermissionEnum {
 
 
 #[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum PermissionGroupErrorCode {
+
+    #[graphql(name = "REQUIRED")]
+    REQUIRED,
+
+    #[graphql(name = "UNIQUE")]
+    UNIQUE,
+
+    #[graphql(name = "ASSIGN_NON_STAFF_MEMBER")]
+    ASSIGNNONSTAFFMEMBER,
+
+    #[graphql(name = "DUPLICATED_INPUT_ITEM")]
+    DUPLICATEDINPUTITEM,
+
+    #[graphql(name = "CANNOT_REMOVE_FROM_LAST_GROUP")]
+    CANNOTREMOVEFROMLASTGROUP,
+
+    #[graphql(name = "LEFT_NOT_MANAGEABLE_PERMISSION")]
+    LEFTNOTMANAGEABLEPERMISSION,
+
+    #[graphql(name = "OUT_OF_SCOPE_PERMISSION")]
+    OUTOFSCOPEPERMISSION,
+
+    #[graphql(name = "OUT_OF_SCOPE_USER")]
+    OUTOFSCOPEUSER,
+
+    #[graphql(name = "OUT_OF_SCOPE_CHANNEL")]
+    OUTOFSCOPECHANNEL,
+
+}
+
+
+#[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
 pub enum PermissionGroupSortField {
 
     #[graphql(name = "NAME")]
@@ -4156,6 +6157,30 @@ pub enum PluginConfigurationType {
 
     #[graphql(name = "GLOBAL")]
     GLOBAL,
+
+}
+
+
+#[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum PluginErrorCode {
+
+    #[graphql(name = "GRAPHQL_ERROR")]
+    GRAPHQLERROR,
+
+    #[graphql(name = "INVALID")]
+    INVALID,
+
+    #[graphql(name = "PLUGIN_MISCONFIGURED")]
+    PLUGINMISCONFIGURED,
+
+    #[graphql(name = "NOT_FOUND")]
+    NOTFOUND,
+
+    #[graphql(name = "REQUIRED")]
+    REQUIRED,
+
+    #[graphql(name = "UNIQUE")]
+    UNIQUE,
 
 }
 
@@ -4192,6 +6217,129 @@ pub enum ProductAttributeType {
 
     #[graphql(name = "VARIANT")]
     VARIANT,
+
+}
+
+
+#[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum ProductBulkCreateErrorCode {
+
+    #[graphql(name = "ATTRIBUTE_ALREADY_ASSIGNED")]
+    ATTRIBUTEALREADYASSIGNED,
+
+    #[graphql(name = "ATTRIBUTE_CANNOT_BE_ASSIGNED")]
+    ATTRIBUTECANNOTBEASSIGNED,
+
+    #[graphql(name = "ATTRIBUTE_VARIANTS_DISABLED")]
+    ATTRIBUTEVARIANTSDISABLED,
+
+    #[graphql(name = "BLANK")]
+    BLANK,
+
+    #[graphql(name = "MAX_LENGTH")]
+    MAXLENGTH,
+
+    #[graphql(name = "DUPLICATED_INPUT_ITEM")]
+    DUPLICATEDINPUTITEM,
+
+    #[graphql(name = "GRAPHQL_ERROR")]
+    GRAPHQLERROR,
+
+    #[graphql(name = "INVALID")]
+    INVALID,
+
+    #[graphql(name = "INVALID_PRICE")]
+    INVALIDPRICE,
+
+    #[graphql(name = "PRODUCT_WITHOUT_CATEGORY")]
+    PRODUCTWITHOUTCATEGORY,
+
+    #[graphql(name = "NOT_FOUND")]
+    NOTFOUND,
+
+    #[graphql(name = "REQUIRED")]
+    REQUIRED,
+
+    #[graphql(name = "UNIQUE")]
+    UNIQUE,
+
+    #[graphql(name = "PRODUCT_NOT_ASSIGNED_TO_CHANNEL")]
+    PRODUCTNOTASSIGNEDTOCHANNEL,
+
+    #[graphql(name = "UNSUPPORTED_MEDIA_PROVIDER")]
+    UNSUPPORTEDMEDIAPROVIDER,
+
+    #[graphql(name = "FILE_SIZE_LIMIT_EXCEEDED")]
+    FILESIZELIMITEXCEEDED,
+
+}
+
+
+#[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum ProductErrorCode {
+
+    #[graphql(name = "ALREADY_EXISTS")]
+    ALREADYEXISTS,
+
+    #[graphql(name = "ATTRIBUTE_ALREADY_ASSIGNED")]
+    ATTRIBUTEALREADYASSIGNED,
+
+    #[graphql(name = "ATTRIBUTE_CANNOT_BE_ASSIGNED")]
+    ATTRIBUTECANNOTBEASSIGNED,
+
+    #[graphql(name = "ATTRIBUTE_VARIANTS_DISABLED")]
+    ATTRIBUTEVARIANTSDISABLED,
+
+    #[graphql(name = "MEDIA_ALREADY_ASSIGNED")]
+    MEDIAALREADYASSIGNED,
+
+    #[graphql(name = "DUPLICATED_INPUT_ITEM")]
+    DUPLICATEDINPUTITEM,
+
+    #[graphql(name = "GRAPHQL_ERROR")]
+    GRAPHQLERROR,
+
+    #[graphql(name = "INVALID")]
+    INVALID,
+
+    #[graphql(name = "INVALID_PRICE")]
+    INVALIDPRICE,
+
+    #[graphql(name = "PRODUCT_WITHOUT_CATEGORY")]
+    PRODUCTWITHOUTCATEGORY,
+
+    #[graphql(name = "NOT_PRODUCTS_IMAGE")]
+    NOTPRODUCTSIMAGE,
+
+    #[graphql(name = "NOT_PRODUCTS_VARIANT")]
+    NOTPRODUCTSVARIANT,
+
+    #[graphql(name = "NOT_FOUND")]
+    NOTFOUND,
+
+    #[graphql(name = "REQUIRED")]
+    REQUIRED,
+
+    #[graphql(name = "UNIQUE")]
+    UNIQUE,
+
+    #[graphql(name = "CANNOT_MANAGE_PRODUCT_WITHOUT_VARIANT")]
+    CANNOTMANAGEPRODUCTWITHOUTVARIANT,
+
+    #[graphql(name = "PRODUCT_NOT_ASSIGNED_TO_CHANNEL")]
+    PRODUCTNOTASSIGNEDTOCHANNEL,
+
+    #[graphql(name = "UNSUPPORTED_MEDIA_PROVIDER")]
+    UNSUPPORTEDMEDIAPROVIDER,
+
+    #[graphql(name = "INVALID_FILE_TYPE")]
+    INVALIDFILETYPE,
+
+    #[graphql(name = "UNSUPPORTED_MIME_TYPE")]
+    UNSUPPORTEDMIMETYPE,
+
+    #[graphql(name = "FILE_SIZE_LIMIT_EXCEEDED")]
+    FILESIZELIMITEXCEEDED,
 
 }
 
@@ -4234,6 +6382,18 @@ pub enum ProductFieldEnum {
 
     #[graphql(name = "VARIANT_MEDIA")]
     VARIANTMEDIA,
+
+}
+
+
+#[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum ProductMediaType {
+
+    #[graphql(name = "IMAGE")]
+    IMAGE,
+
+    #[graphql(name = "VIDEO")]
+    VIDEO,
 
 }
 
@@ -4287,6 +6447,24 @@ pub enum ProductOrderField {
 
 
 #[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum ProductTranslateErrorCode {
+
+    #[graphql(name = "GRAPHQL_ERROR")]
+    GRAPHQLERROR,
+
+    #[graphql(name = "INVALID")]
+    INVALID,
+
+    #[graphql(name = "NOT_FOUND")]
+    NOTFOUND,
+
+    #[graphql(name = "REQUIRED")]
+    REQUIRED,
+
+}
+
+
+#[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
 pub enum ProductTypeConfigurable {
 
     #[graphql(name = "CONFIGURABLE")]
@@ -4332,6 +6510,51 @@ pub enum ProductTypeSortField {
 
 
 #[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum ProductVariantBulkErrorCode {
+
+    #[graphql(name = "ATTRIBUTE_ALREADY_ASSIGNED")]
+    ATTRIBUTEALREADYASSIGNED,
+
+    #[graphql(name = "ATTRIBUTE_CANNOT_BE_ASSIGNED")]
+    ATTRIBUTECANNOTBEASSIGNED,
+
+    #[graphql(name = "ATTRIBUTE_VARIANTS_DISABLED")]
+    ATTRIBUTEVARIANTSDISABLED,
+
+    #[graphql(name = "DUPLICATED_INPUT_ITEM")]
+    DUPLICATEDINPUTITEM,
+
+    #[graphql(name = "GRAPHQL_ERROR")]
+    GRAPHQLERROR,
+
+    #[graphql(name = "INVALID")]
+    INVALID,
+
+    #[graphql(name = "INVALID_PRICE")]
+    INVALIDPRICE,
+
+    #[graphql(name = "NOT_PRODUCTS_VARIANT")]
+    NOTPRODUCTSVARIANT,
+
+    #[graphql(name = "NOT_FOUND")]
+    NOTFOUND,
+
+    #[graphql(name = "REQUIRED")]
+    REQUIRED,
+
+    #[graphql(name = "UNIQUE")]
+    UNIQUE,
+
+    #[graphql(name = "PRODUCT_NOT_ASSIGNED_TO_CHANNEL")]
+    PRODUCTNOTASSIGNEDTOCHANNEL,
+
+    #[graphql(name = "STOCK_ALREADY_EXISTS")]
+    STOCKALREADYEXISTS,
+
+}
+
+
+#[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
 pub enum ProductVariantSortField {
 
     #[graphql(name = "LAST_MODIFIED_AT")]
@@ -4339,6 +6562,183 @@ pub enum ProductVariantSortField {
 
     #[graphql(name = "ID")]
     ID,
+
+}
+
+
+#[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum ProductVariantTranslateErrorCode {
+
+    #[graphql(name = "GRAPHQL_ERROR")]
+    GRAPHQLERROR,
+
+    #[graphql(name = "INVALID")]
+    INVALID,
+
+    #[graphql(name = "NOT_FOUND")]
+    NOTFOUND,
+
+    #[graphql(name = "REQUIRED")]
+    REQUIRED,
+
+}
+
+
+#[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum PromotionCreateErrorCode {
+
+    #[graphql(name = "GRAPHQL_ERROR")]
+    GRAPHQLERROR,
+
+    #[graphql(name = "NOT_FOUND")]
+    NOTFOUND,
+
+    #[graphql(name = "REQUIRED")]
+    REQUIRED,
+
+    #[graphql(name = "INVALID")]
+    INVALID,
+
+    #[graphql(name = "MULTIPLE_CURRENCIES_NOT_ALLOWED")]
+    MULTIPLECURRENCIESNOTALLOWED,
+
+    #[graphql(name = "INVALID_PRECISION")]
+    INVALIDPRECISION,
+
+    #[graphql(name = "MISSING_CHANNELS")]
+    MISSINGCHANNELS,
+
+    #[graphql(name = "RULES_NUMBER_LIMIT")]
+    RULESNUMBERLIMIT,
+
+    #[graphql(name = "GIFTS_NUMBER_LIMIT")]
+    GIFTSNUMBERLIMIT,
+
+    #[graphql(name = "INVALID_GIFT_TYPE")]
+    INVALIDGIFTTYPE,
+
+}
+
+
+#[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum PromotionDeleteErrorCode {
+
+    #[graphql(name = "GRAPHQL_ERROR")]
+    GRAPHQLERROR,
+
+    #[graphql(name = "NOT_FOUND")]
+    NOTFOUND,
+
+}
+
+
+#[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum PromotionEventsEnum {
+
+    #[graphql(name = "PROMOTION_CREATED")]
+    PROMOTIONCREATED,
+
+    #[graphql(name = "PROMOTION_UPDATED")]
+    PROMOTIONUPDATED,
+
+    #[graphql(name = "PROMOTION_STARTED")]
+    PROMOTIONSTARTED,
+
+    #[graphql(name = "PROMOTION_ENDED")]
+    PROMOTIONENDED,
+
+    #[graphql(name = "RULE_CREATED")]
+    RULECREATED,
+
+    #[graphql(name = "RULE_UPDATED")]
+    RULEUPDATED,
+
+    #[graphql(name = "RULE_DELETED")]
+    RULEDELETED,
+
+}
+
+
+#[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum PromotionRuleCreateErrorCode {
+
+    #[graphql(name = "GRAPHQL_ERROR")]
+    GRAPHQLERROR,
+
+    #[graphql(name = "NOT_FOUND")]
+    NOTFOUND,
+
+    #[graphql(name = "REQUIRED")]
+    REQUIRED,
+
+    #[graphql(name = "INVALID")]
+    INVALID,
+
+    #[graphql(name = "MULTIPLE_CURRENCIES_NOT_ALLOWED")]
+    MULTIPLECURRENCIESNOTALLOWED,
+
+    #[graphql(name = "INVALID_PRECISION")]
+    INVALIDPRECISION,
+
+    #[graphql(name = "MISSING_CHANNELS")]
+    MISSINGCHANNELS,
+
+    #[graphql(name = "RULES_NUMBER_LIMIT")]
+    RULESNUMBERLIMIT,
+
+    #[graphql(name = "GIFTS_NUMBER_LIMIT")]
+    GIFTSNUMBERLIMIT,
+
+    #[graphql(name = "INVALID_GIFT_TYPE")]
+    INVALIDGIFTTYPE,
+
+}
+
+
+#[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum PromotionRuleDeleteErrorCode {
+
+    #[graphql(name = "GRAPHQL_ERROR")]
+    GRAPHQLERROR,
+
+    #[graphql(name = "NOT_FOUND")]
+    NOTFOUND,
+
+}
+
+
+#[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum PromotionRuleUpdateErrorCode {
+
+    #[graphql(name = "GRAPHQL_ERROR")]
+    GRAPHQLERROR,
+
+    #[graphql(name = "NOT_FOUND")]
+    NOTFOUND,
+
+    #[graphql(name = "INVALID")]
+    INVALID,
+
+    #[graphql(name = "REQUIRED")]
+    REQUIRED,
+
+    #[graphql(name = "DUPLICATED_INPUT_ITEM")]
+    DUPLICATEDINPUTITEM,
+
+    #[graphql(name = "MISSING_CHANNELS")]
+    MISSINGCHANNELS,
+
+    #[graphql(name = "MULTIPLE_CURRENCIES_NOT_ALLOWED")]
+    MULTIPLECURRENCIESNOTALLOWED,
+
+    #[graphql(name = "INVALID_PRECISION")]
+    INVALIDPRECISION,
+
+    #[graphql(name = "INVALID_GIFT_TYPE")]
+    INVALIDGIFTTYPE,
+
+    #[graphql(name = "GIFTS_NUMBER_LIMIT")]
+    GIFTSNUMBERLIMIT,
 
 }
 
@@ -4374,6 +6774,39 @@ pub enum PromotionTypeEnum {
 
 
 #[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum PromotionUpdateErrorCode {
+
+    #[graphql(name = "GRAPHQL_ERROR")]
+    GRAPHQLERROR,
+
+    #[graphql(name = "NOT_FOUND")]
+    NOTFOUND,
+
+    #[graphql(name = "REQUIRED")]
+    REQUIRED,
+
+    #[graphql(name = "INVALID")]
+    INVALID,
+
+}
+
+
+#[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum RefundSettingsErrorCode {
+
+    #[graphql(name = "INVALID")]
+    INVALID,
+
+    #[graphql(name = "REQUIRED")]
+    REQUIRED,
+
+    #[graphql(name = "GRAPHQL_ERROR")]
+    GRAPHQLERROR,
+
+}
+
+
+#[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
 pub enum ReportingPeriod {
 
     #[graphql(name = "TODAY")]
@@ -4381,6 +6814,24 @@ pub enum ReportingPeriod {
 
     #[graphql(name = "THIS_MONTH")]
     THISMONTH,
+
+}
+
+
+#[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum ReturnSettingsErrorCode {
+
+    #[graphql(name = "INVALID")]
+    INVALID,
+
+    #[graphql(name = "NOT_FOUND")]
+    NOTFOUND,
+
+    #[graphql(name = "REQUIRED")]
+    REQUIRED,
+
+    #[graphql(name = "GRAPHQL_ERROR")]
+    GRAPHQLERROR,
 
 }
 
@@ -4437,6 +6888,66 @@ pub enum SaleSortField {
 
 
 #[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum SaleType {
+
+    #[graphql(name = "FIXED")]
+    FIXED,
+
+    #[graphql(name = "PERCENTAGE")]
+    PERCENTAGE,
+
+}
+
+
+#[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum SendConfirmationEmailErrorCode {
+
+    #[graphql(name = "INVALID")]
+    INVALID,
+
+    #[graphql(name = "ACCOUNT_CONFIRMED")]
+    ACCOUNTCONFIRMED,
+
+    #[graphql(name = "CONFIRMATION_ALREADY_REQUESTED")]
+    CONFIRMATIONALREADYREQUESTED,
+
+    #[graphql(name = "MISSING_CHANNEL_SLUG")]
+    MISSINGCHANNELSLUG,
+
+}
+
+
+#[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum ShippingErrorCode {
+
+    #[graphql(name = "ALREADY_EXISTS")]
+    ALREADYEXISTS,
+
+    #[graphql(name = "GRAPHQL_ERROR")]
+    GRAPHQLERROR,
+
+    #[graphql(name = "INVALID")]
+    INVALID,
+
+    #[graphql(name = "MAX_LESS_THAN_MIN")]
+    MAXLESSTHANMIN,
+
+    #[graphql(name = "NOT_FOUND")]
+    NOTFOUND,
+
+    #[graphql(name = "REQUIRED")]
+    REQUIRED,
+
+    #[graphql(name = "UNIQUE")]
+    UNIQUE,
+
+    #[graphql(name = "DUPLICATED_INPUT_ITEM")]
+    DUPLICATEDINPUTITEM,
+
+}
+
+
+#[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
 pub enum ShippingMethodTypeEnum {
 
     #[graphql(name = "PRICE")]
@@ -4444,6 +6955,36 @@ pub enum ShippingMethodTypeEnum {
 
     #[graphql(name = "WEIGHT")]
     WEIGHT,
+
+}
+
+
+#[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum ShopErrorCode {
+
+    #[graphql(name = "ALREADY_EXISTS")]
+    ALREADYEXISTS,
+
+    #[graphql(name = "CANNOT_FETCH_TAX_RATES")]
+    CANNOTFETCHTAXRATES,
+
+    #[graphql(name = "GRAPHQL_ERROR")]
+    GRAPHQLERROR,
+
+    #[graphql(name = "INVALID")]
+    INVALID,
+
+    #[graphql(name = "NOT_FOUND")]
+    NOTFOUND,
+
+    #[graphql(name = "REQUIRED")]
+    REQUIRED,
+
+    #[graphql(name = "UNIQUE")]
+    UNIQUE,
+
+    #[graphql(name = "PASSWORD_AUTH_RESTRICTION")]
+    PASSWORDAUTHRESTRICTION,
 
 }
 
@@ -4473,6 +7014,114 @@ pub enum StockAvailability {
 
 
 #[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum StockBulkUpdateErrorCode {
+
+    #[graphql(name = "GRAPHQL_ERROR")]
+    GRAPHQLERROR,
+
+    #[graphql(name = "INVALID")]
+    INVALID,
+
+    #[graphql(name = "NOT_FOUND")]
+    NOTFOUND,
+
+    #[graphql(name = "REQUIRED")]
+    REQUIRED,
+
+}
+
+
+#[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum StockErrorCode {
+
+    #[graphql(name = "ALREADY_EXISTS")]
+    ALREADYEXISTS,
+
+    #[graphql(name = "GRAPHQL_ERROR")]
+    GRAPHQLERROR,
+
+    #[graphql(name = "INVALID")]
+    INVALID,
+
+    #[graphql(name = "NOT_FOUND")]
+    NOTFOUND,
+
+    #[graphql(name = "REQUIRED")]
+    REQUIRED,
+
+    #[graphql(name = "UNIQUE")]
+    UNIQUE,
+
+}
+
+
+#[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum StockUpdatePolicyEnum {
+
+    #[graphql(name = "SKIP")]
+    SKIP,
+
+    #[graphql(name = "UPDATE")]
+    UPDATE,
+
+    #[graphql(name = "FORCE")]
+    FORCE,
+
+}
+
+
+#[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum StorePaymentMethodEnum {
+
+    #[graphql(name = "ON_SESSION")]
+    ONSESSION,
+
+    #[graphql(name = "OFF_SESSION")]
+    OFFSESSION,
+
+    #[graphql(name = "NONE")]
+    NONE,
+
+}
+
+
+#[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum StoredPaymentMethodRequestDeleteErrorCode {
+
+    #[graphql(name = "GRAPHQL_ERROR")]
+    GRAPHQLERROR,
+
+    #[graphql(name = "INVALID")]
+    INVALID,
+
+    #[graphql(name = "NOT_FOUND")]
+    NOTFOUND,
+
+    #[graphql(name = "CHANNEL_INACTIVE")]
+    CHANNELINACTIVE,
+
+    #[graphql(name = "GATEWAY_ERROR")]
+    GATEWAYERROR,
+
+}
+
+
+#[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum StoredPaymentMethodRequestDeleteResult {
+
+    #[graphql(name = "SUCCESSFULLY_DELETED")]
+    SUCCESSFULLYDELETED,
+
+    #[graphql(name = "FAILED_TO_DELETE")]
+    FAILEDTODELETE,
+
+    #[graphql(name = "FAILED_TO_DELIVER")]
+    FAILEDTODELIVER,
+
+}
+
+
+#[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
 pub enum TaxCalculationStrategy {
 
     #[graphql(name = "FLAT_RATES")]
@@ -4485,10 +7134,142 @@ pub enum TaxCalculationStrategy {
 
 
 #[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum TaxClassCreateErrorCode {
+
+    #[graphql(name = "GRAPHQL_ERROR")]
+    GRAPHQLERROR,
+
+    #[graphql(name = "INVALID")]
+    INVALID,
+
+    #[graphql(name = "NOT_FOUND")]
+    NOTFOUND,
+
+}
+
+
+#[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum TaxClassDeleteErrorCode {
+
+    #[graphql(name = "GRAPHQL_ERROR")]
+    GRAPHQLERROR,
+
+    #[graphql(name = "INVALID")]
+    INVALID,
+
+    #[graphql(name = "NOT_FOUND")]
+    NOTFOUND,
+
+}
+
+
+#[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
 pub enum TaxClassSortField {
 
     #[graphql(name = "NAME")]
     NAME,
+
+}
+
+
+#[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum TaxClassUpdateErrorCode {
+
+    #[graphql(name = "DUPLICATED_INPUT_ITEM")]
+    DUPLICATEDINPUTITEM,
+
+    #[graphql(name = "GRAPHQL_ERROR")]
+    GRAPHQLERROR,
+
+    #[graphql(name = "INVALID")]
+    INVALID,
+
+    #[graphql(name = "NOT_FOUND")]
+    NOTFOUND,
+
+}
+
+
+#[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum TaxConfigurationUpdateErrorCode {
+
+    #[graphql(name = "DUPLICATED_INPUT_ITEM")]
+    DUPLICATEDINPUTITEM,
+
+    #[graphql(name = "GRAPHQL_ERROR")]
+    GRAPHQLERROR,
+
+    #[graphql(name = "INVALID")]
+    INVALID,
+
+    #[graphql(name = "NOT_FOUND")]
+    NOTFOUND,
+
+}
+
+
+#[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum TaxCountryConfigurationDeleteErrorCode {
+
+    #[graphql(name = "GRAPHQL_ERROR")]
+    GRAPHQLERROR,
+
+    #[graphql(name = "INVALID")]
+    INVALID,
+
+    #[graphql(name = "NOT_FOUND")]
+    NOTFOUND,
+
+}
+
+
+#[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum TaxCountryConfigurationUpdateErrorCode {
+
+    #[graphql(name = "GRAPHQL_ERROR")]
+    GRAPHQLERROR,
+
+    #[graphql(name = "INVALID")]
+    INVALID,
+
+    #[graphql(name = "NOT_FOUND")]
+    NOTFOUND,
+
+    #[graphql(name = "ONLY_ONE_DEFAULT_COUNTRY_RATE_ALLOWED")]
+    ONLYONEDEFAULTCOUNTRYRATEALLOWED,
+
+    #[graphql(name = "CANNOT_CREATE_NEGATIVE_RATE")]
+    CANNOTCREATENEGATIVERATE,
+
+}
+
+
+#[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum TaxExemptionManageErrorCode {
+
+    #[graphql(name = "GRAPHQL_ERROR")]
+    GRAPHQLERROR,
+
+    #[graphql(name = "INVALID")]
+    INVALID,
+
+    #[graphql(name = "NOT_FOUND")]
+    NOTFOUND,
+
+    #[graphql(name = "NOT_EDITABLE_ORDER")]
+    NOTEDITABLEORDER,
+
+}
+
+
+#[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum TaxableObjectDiscountTypeEnum {
+
+    #[graphql(name = "SUBTOTAL")]
+    SUBTOTAL,
+
+    #[graphql(name = "SHIPPING")]
+    SHIPPING,
 
 }
 
@@ -4527,6 +7308,15 @@ pub enum TimePeriodTypeEnum {
 
 
 #[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum TokenizedPaymentFlowEnum {
+
+    #[graphql(name = "INTERACTIVE")]
+    INTERACTIVE,
+
+}
+
+
+#[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
 pub enum TransactionActionEnum {
 
     #[graphql(name = "CHARGE")]
@@ -4542,6 +7332,114 @@ pub enum TransactionActionEnum {
 
 
 #[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum TransactionCreateErrorCode {
+
+    #[graphql(name = "INVALID")]
+    INVALID,
+
+    #[graphql(name = "GRAPHQL_ERROR")]
+    GRAPHQLERROR,
+
+    #[graphql(name = "NOT_FOUND")]
+    NOTFOUND,
+
+    #[graphql(name = "INCORRECT_CURRENCY")]
+    INCORRECTCURRENCY,
+
+    #[graphql(name = "METADATA_KEY_REQUIRED")]
+    METADATAKEYREQUIRED,
+
+    #[graphql(name = "UNIQUE")]
+    UNIQUE,
+
+}
+
+
+#[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum TransactionEventReportErrorCode {
+
+    #[graphql(name = "INVALID")]
+    INVALID,
+
+    #[graphql(name = "GRAPHQL_ERROR")]
+    GRAPHQLERROR,
+
+    #[graphql(name = "NOT_FOUND")]
+    NOTFOUND,
+
+    #[graphql(name = "INCORRECT_DETAILS")]
+    INCORRECTDETAILS,
+
+    #[graphql(name = "ALREADY_EXISTS")]
+    ALREADYEXISTS,
+
+    #[graphql(name = "REQUIRED")]
+    REQUIRED,
+
+}
+
+
+#[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum TransactionEventTypeEnum {
+
+    #[graphql(name = "AUTHORIZATION_SUCCESS")]
+    AUTHORIZATIONSUCCESS,
+
+    #[graphql(name = "AUTHORIZATION_FAILURE")]
+    AUTHORIZATIONFAILURE,
+
+    #[graphql(name = "AUTHORIZATION_ADJUSTMENT")]
+    AUTHORIZATIONADJUSTMENT,
+
+    #[graphql(name = "AUTHORIZATION_REQUEST")]
+    AUTHORIZATIONREQUEST,
+
+    #[graphql(name = "AUTHORIZATION_ACTION_REQUIRED")]
+    AUTHORIZATIONACTIONREQUIRED,
+
+    #[graphql(name = "CHARGE_ACTION_REQUIRED")]
+    CHARGEACTIONREQUIRED,
+
+    #[graphql(name = "CHARGE_SUCCESS")]
+    CHARGESUCCESS,
+
+    #[graphql(name = "CHARGE_FAILURE")]
+    CHARGEFAILURE,
+
+    #[graphql(name = "CHARGE_BACK")]
+    CHARGEBACK,
+
+    #[graphql(name = "CHARGE_REQUEST")]
+    CHARGEREQUEST,
+
+    #[graphql(name = "REFUND_SUCCESS")]
+    REFUNDSUCCESS,
+
+    #[graphql(name = "REFUND_FAILURE")]
+    REFUNDFAILURE,
+
+    #[graphql(name = "REFUND_REVERSE")]
+    REFUNDREVERSE,
+
+    #[graphql(name = "REFUND_REQUEST")]
+    REFUNDREQUEST,
+
+    #[graphql(name = "CANCEL_SUCCESS")]
+    CANCELSUCCESS,
+
+    #[graphql(name = "CANCEL_FAILURE")]
+    CANCELFAILURE,
+
+    #[graphql(name = "CANCEL_REQUEST")]
+    CANCELREQUEST,
+
+    #[graphql(name = "INFO")]
+    INFO,
+
+}
+
+
+#[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
 pub enum TransactionFlowStrategyEnum {
 
     #[graphql(name = "AUTHORIZATION")]
@@ -4549,6 +7447,174 @@ pub enum TransactionFlowStrategyEnum {
 
     #[graphql(name = "CHARGE")]
     CHARGE,
+
+}
+
+
+#[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum TransactionInitializeErrorCode {
+
+    #[graphql(name = "GRAPHQL_ERROR")]
+    GRAPHQLERROR,
+
+    #[graphql(name = "INVALID")]
+    INVALID,
+
+    #[graphql(name = "NOT_FOUND")]
+    NOTFOUND,
+
+    #[graphql(name = "UNIQUE")]
+    UNIQUE,
+
+    #[graphql(name = "CHECKOUT_COMPLETION_IN_PROGRESS")]
+    CHECKOUTCOMPLETIONINPROGRESS,
+
+}
+
+
+#[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum TransactionKind {
+
+    #[graphql(name = "EXTERNAL")]
+    EXTERNAL,
+
+    #[graphql(name = "AUTH")]
+    AUTH,
+
+    #[graphql(name = "PENDING")]
+    PENDING,
+
+    #[graphql(name = "ACTION_TO_CONFIRM")]
+    ACTIONTOCONFIRM,
+
+    #[graphql(name = "REFUND")]
+    REFUND,
+
+    #[graphql(name = "REFUND_ONGOING")]
+    REFUNDONGOING,
+
+    #[graphql(name = "CAPTURE")]
+    CAPTURE,
+
+    #[graphql(name = "VOID")]
+    VOID,
+
+    #[graphql(name = "CONFIRM")]
+    CONFIRM,
+
+    #[graphql(name = "CANCEL")]
+    CANCEL,
+
+}
+
+
+#[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum TransactionProcessErrorCode {
+
+    #[graphql(name = "GRAPHQL_ERROR")]
+    GRAPHQLERROR,
+
+    #[graphql(name = "INVALID")]
+    INVALID,
+
+    #[graphql(name = "NOT_FOUND")]
+    NOTFOUND,
+
+    #[graphql(name = "TRANSACTION_ALREADY_PROCESSED")]
+    TRANSACTIONALREADYPROCESSED,
+
+    #[graphql(name = "MISSING_PAYMENT_APP_RELATION")]
+    MISSINGPAYMENTAPPRELATION,
+
+    #[graphql(name = "MISSING_PAYMENT_APP")]
+    MISSINGPAYMENTAPP,
+
+    #[graphql(name = "CHECKOUT_COMPLETION_IN_PROGRESS")]
+    CHECKOUTCOMPLETIONINPROGRESS,
+
+}
+
+
+#[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum TransactionRequestActionErrorCode {
+
+    #[graphql(name = "INVALID")]
+    INVALID,
+
+    #[graphql(name = "REQUIRED")]
+    REQUIRED,
+
+    #[graphql(name = "GRAPHQL_ERROR")]
+    GRAPHQLERROR,
+
+    #[graphql(name = "NOT_FOUND")]
+    NOTFOUND,
+
+    #[graphql(name = "MISSING_TRANSACTION_ACTION_REQUEST_WEBHOOK")]
+    MISSINGTRANSACTIONACTIONREQUESTWEBHOOK,
+
+}
+
+
+#[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum TransactionRequestRefundForGrantedRefundErrorCode {
+
+    #[graphql(name = "INVALID")]
+    INVALID,
+
+    #[graphql(name = "GRAPHQL_ERROR")]
+    GRAPHQLERROR,
+
+    #[graphql(name = "NOT_FOUND")]
+    NOTFOUND,
+
+    #[graphql(name = "AMOUNT_GREATER_THAN_AVAILABLE")]
+    AMOUNTGREATERTHANAVAILABLE,
+
+    #[graphql(name = "MISSING_TRANSACTION_ACTION_REQUEST_WEBHOOK")]
+    MISSINGTRANSACTIONACTIONREQUESTWEBHOOK,
+
+    #[graphql(name = "REFUND_ALREADY_PROCESSED")]
+    REFUNDALREADYPROCESSED,
+
+    #[graphql(name = "REFUND_IS_PENDING")]
+    REFUNDISPENDING,
+
+}
+
+
+#[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum TransactionSortField {
+
+    #[graphql(name = "CREATED_AT")]
+    CREATEDAT,
+
+    #[graphql(name = "MODIFIED_AT")]
+    MODIFIEDAT,
+
+}
+
+
+#[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum TransactionUpdateErrorCode {
+
+    #[graphql(name = "INVALID")]
+    INVALID,
+
+    #[graphql(name = "GRAPHQL_ERROR")]
+    GRAPHQLERROR,
+
+    #[graphql(name = "NOT_FOUND")]
+    NOTFOUND,
+
+    #[graphql(name = "INCORRECT_CURRENCY")]
+    INCORRECTCURRENCY,
+
+    #[graphql(name = "METADATA_KEY_REQUIRED")]
+    METADATAKEYREQUIRED,
+
+    #[graphql(name = "UNIQUE")]
+    UNIQUE,
 
 }
 
@@ -4599,6 +7665,42 @@ pub enum TranslatableKinds {
 
 
 #[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum TranslationErrorCode {
+
+    #[graphql(name = "GRAPHQL_ERROR")]
+    GRAPHQLERROR,
+
+    #[graphql(name = "INVALID")]
+    INVALID,
+
+    #[graphql(name = "NOT_FOUND")]
+    NOTFOUND,
+
+    #[graphql(name = "REQUIRED")]
+    REQUIRED,
+
+    #[graphql(name = "UNIQUE")]
+    UNIQUE,
+
+}
+
+
+#[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum UploadErrorCode {
+
+    #[graphql(name = "GRAPHQL_ERROR")]
+    GRAPHQLERROR,
+
+    #[graphql(name = "INVALID_FILE_TYPE")]
+    INVALIDFILETYPE,
+
+    #[graphql(name = "UNSUPPORTED_MIME_TYPE")]
+    UNSUPPORTEDMIMETYPE,
+
+}
+
+
+#[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
 pub enum UserSortField {
 
     #[graphql(name = "FIRST_NAME")]
@@ -4636,6 +7738,66 @@ pub enum VariantAttributeScope {
 
     #[graphql(name = "NOT_VARIANT_SELECTION")]
     NOTVARIANTSELECTION,
+
+}
+
+
+#[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum VolumeUnitsEnum {
+
+    #[graphql(name = "CUBIC_MILLIMETER")]
+    CUBICMILLIMETER,
+
+    #[graphql(name = "CUBIC_CENTIMETER")]
+    CUBICCENTIMETER,
+
+    #[graphql(name = "CUBIC_DECIMETER")]
+    CUBICDECIMETER,
+
+    #[graphql(name = "CUBIC_METER")]
+    CUBICMETER,
+
+    #[graphql(name = "LITER")]
+    LITER,
+
+    #[graphql(name = "CUBIC_FOOT")]
+    CUBICFOOT,
+
+    #[graphql(name = "CUBIC_INCH")]
+    CUBICINCH,
+
+    #[graphql(name = "CUBIC_YARD")]
+    CUBICYARD,
+
+    #[graphql(name = "QT")]
+    QT,
+
+    #[graphql(name = "PINT")]
+    PINT,
+
+    #[graphql(name = "FL_OZ")]
+    FLOZ,
+
+    #[graphql(name = "ACRE_IN")]
+    ACREIN,
+
+    #[graphql(name = "ACRE_FT")]
+    ACREFT,
+
+}
+
+
+#[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum VoucherCodeBulkDeleteErrorCode {
+
+    #[graphql(name = "GRAPHQL_ERROR")]
+    GRAPHQLERROR,
+
+    #[graphql(name = "NOT_FOUND")]
+    NOTFOUND,
+
+    #[graphql(name = "INVALID")]
+    INVALID,
 
 }
 
@@ -4716,10 +7878,109 @@ pub enum WarehouseClickAndCollectOptionEnum {
 
 
 #[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum WarehouseErrorCode {
+
+    #[graphql(name = "ALREADY_EXISTS")]
+    ALREADYEXISTS,
+
+    #[graphql(name = "GRAPHQL_ERROR")]
+    GRAPHQLERROR,
+
+    #[graphql(name = "INVALID")]
+    INVALID,
+
+    #[graphql(name = "NOT_FOUND")]
+    NOTFOUND,
+
+    #[graphql(name = "REQUIRED")]
+    REQUIRED,
+
+    #[graphql(name = "UNIQUE")]
+    UNIQUE,
+
+}
+
+
+#[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
 pub enum WarehouseSortField {
 
     #[graphql(name = "NAME")]
     NAME,
+
+}
+
+
+#[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum WebhookDryRunErrorCode {
+
+    #[graphql(name = "GRAPHQL_ERROR")]
+    GRAPHQLERROR,
+
+    #[graphql(name = "NOT_FOUND")]
+    NOTFOUND,
+
+    #[graphql(name = "INVALID_ID")]
+    INVALIDID,
+
+    #[graphql(name = "MISSING_PERMISSION")]
+    MISSINGPERMISSION,
+
+    #[graphql(name = "TYPE_NOT_SUPPORTED")]
+    TYPENOTSUPPORTED,
+
+    #[graphql(name = "SYNTAX")]
+    SYNTAX,
+
+    #[graphql(name = "MISSING_SUBSCRIPTION")]
+    MISSINGSUBSCRIPTION,
+
+    #[graphql(name = "UNABLE_TO_PARSE")]
+    UNABLETOPARSE,
+
+    #[graphql(name = "MISSING_EVENT")]
+    MISSINGEVENT,
+
+}
+
+
+#[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum WebhookErrorCode {
+
+    #[graphql(name = "GRAPHQL_ERROR")]
+    GRAPHQLERROR,
+
+    #[graphql(name = "INVALID")]
+    INVALID,
+
+    #[graphql(name = "NOT_FOUND")]
+    NOTFOUND,
+
+    #[graphql(name = "REQUIRED")]
+    REQUIRED,
+
+    #[graphql(name = "UNIQUE")]
+    UNIQUE,
+
+    #[graphql(name = "DELETE_FAILED")]
+    DELETEFAILED,
+
+    #[graphql(name = "SYNTAX")]
+    SYNTAX,
+
+    #[graphql(name = "MISSING_SUBSCRIPTION")]
+    MISSINGSUBSCRIPTION,
+
+    #[graphql(name = "UNABLE_TO_PARSE")]
+    UNABLETOPARSE,
+
+    #[graphql(name = "MISSING_EVENT")]
+    MISSINGEVENT,
+
+    #[graphql(name = "INVALID_CUSTOM_HEADERS")]
+    INVALIDCUSTOMHEADERS,
+
+    #[graphql(name = "INVALID_NOTIFY_WITH_SUBSCRIPTION")]
+    INVALIDNOTIFYWITHSUBSCRIPTION,
 
 }
 
@@ -5793,6 +9054,501 @@ pub enum WebhookEventTypeSyncEnum {
 
 
 #[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum WebhookSampleEventTypeEnum {
+
+    #[graphql(name = "ACCOUNT_CONFIRMATION_REQUESTED")]
+    ACCOUNTCONFIRMATIONREQUESTED,
+
+    #[graphql(name = "ACCOUNT_CHANGE_EMAIL_REQUESTED")]
+    ACCOUNTCHANGEEMAILREQUESTED,
+
+    #[graphql(name = "ACCOUNT_EMAIL_CHANGED")]
+    ACCOUNTEMAILCHANGED,
+
+    #[graphql(name = "ACCOUNT_SET_PASSWORD_REQUESTED")]
+    ACCOUNTSETPASSWORDREQUESTED,
+
+    #[graphql(name = "ACCOUNT_CONFIRMED")]
+    ACCOUNTCONFIRMED,
+
+    #[graphql(name = "ACCOUNT_DELETE_REQUESTED")]
+    ACCOUNTDELETEREQUESTED,
+
+    #[graphql(name = "ACCOUNT_DELETED")]
+    ACCOUNTDELETED,
+
+    #[graphql(name = "ADDRESS_CREATED")]
+    ADDRESSCREATED,
+
+    #[graphql(name = "ADDRESS_UPDATED")]
+    ADDRESSUPDATED,
+
+    #[graphql(name = "ADDRESS_DELETED")]
+    ADDRESSDELETED,
+
+    #[graphql(name = "APP_INSTALLED")]
+    APPINSTALLED,
+
+    #[graphql(name = "APP_UPDATED")]
+    APPUPDATED,
+
+    #[graphql(name = "APP_DELETED")]
+    APPDELETED,
+
+    #[graphql(name = "APP_STATUS_CHANGED")]
+    APPSTATUSCHANGED,
+
+    #[graphql(name = "ATTRIBUTE_CREATED")]
+    ATTRIBUTECREATED,
+
+    #[graphql(name = "ATTRIBUTE_UPDATED")]
+    ATTRIBUTEUPDATED,
+
+    #[graphql(name = "ATTRIBUTE_DELETED")]
+    ATTRIBUTEDELETED,
+
+    #[graphql(name = "ATTRIBUTE_VALUE_CREATED")]
+    ATTRIBUTEVALUECREATED,
+
+    #[graphql(name = "ATTRIBUTE_VALUE_UPDATED")]
+    ATTRIBUTEVALUEUPDATED,
+
+    #[graphql(name = "ATTRIBUTE_VALUE_DELETED")]
+    ATTRIBUTEVALUEDELETED,
+
+    #[graphql(name = "CATEGORY_CREATED")]
+    CATEGORYCREATED,
+
+    #[graphql(name = "CATEGORY_UPDATED")]
+    CATEGORYUPDATED,
+
+    #[graphql(name = "CATEGORY_DELETED")]
+    CATEGORYDELETED,
+
+    #[graphql(name = "CHANNEL_CREATED")]
+    CHANNELCREATED,
+
+    #[graphql(name = "CHANNEL_UPDATED")]
+    CHANNELUPDATED,
+
+    #[graphql(name = "CHANNEL_DELETED")]
+    CHANNELDELETED,
+
+    #[graphql(name = "CHANNEL_STATUS_CHANGED")]
+    CHANNELSTATUSCHANGED,
+
+    #[graphql(name = "CHANNEL_METADATA_UPDATED")]
+    CHANNELMETADATAUPDATED,
+
+    #[graphql(name = "GIFT_CARD_CREATED")]
+    GIFTCARDCREATED,
+
+    #[graphql(name = "GIFT_CARD_UPDATED")]
+    GIFTCARDUPDATED,
+
+    #[graphql(name = "GIFT_CARD_DELETED")]
+    GIFTCARDDELETED,
+
+    #[graphql(name = "GIFT_CARD_SENT")]
+    GIFTCARDSENT,
+
+    #[graphql(name = "GIFT_CARD_STATUS_CHANGED")]
+    GIFTCARDSTATUSCHANGED,
+
+    #[graphql(name = "GIFT_CARD_METADATA_UPDATED")]
+    GIFTCARDMETADATAUPDATED,
+
+    #[graphql(name = "MENU_CREATED")]
+    MENUCREATED,
+
+    #[graphql(name = "MENU_UPDATED")]
+    MENUUPDATED,
+
+    #[graphql(name = "MENU_DELETED")]
+    MENUDELETED,
+
+    #[graphql(name = "MENU_ITEM_CREATED")]
+    MENUITEMCREATED,
+
+    #[graphql(name = "MENU_ITEM_UPDATED")]
+    MENUITEMUPDATED,
+
+    #[graphql(name = "MENU_ITEM_DELETED")]
+    MENUITEMDELETED,
+
+    #[graphql(name = "ORDER_CREATED")]
+    ORDERCREATED,
+
+    #[graphql(name = "ORDER_CONFIRMED")]
+    ORDERCONFIRMED,
+
+    #[graphql(name = "ORDER_PAID")]
+    ORDERPAID,
+
+    #[graphql(name = "ORDER_FULLY_PAID")]
+    ORDERFULLYPAID,
+
+    #[graphql(name = "ORDER_REFUNDED")]
+    ORDERREFUNDED,
+
+    #[graphql(name = "ORDER_FULLY_REFUNDED")]
+    ORDERFULLYREFUNDED,
+
+    #[graphql(name = "ORDER_UPDATED")]
+    ORDERUPDATED,
+
+    #[graphql(name = "ORDER_CANCELLED")]
+    ORDERCANCELLED,
+
+    #[graphql(name = "ORDER_EXPIRED")]
+    ORDEREXPIRED,
+
+    #[graphql(name = "ORDER_FULFILLED")]
+    ORDERFULFILLED,
+
+    #[graphql(name = "ORDER_METADATA_UPDATED")]
+    ORDERMETADATAUPDATED,
+
+    #[graphql(name = "ORDER_BULK_CREATED")]
+    ORDERBULKCREATED,
+
+    #[graphql(name = "FULFILLMENT_CREATED")]
+    FULFILLMENTCREATED,
+
+    #[graphql(name = "FULFILLMENT_CANCELED")]
+    FULFILLMENTCANCELED,
+
+    #[graphql(name = "FULFILLMENT_APPROVED")]
+    FULFILLMENTAPPROVED,
+
+    #[graphql(name = "FULFILLMENT_METADATA_UPDATED")]
+    FULFILLMENTMETADATAUPDATED,
+
+    #[graphql(name = "FULFILLMENT_TRACKING_NUMBER_UPDATED")]
+    FULFILLMENTTRACKINGNUMBERUPDATED,
+
+    #[graphql(name = "DRAFT_ORDER_CREATED")]
+    DRAFTORDERCREATED,
+
+    #[graphql(name = "DRAFT_ORDER_UPDATED")]
+    DRAFTORDERUPDATED,
+
+    #[graphql(name = "DRAFT_ORDER_DELETED")]
+    DRAFTORDERDELETED,
+
+    #[graphql(name = "SALE_CREATED")]
+    SALECREATED,
+
+    #[graphql(name = "SALE_UPDATED")]
+    SALEUPDATED,
+
+    #[graphql(name = "SALE_DELETED")]
+    SALEDELETED,
+
+    #[graphql(name = "SALE_TOGGLE")]
+    SALETOGGLE,
+
+    #[graphql(name = "PROMOTION_CREATED")]
+    PROMOTIONCREATED,
+
+    #[graphql(name = "PROMOTION_UPDATED")]
+    PROMOTIONUPDATED,
+
+    #[graphql(name = "PROMOTION_DELETED")]
+    PROMOTIONDELETED,
+
+    #[graphql(name = "PROMOTION_STARTED")]
+    PROMOTIONSTARTED,
+
+    #[graphql(name = "PROMOTION_ENDED")]
+    PROMOTIONENDED,
+
+    #[graphql(name = "PROMOTION_RULE_CREATED")]
+    PROMOTIONRULECREATED,
+
+    #[graphql(name = "PROMOTION_RULE_UPDATED")]
+    PROMOTIONRULEUPDATED,
+
+    #[graphql(name = "PROMOTION_RULE_DELETED")]
+    PROMOTIONRULEDELETED,
+
+    #[graphql(name = "INVOICE_REQUESTED")]
+    INVOICEREQUESTED,
+
+    #[graphql(name = "INVOICE_DELETED")]
+    INVOICEDELETED,
+
+    #[graphql(name = "INVOICE_SENT")]
+    INVOICESENT,
+
+    #[graphql(name = "CUSTOMER_CREATED")]
+    CUSTOMERCREATED,
+
+    #[graphql(name = "CUSTOMER_UPDATED")]
+    CUSTOMERUPDATED,
+
+    #[graphql(name = "CUSTOMER_DELETED")]
+    CUSTOMERDELETED,
+
+    #[graphql(name = "CUSTOMER_METADATA_UPDATED")]
+    CUSTOMERMETADATAUPDATED,
+
+    #[graphql(name = "CUSTOMER_TYPE_CREATED")]
+    CUSTOMERTYPECREATED,
+
+    #[graphql(name = "CUSTOMER_TYPE_UPDATED")]
+    CUSTOMERTYPEUPDATED,
+
+    #[graphql(name = "CUSTOMER_TYPE_DELETED")]
+    CUSTOMERTYPEDELETED,
+
+    #[graphql(name = "COLLECTION_CREATED")]
+    COLLECTIONCREATED,
+
+    #[graphql(name = "COLLECTION_UPDATED")]
+    COLLECTIONUPDATED,
+
+    #[graphql(name = "COLLECTION_DELETED")]
+    COLLECTIONDELETED,
+
+    #[graphql(name = "COLLECTION_METADATA_UPDATED")]
+    COLLECTIONMETADATAUPDATED,
+
+    #[graphql(name = "PRODUCT_CREATED")]
+    PRODUCTCREATED,
+
+    #[graphql(name = "PRODUCT_UPDATED")]
+    PRODUCTUPDATED,
+
+    #[graphql(name = "PRODUCT_DELETED")]
+    PRODUCTDELETED,
+
+    #[graphql(name = "PRODUCT_METADATA_UPDATED")]
+    PRODUCTMETADATAUPDATED,
+
+    #[graphql(name = "PRODUCT_EXPORT_COMPLETED")]
+    PRODUCTEXPORTCOMPLETED,
+
+    #[graphql(name = "PRODUCT_TYPE_CREATED")]
+    PRODUCTTYPECREATED,
+
+    #[graphql(name = "PRODUCT_TYPE_UPDATED")]
+    PRODUCTTYPEUPDATED,
+
+    #[graphql(name = "PRODUCT_TYPE_DELETED")]
+    PRODUCTTYPEDELETED,
+
+    #[graphql(name = "PRODUCT_MEDIA_CREATED")]
+    PRODUCTMEDIACREATED,
+
+    #[graphql(name = "PRODUCT_MEDIA_UPDATED")]
+    PRODUCTMEDIAUPDATED,
+
+    #[graphql(name = "PRODUCT_MEDIA_DELETED")]
+    PRODUCTMEDIADELETED,
+
+    #[graphql(name = "PRODUCT_VARIANT_CREATED")]
+    PRODUCTVARIANTCREATED,
+
+    #[graphql(name = "PRODUCT_VARIANT_UPDATED")]
+    PRODUCTVARIANTUPDATED,
+
+    #[graphql(name = "PRODUCT_VARIANT_DELETED")]
+    PRODUCTVARIANTDELETED,
+
+    #[graphql(name = "PRODUCT_VARIANT_METADATA_UPDATED")]
+    PRODUCTVARIANTMETADATAUPDATED,
+
+    #[graphql(name = "PRODUCT_VARIANT_OUT_OF_STOCK")]
+    PRODUCTVARIANTOUTOFSTOCK,
+
+    #[graphql(name = "PRODUCT_VARIANT_BACK_IN_STOCK")]
+    PRODUCTVARIANTBACKINSTOCK,
+
+    #[graphql(name = "PRODUCT_VARIANT_STOCK_UPDATED")]
+    PRODUCTVARIANTSTOCKUPDATED,
+
+    #[graphql(name = "PRODUCT_VARIANT_OUT_OF_STOCK_IN_CHANNEL")]
+    PRODUCTVARIANTOUTOFSTOCKINCHANNEL,
+
+    #[graphql(name = "PRODUCT_VARIANT_BACK_IN_STOCK_IN_CHANNEL")]
+    PRODUCTVARIANTBACKINSTOCKINCHANNEL,
+
+    #[graphql(name = "PRODUCT_VARIANT_OUT_OF_STOCK_FOR_CLICK_AND_COLLECT")]
+    PRODUCTVARIANTOUTOFSTOCKFORCLICKANDCOLLECT,
+
+    #[graphql(name = "PRODUCT_VARIANT_BACK_IN_STOCK_FOR_CLICK_AND_COLLECT")]
+    PRODUCTVARIANTBACKINSTOCKFORCLICKANDCOLLECT,
+
+    #[graphql(name = "PRODUCT_VARIANT_DISCOUNTED_PRICE_UPDATED")]
+    PRODUCTVARIANTDISCOUNTEDPRICEUPDATED,
+
+    #[graphql(name = "CHECKOUT_CREATED")]
+    CHECKOUTCREATED,
+
+    #[graphql(name = "CHECKOUT_UPDATED")]
+    CHECKOUTUPDATED,
+
+    #[graphql(name = "CHECKOUT_FULLY_AUTHORIZED")]
+    CHECKOUTFULLYAUTHORIZED,
+
+    #[graphql(name = "CHECKOUT_FULLY_PAID")]
+    CHECKOUTFULLYPAID,
+
+    #[graphql(name = "CHECKOUT_METADATA_UPDATED")]
+    CHECKOUTMETADATAUPDATED,
+
+    #[graphql(name = "NOTIFY_USER")]
+    NOTIFYUSER,
+
+    #[graphql(name = "PAGE_CREATED")]
+    PAGECREATED,
+
+    #[graphql(name = "PAGE_UPDATED")]
+    PAGEUPDATED,
+
+    #[graphql(name = "PAGE_DELETED")]
+    PAGEDELETED,
+
+    #[graphql(name = "PAGE_TYPE_CREATED")]
+    PAGETYPECREATED,
+
+    #[graphql(name = "PAGE_TYPE_UPDATED")]
+    PAGETYPEUPDATED,
+
+    #[graphql(name = "PAGE_TYPE_DELETED")]
+    PAGETYPEDELETED,
+
+    #[graphql(name = "PERMISSION_GROUP_CREATED")]
+    PERMISSIONGROUPCREATED,
+
+    #[graphql(name = "PERMISSION_GROUP_UPDATED")]
+    PERMISSIONGROUPUPDATED,
+
+    #[graphql(name = "PERMISSION_GROUP_DELETED")]
+    PERMISSIONGROUPDELETED,
+
+    #[graphql(name = "SHIPPING_PRICE_CREATED")]
+    SHIPPINGPRICECREATED,
+
+    #[graphql(name = "SHIPPING_PRICE_UPDATED")]
+    SHIPPINGPRICEUPDATED,
+
+    #[graphql(name = "SHIPPING_PRICE_DELETED")]
+    SHIPPINGPRICEDELETED,
+
+    #[graphql(name = "SHIPPING_ZONE_CREATED")]
+    SHIPPINGZONECREATED,
+
+    #[graphql(name = "SHIPPING_ZONE_UPDATED")]
+    SHIPPINGZONEUPDATED,
+
+    #[graphql(name = "SHIPPING_ZONE_DELETED")]
+    SHIPPINGZONEDELETED,
+
+    #[graphql(name = "SHIPPING_ZONE_METADATA_UPDATED")]
+    SHIPPINGZONEMETADATAUPDATED,
+
+    #[graphql(name = "STAFF_CREATED")]
+    STAFFCREATED,
+
+    #[graphql(name = "STAFF_UPDATED")]
+    STAFFUPDATED,
+
+    #[graphql(name = "STAFF_DELETED")]
+    STAFFDELETED,
+
+    #[graphql(name = "STAFF_SET_PASSWORD_REQUESTED")]
+    STAFFSETPASSWORDREQUESTED,
+
+    #[graphql(name = "TRANSACTION_ITEM_METADATA_UPDATED")]
+    TRANSACTIONITEMMETADATAUPDATED,
+
+    #[graphql(name = "TRANSLATION_CREATED")]
+    TRANSLATIONCREATED,
+
+    #[graphql(name = "TRANSLATION_UPDATED")]
+    TRANSLATIONUPDATED,
+
+    #[graphql(name = "WAREHOUSE_CREATED")]
+    WAREHOUSECREATED,
+
+    #[graphql(name = "WAREHOUSE_UPDATED")]
+    WAREHOUSEUPDATED,
+
+    #[graphql(name = "WAREHOUSE_DELETED")]
+    WAREHOUSEDELETED,
+
+    #[graphql(name = "WAREHOUSE_METADATA_UPDATED")]
+    WAREHOUSEMETADATAUPDATED,
+
+    #[graphql(name = "VOUCHER_CREATED")]
+    VOUCHERCREATED,
+
+    #[graphql(name = "VOUCHER_UPDATED")]
+    VOUCHERUPDATED,
+
+    #[graphql(name = "VOUCHER_DELETED")]
+    VOUCHERDELETED,
+
+    #[graphql(name = "VOUCHER_CODES_CREATED")]
+    VOUCHERCODESCREATED,
+
+    #[graphql(name = "VOUCHER_CODES_DELETED")]
+    VOUCHERCODESDELETED,
+
+    #[graphql(name = "VOUCHER_METADATA_UPDATED")]
+    VOUCHERMETADATAUPDATED,
+
+    #[graphql(name = "OBSERVABILITY")]
+    OBSERVABILITY,
+
+    #[graphql(name = "THUMBNAIL_CREATED")]
+    THUMBNAILCREATED,
+
+    #[graphql(name = "SHOP_METADATA_UPDATED")]
+    SHOPMETADATAUPDATED,
+
+}
+
+
+#[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum WebhookTriggerErrorCode {
+
+    #[graphql(name = "GRAPHQL_ERROR")]
+    GRAPHQLERROR,
+
+    #[graphql(name = "NOT_FOUND")]
+    NOTFOUND,
+
+    #[graphql(name = "INVALID_ID")]
+    INVALIDID,
+
+    #[graphql(name = "MISSING_PERMISSION")]
+    MISSINGPERMISSION,
+
+    #[graphql(name = "TYPE_NOT_SUPPORTED")]
+    TYPENOTSUPPORTED,
+
+    #[graphql(name = "SYNTAX")]
+    SYNTAX,
+
+    #[graphql(name = "MISSING_SUBSCRIPTION")]
+    MISSINGSUBSCRIPTION,
+
+    #[graphql(name = "UNABLE_TO_PARSE")]
+    UNABLETOPARSE,
+
+    #[graphql(name = "MISSING_QUERY")]
+    MISSINGQUERY,
+
+    #[graphql(name = "MISSING_EVENT")]
+    MISSINGEVENT,
+
+}
+
+
+#[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
 pub enum WeightUnitsEnum {
 
     #[graphql(name = "G")]
@@ -5833,7 +9589,38 @@ pub struct AccountInput {
     pub default_shipping_address: Option<AddressInput>,
 
     #[graphql(name = "metadata")]
-    pub metadata: Vec<crate::common::MetadataInput>,
+    pub metadata: Option<Vec<crate::common::MetadataInput>>,
+
+}
+
+
+#[derive(InputObject, Clone, Debug)]
+#[graphql(name = "AccountRegisterInput")]
+pub struct AccountRegisterInput {
+
+    #[graphql(name = "firstName")]
+    pub first_name: Option<String>,
+
+    #[graphql(name = "lastName")]
+    pub last_name: Option<String>,
+
+    #[graphql(name = "languageCode")]
+    pub language_code: Option<LanguageCodeEnum>,
+
+    #[graphql(name = "email")]
+    pub email: String,
+
+    #[graphql(name = "password")]
+    pub password: String,
+
+    #[graphql(name = "redirectUrl")]
+    pub redirect_url: Option<String>,
+
+    #[graphql(name = "metadata")]
+    pub metadata: Option<Vec<crate::common::MetadataInput>>,
+
+    #[graphql(name = "channel")]
+    pub channel: Option<String>,
 
 }
 
@@ -5889,7 +9676,7 @@ pub struct AddressInput {
     pub phone: Option<String>,
 
     #[graphql(name = "metadata")]
-    pub metadata: Vec<crate::common::MetadataInput>,
+    pub metadata: Option<Vec<crate::common::MetadataInput>>,
 
     #[graphql(name = "skipValidation")]
     pub skip_validation: Option<bool>,
@@ -5902,7 +9689,7 @@ pub struct AddressInput {
 pub struct AppExtensionFilterInput {
 
     #[graphql(name = "mountName")]
-    pub mount_name: Vec<String>,
+    pub mount_name: Option<Vec<String>>,
 
     #[graphql(name = "targetName")]
     pub target_name: Option<String>,
@@ -5937,7 +9724,7 @@ pub struct AppInput {
     pub identifier: Option<String>,
 
     #[graphql(name = "permissions")]
-    pub permissions: Vec<PermissionEnum>,
+    pub permissions: Option<Vec<PermissionEnum>>,
 
 }
 
@@ -5956,7 +9743,26 @@ pub struct AppInstallInput {
     pub activate_after_installation: Option<bool>,
 
     #[graphql(name = "permissions")]
-    pub permissions: Vec<PermissionEnum>,
+    pub permissions: Option<Vec<PermissionEnum>>,
+
+}
+
+
+#[derive(InputObject, Clone, Debug)]
+#[graphql(name = "AppProblemCreateInput")]
+pub struct AppProblemCreateInput {
+
+    #[graphql(name = "message")]
+    pub message: String,
+
+    #[graphql(name = "key")]
+    pub key: String,
+
+    #[graphql(name = "criticalThreshold")]
+    pub critical_threshold: Option<i32>,
+
+    #[graphql(name = "aggregationPeriod")]
+    pub aggregation_period: Option<i32>,
 
 }
 
@@ -5966,10 +9772,10 @@ pub struct AppInstallInput {
 pub struct AppProblemDismissByAppInput {
 
     #[graphql(name = "ids")]
-    pub ids: Vec<ID>,
+    pub ids: Option<Vec<ID>>,
 
     #[graphql(name = "keys")]
-    pub keys: Vec<String>,
+    pub keys: Option<Vec<String>>,
 
 }
 
@@ -6106,6 +9912,41 @@ pub struct AssignedAttributeWhereInput {
 
 
 #[derive(InputObject, Clone, Debug)]
+#[graphql(name = "AttributeBulkTranslateInput")]
+pub struct AttributeBulkTranslateInput {
+
+    #[graphql(name = "id")]
+    pub id: Option<ID>,
+
+    #[graphql(name = "externalReference")]
+    pub external_reference: Option<String>,
+
+    #[graphql(name = "languageCode")]
+    pub language_code: LanguageCodeEnum,
+
+    #[graphql(name = "translationFields")]
+    pub translation_fields: NameTranslationInput,
+
+}
+
+
+#[derive(InputObject, Clone, Debug)]
+#[graphql(name = "AttributeBulkUpdateInput")]
+pub struct AttributeBulkUpdateInput {
+
+    #[graphql(name = "id")]
+    pub id: Option<ID>,
+
+    #[graphql(name = "externalReference")]
+    pub external_reference: Option<String>,
+
+    #[graphql(name = "fields")]
+    pub fields: AttributeUpdateInput,
+
+}
+
+
+#[derive(InputObject, Clone, Debug)]
 #[graphql(name = "AttributeChoicesSortingInput")]
 pub struct AttributeChoicesSortingInput {
 
@@ -6141,7 +9982,7 @@ pub struct AttributeCreateInput {
     pub unit: Option<MeasurementUnitsEnum>,
 
     #[graphql(name = "values")]
-    pub values: Vec<AttributeValueCreateInput>,
+    pub values: Option<Vec<AttributeValueCreateInput>>,
 
     #[graphql(name = "valueRequired")]
     pub value_required: Option<bool>,
@@ -6156,7 +9997,7 @@ pub struct AttributeCreateInput {
     pub external_reference: Option<String>,
 
     #[graphql(name = "referenceTypes")]
-    pub reference_types: Vec<ID>,
+    pub reference_types: Option<Vec<ID>>,
 
 }
 
@@ -6169,7 +10010,7 @@ pub struct AttributeEntityTypeEnumFilterInput {
     pub eq: Option<AttributeEntityTypeEnum>,
 
     #[graphql(name = "oneOf")]
-    pub one_of: Vec<AttributeEntityTypeEnum>,
+    pub one_of: Option<Vec<AttributeEntityTypeEnum>>,
 
 }
 
@@ -6188,13 +10029,13 @@ pub struct AttributeFilterInput {
     pub visible_in_storefront: Option<bool>,
 
     #[graphql(name = "metadata")]
-    pub metadata: Vec<MetadataFilter>,
+    pub metadata: Option<Vec<MetadataFilter>>,
 
     #[graphql(name = "search")]
     pub search: Option<String>,
 
     #[graphql(name = "ids")]
-    pub ids: Vec<ID>,
+    pub ids: Option<Vec<ID>>,
 
     #[graphql(name = "type")]
     pub r#type: Option<AttributeTypeEnum>,
@@ -6206,7 +10047,7 @@ pub struct AttributeFilterInput {
     pub in_category: Option<ID>,
 
     #[graphql(name = "slugs")]
-    pub slugs: Vec<String>,
+    pub slugs: Option<Vec<String>>,
 
     #[graphql(name = "channel")]
     pub channel: Option<String>,
@@ -6225,7 +10066,7 @@ pub struct AttributeInput {
     pub value: Option<AssignedAttributeValueInput>,
 
     #[graphql(name = "values")]
-    pub values: Vec<String>,
+    pub values: Option<Vec<String>>,
 
     #[graphql(name = "valuesRange")]
     pub values_range: Option<IntRangeInput>,
@@ -6250,7 +10091,7 @@ pub struct AttributeInputTypeEnumFilterInput {
     pub eq: Option<AttributeInputTypeEnum>,
 
     #[graphql(name = "oneOf")]
-    pub one_of: Vec<AttributeInputTypeEnum>,
+    pub one_of: Option<Vec<AttributeInputTypeEnum>>,
 
 }
 
@@ -6276,7 +10117,7 @@ pub struct AttributeTypeEnumFilterInput {
     pub eq: Option<AttributeTypeEnum>,
 
     #[graphql(name = "oneOf")]
-    pub one_of: Vec<AttributeTypeEnum>,
+    pub one_of: Option<Vec<AttributeTypeEnum>>,
 
 }
 
@@ -6295,10 +10136,10 @@ pub struct AttributeUpdateInput {
     pub unit: Option<MeasurementUnitsEnum>,
 
     #[graphql(name = "removeValues")]
-    pub remove_values: Vec<ID>,
+    pub remove_values: Option<Vec<ID>>,
 
     #[graphql(name = "addValues")]
-    pub add_values: Vec<AttributeValueUpdateInput>,
+    pub add_values: Option<Vec<AttributeValueUpdateInput>>,
 
     #[graphql(name = "valueRequired")]
     pub value_required: Option<bool>,
@@ -6313,7 +10154,26 @@ pub struct AttributeUpdateInput {
     pub external_reference: Option<String>,
 
     #[graphql(name = "referenceTypes")]
-    pub reference_types: Vec<ID>,
+    pub reference_types: Option<Vec<ID>>,
+
+}
+
+
+#[derive(InputObject, Clone, Debug)]
+#[graphql(name = "AttributeValueBulkTranslateInput")]
+pub struct AttributeValueBulkTranslateInput {
+
+    #[graphql(name = "id")]
+    pub id: Option<ID>,
+
+    #[graphql(name = "externalReference")]
+    pub external_reference: Option<String>,
+
+    #[graphql(name = "languageCode")]
+    pub language_code: LanguageCodeEnum,
+
+    #[graphql(name = "translationFields")]
+    pub translation_fields: AttributeValueTranslationInput,
 
 }
 
@@ -6354,10 +10214,10 @@ pub struct AttributeValueFilterInput {
     pub search: Option<String>,
 
     #[graphql(name = "ids")]
-    pub ids: Vec<ID>,
+    pub ids: Option<Vec<ID>>,
 
     #[graphql(name = "slugs")]
-    pub slugs: Vec<String>,
+    pub slugs: Option<Vec<String>>,
 
 }
 
@@ -6373,7 +10233,7 @@ pub struct AttributeValueInput {
     pub external_reference: Option<String>,
 
     #[graphql(name = "values")]
-    pub values: Vec<String>,
+    pub values: Option<Vec<String>>,
 
     #[graphql(name = "dropdown")]
     pub dropdown: Option<AttributeValueSelectableTypeInput>,
@@ -6382,7 +10242,7 @@ pub struct AttributeValueInput {
     pub swatch: Option<AttributeValueSelectableTypeInput>,
 
     #[graphql(name = "multiselect")]
-    pub multiselect: Vec<AttributeValueSelectableTypeInput>,
+    pub multiselect: Option<Vec<AttributeValueSelectableTypeInput>>,
 
     #[graphql(name = "numeric")]
     pub numeric: Option<String>,
@@ -6397,7 +10257,7 @@ pub struct AttributeValueInput {
     pub reference: Option<ID>,
 
     #[graphql(name = "references")]
-    pub references: Vec<ID>,
+    pub references: Option<Vec<ID>>,
 
     #[graphql(name = "richText")]
     pub rich_text: Option<GenJSONString>,
@@ -6482,7 +10342,7 @@ pub struct AttributeValueUpdateInput {
 pub struct AttributeValueWhereInput {
 
     #[graphql(name = "ids")]
-    pub ids: Vec<ID>,
+    pub ids: Option<Vec<ID>>,
 
     #[graphql(name = "name")]
     pub name: Option<StringFilterInput>,
@@ -6491,10 +10351,10 @@ pub struct AttributeValueWhereInput {
     pub slug: Option<StringFilterInput>,
 
     #[graphql(name = "AND")]
-    pub and: Vec<AttributeValueWhereInput>,
+    pub and: Option<Vec<AttributeValueWhereInput>>,
 
     #[graphql(name = "OR")]
-    pub or: Vec<AttributeValueWhereInput>,
+    pub or: Option<Vec<AttributeValueWhereInput>>,
 
 }
 
@@ -6504,10 +10364,10 @@ pub struct AttributeValueWhereInput {
 pub struct AttributeWhereInput {
 
     #[graphql(name = "metadata")]
-    pub metadata: Vec<MetadataFilter>,
+    pub metadata: Option<Vec<MetadataFilter>>,
 
     #[graphql(name = "ids")]
-    pub ids: Vec<ID>,
+    pub ids: Option<Vec<ID>>,
 
     #[graphql(name = "name")]
     pub name: Option<StringFilterInput>,
@@ -6543,10 +10403,10 @@ pub struct AttributeWhereInput {
     pub visible_in_storefront: Option<bool>,
 
     #[graphql(name = "AND")]
-    pub and: Vec<AttributeWhereInput>,
+    pub and: Option<Vec<AttributeWhereInput>>,
 
     #[graphql(name = "OR")]
-    pub or: Vec<AttributeWhereInput>,
+    pub or: Option<Vec<AttributeWhereInput>>,
 
 }
 
@@ -6562,7 +10422,7 @@ pub struct BulkAttributeValueInput {
     pub external_reference: Option<String>,
 
     #[graphql(name = "values")]
-    pub values: Vec<String>,
+    pub values: Option<Vec<String>>,
 
     #[graphql(name = "dropdown")]
     pub dropdown: Option<AttributeValueSelectableTypeInput>,
@@ -6571,7 +10431,7 @@ pub struct BulkAttributeValueInput {
     pub swatch: Option<AttributeValueSelectableTypeInput>,
 
     #[graphql(name = "multiselect")]
-    pub multiselect: Vec<AttributeValueSelectableTypeInput>,
+    pub multiselect: Option<Vec<AttributeValueSelectableTypeInput>>,
 
     #[graphql(name = "numeric")]
     pub numeric: Option<String>,
@@ -6586,7 +10446,7 @@ pub struct BulkAttributeValueInput {
     pub reference: Option<ID>,
 
     #[graphql(name = "references")]
-    pub references: Vec<ID>,
+    pub references: Option<Vec<ID>>,
 
     #[graphql(name = "richText")]
     pub rich_text: Option<GenJSONString>,
@@ -6602,6 +10462,22 @@ pub struct BulkAttributeValueInput {
 
     #[graphql(name = "dateTime")]
     pub date_time: Option<DateTime<Utc>>,
+
+}
+
+
+#[derive(InputObject, Clone, Debug)]
+#[graphql(name = "CardInput")]
+pub struct CardInput {
+
+    #[graphql(name = "code")]
+    pub code: String,
+
+    #[graphql(name = "cvc")]
+    pub cvc: Option<String>,
+
+    #[graphql(name = "money")]
+    pub money: MoneyInput,
 
 }
 
@@ -6636,16 +10512,16 @@ pub struct CardPaymentMethodDetailsInput {
 pub struct CatalogueInput {
 
     #[graphql(name = "products")]
-    pub products: Vec<ID>,
+    pub products: Option<Vec<ID>>,
 
     #[graphql(name = "categories")]
-    pub categories: Vec<ID>,
+    pub categories: Option<Vec<ID>>,
 
     #[graphql(name = "collections")]
-    pub collections: Vec<ID>,
+    pub collections: Option<Vec<ID>>,
 
     #[graphql(name = "variants")]
-    pub variants: Vec<ID>,
+    pub variants: Option<Vec<ID>>,
 
 }
 
@@ -6667,10 +10543,10 @@ pub struct CataloguePredicateInput {
     pub collection_predicate: Option<CollectionWhereInput>,
 
     #[graphql(name = "AND")]
-    pub and: Vec<CataloguePredicateInput>,
+    pub and: Option<Vec<CataloguePredicateInput>>,
 
     #[graphql(name = "OR")]
-    pub or: Vec<CataloguePredicateInput>,
+    pub or: Option<Vec<CataloguePredicateInput>>,
 
 }
 
@@ -6683,13 +10559,13 @@ pub struct CategoryFilterInput {
     pub search: Option<String>,
 
     #[graphql(name = "metadata")]
-    pub metadata: Vec<MetadataFilter>,
+    pub metadata: Option<Vec<MetadataFilter>>,
 
     #[graphql(name = "ids")]
-    pub ids: Vec<ID>,
+    pub ids: Option<Vec<ID>>,
 
     #[graphql(name = "slugs")]
-    pub slugs: Vec<String>,
+    pub slugs: Option<Vec<String>>,
 
     #[graphql(name = "updatedAt")]
     pub updated_at: Option<DateTimeRangeInput>,
@@ -6720,10 +10596,10 @@ pub struct CategoryInput {
     pub background_image_alt: Option<String>,
 
     #[graphql(name = "metadata")]
-    pub metadata: Vec<crate::common::MetadataInput>,
+    pub metadata: Option<Vec<crate::common::MetadataInput>>,
 
     #[graphql(name = "privateMetadata")]
-    pub private_metadata: Vec<crate::common::MetadataInput>,
+    pub private_metadata: Option<Vec<crate::common::MetadataInput>>,
 
 }
 
@@ -6749,16 +10625,16 @@ pub struct CategorySortingInput {
 pub struct CategoryWhereInput {
 
     #[graphql(name = "metadata")]
-    pub metadata: Vec<MetadataFilter>,
+    pub metadata: Option<Vec<MetadataFilter>>,
 
     #[graphql(name = "ids")]
-    pub ids: Vec<ID>,
+    pub ids: Option<Vec<ID>>,
 
     #[graphql(name = "AND")]
-    pub and: Vec<CategoryWhereInput>,
+    pub and: Option<Vec<CategoryWhereInput>>,
 
     #[graphql(name = "OR")]
-    pub or: Vec<CategoryWhereInput>,
+    pub or: Option<Vec<CategoryWhereInput>>,
 
 }
 
@@ -6774,19 +10650,19 @@ pub struct ChannelCreateInput {
     pub stock_settings: Option<StockSettingsInput>,
 
     #[graphql(name = "addShippingZones")]
-    pub add_shipping_zones: Vec<ID>,
+    pub add_shipping_zones: Option<Vec<ID>>,
 
     #[graphql(name = "addWarehouses")]
-    pub add_warehouses: Vec<ID>,
+    pub add_warehouses: Option<Vec<ID>>,
 
     #[graphql(name = "orderSettings")]
     pub order_settings: Option<OrderSettingsInput>,
 
     #[graphql(name = "metadata")]
-    pub metadata: Vec<crate::common::MetadataInput>,
+    pub metadata: Option<Vec<crate::common::MetadataInput>>,
 
     #[graphql(name = "privateMetadata")]
-    pub private_metadata: Vec<crate::common::MetadataInput>,
+    pub private_metadata: Option<Vec<crate::common::MetadataInput>>,
 
     #[graphql(name = "checkoutSettings")]
     pub checkout_settings: Option<CheckoutSettingsInput>,
@@ -6849,19 +10725,19 @@ pub struct ChannelUpdateInput {
     pub stock_settings: Option<StockSettingsInput>,
 
     #[graphql(name = "addShippingZones")]
-    pub add_shipping_zones: Vec<ID>,
+    pub add_shipping_zones: Option<Vec<ID>>,
 
     #[graphql(name = "addWarehouses")]
-    pub add_warehouses: Vec<ID>,
+    pub add_warehouses: Option<Vec<ID>>,
 
     #[graphql(name = "orderSettings")]
     pub order_settings: Option<OrderSettingsInput>,
 
     #[graphql(name = "metadata")]
-    pub metadata: Vec<crate::common::MetadataInput>,
+    pub metadata: Option<Vec<crate::common::MetadataInput>>,
 
     #[graphql(name = "privateMetadata")]
-    pub private_metadata: Vec<crate::common::MetadataInput>,
+    pub private_metadata: Option<Vec<crate::common::MetadataInput>>,
 
     #[graphql(name = "checkoutSettings")]
     pub checkout_settings: Option<CheckoutSettingsInput>,
@@ -6879,10 +10755,26 @@ pub struct ChannelUpdateInput {
     pub default_country: Option<CountryCode>,
 
     #[graphql(name = "removeShippingZones")]
-    pub remove_shipping_zones: Vec<ID>,
+    pub remove_shipping_zones: Option<Vec<ID>>,
 
     #[graphql(name = "removeWarehouses")]
-    pub remove_warehouses: Vec<ID>,
+    pub remove_warehouses: Option<Vec<ID>>,
+
+}
+
+
+#[derive(InputObject, Clone, Debug)]
+#[graphql(name = "CheckoutAddressValidationRules")]
+pub struct CheckoutAddressValidationRules {
+
+    #[graphql(name = "checkRequiredFields")]
+    pub check_required_fields: Option<bool>,
+
+    #[graphql(name = "checkFieldsFormat")]
+    pub check_fields_format: Option<bool>,
+
+    #[graphql(name = "enableFieldsNormalization")]
+    pub enable_fields_normalization: Option<bool>,
 
 }
 
@@ -6904,6 +10796,46 @@ pub struct CheckoutAutoCompleteInput {
 
 
 #[derive(InputObject, Clone, Debug)]
+#[graphql(name = "CheckoutCreateInput")]
+pub struct CheckoutCreateInput {
+
+    #[graphql(name = "channel")]
+    pub channel: Option<String>,
+
+    #[graphql(name = "lines")]
+    pub lines: Option<Vec<CheckoutLineInput>>,
+
+    #[graphql(name = "email")]
+    pub email: Option<String>,
+
+    #[graphql(name = "saveShippingAddress")]
+    pub save_shipping_address: Option<bool>,
+
+    #[graphql(name = "shippingAddress")]
+    pub shipping_address: Option<AddressInput>,
+
+    #[graphql(name = "saveBillingAddress")]
+    pub save_billing_address: Option<bool>,
+
+    #[graphql(name = "billingAddress")]
+    pub billing_address: Option<AddressInput>,
+
+    #[graphql(name = "languageCode")]
+    pub language_code: Option<LanguageCodeEnum>,
+
+    #[graphql(name = "validationRules")]
+    pub validation_rules: Option<CheckoutValidationRules>,
+
+    #[graphql(name = "metadata")]
+    pub metadata: Option<Vec<crate::common::MetadataInput>>,
+
+    #[graphql(name = "privateMetadata")]
+    pub private_metadata: Option<Vec<crate::common::MetadataInput>>,
+
+}
+
+
+#[derive(InputObject, Clone, Debug)]
 #[graphql(name = "CheckoutFilterInput")]
 pub struct CheckoutFilterInput {
 
@@ -6917,19 +10849,69 @@ pub struct CheckoutFilterInput {
     pub search: Option<String>,
 
     #[graphql(name = "metadata")]
-    pub metadata: Vec<MetadataFilter>,
+    pub metadata: Option<Vec<MetadataFilter>>,
 
     #[graphql(name = "channels")]
-    pub channels: Vec<ID>,
+    pub channels: Option<Vec<ID>>,
 
     #[graphql(name = "updatedAt")]
     pub updated_at: Option<DateRangeInput>,
 
     #[graphql(name = "authorizeStatus")]
-    pub authorize_status: Vec<CheckoutAuthorizeStatusEnum>,
+    pub authorize_status: Option<Vec<CheckoutAuthorizeStatusEnum>>,
 
     #[graphql(name = "chargeStatus")]
-    pub charge_status: Vec<CheckoutChargeStatusEnum>,
+    pub charge_status: Option<Vec<CheckoutChargeStatusEnum>>,
+
+}
+
+
+#[derive(InputObject, Clone, Debug)]
+#[graphql(name = "CheckoutLineInput")]
+pub struct CheckoutLineInput {
+
+    #[graphql(name = "quantity")]
+    pub quantity: i32,
+
+    #[graphql(name = "variantId")]
+    pub variant_id: ID,
+
+    #[graphql(name = "price")]
+    pub price: Option<GenPositiveDecimal>,
+
+    #[graphql(name = "priceOverrideReason")]
+    pub price_override_reason: Option<String>,
+
+    #[graphql(name = "forceNewLine")]
+    pub force_new_line: Option<bool>,
+
+    #[graphql(name = "metadata")]
+    pub metadata: Option<Vec<crate::common::MetadataInput>>,
+
+}
+
+
+#[derive(InputObject, Clone, Debug)]
+#[graphql(name = "CheckoutLineUpdateInput")]
+pub struct CheckoutLineUpdateInput {
+
+    #[graphql(name = "variantId")]
+    pub variant_id: Option<ID>,
+
+    #[graphql(name = "quantity")]
+    pub quantity: Option<i32>,
+
+    #[graphql(name = "price")]
+    pub price: Option<GenPositiveDecimal>,
+
+    #[graphql(name = "priceOverrideReason")]
+    pub price_override_reason: Option<String>,
+
+    #[graphql(name = "lineId")]
+    pub line_id: Option<ID>,
+
+    #[graphql(name = "metadata")]
+    pub metadata: Option<Vec<crate::common::MetadataInput>>,
 
 }
 
@@ -6967,14 +10949,27 @@ pub struct CheckoutSortingInput {
 
 
 #[derive(InputObject, Clone, Debug)]
+#[graphql(name = "CheckoutValidationRules")]
+pub struct CheckoutValidationRules {
+
+    #[graphql(name = "shippingAddress")]
+    pub shipping_address: Option<CheckoutAddressValidationRules>,
+
+    #[graphql(name = "billingAddress")]
+    pub billing_address: Option<CheckoutAddressValidationRules>,
+
+}
+
+
+#[derive(InputObject, Clone, Debug)]
 #[graphql(name = "CollectionChannelListingUpdateInput")]
 pub struct CollectionChannelListingUpdateInput {
 
     #[graphql(name = "addChannels")]
-    pub add_channels: Vec<PublishableChannelListingInput>,
+    pub add_channels: Option<Vec<PublishableChannelListingInput>>,
 
     #[graphql(name = "removeChannels")]
-    pub remove_channels: Vec<ID>,
+    pub remove_channels: Option<Vec<ID>>,
 
 }
 
@@ -7008,13 +11003,13 @@ pub struct CollectionCreateInput {
     pub publication_date: Option<DateTime<Utc>>,
 
     #[graphql(name = "metadata")]
-    pub metadata: Vec<crate::common::MetadataInput>,
+    pub metadata: Option<Vec<crate::common::MetadataInput>>,
 
     #[graphql(name = "privateMetadata")]
-    pub private_metadata: Vec<crate::common::MetadataInput>,
+    pub private_metadata: Option<Vec<crate::common::MetadataInput>>,
 
     #[graphql(name = "products")]
-    pub products: Vec<ID>,
+    pub products: Option<Vec<ID>>,
 
 }
 
@@ -7030,13 +11025,13 @@ pub struct CollectionFilterInput {
     pub search: Option<String>,
 
     #[graphql(name = "metadata")]
-    pub metadata: Vec<MetadataFilter>,
+    pub metadata: Option<Vec<MetadataFilter>>,
 
     #[graphql(name = "ids")]
-    pub ids: Vec<ID>,
+    pub ids: Option<Vec<ID>>,
 
     #[graphql(name = "slugs")]
-    pub slugs: Vec<String>,
+    pub slugs: Option<Vec<String>>,
 
     #[graphql(name = "channel")]
     pub channel: Option<String>,
@@ -7073,10 +11068,10 @@ pub struct CollectionInput {
     pub publication_date: Option<DateTime<Utc>>,
 
     #[graphql(name = "metadata")]
-    pub metadata: Vec<crate::common::MetadataInput>,
+    pub metadata: Option<Vec<crate::common::MetadataInput>>,
 
     #[graphql(name = "privateMetadata")]
-    pub private_metadata: Vec<crate::common::MetadataInput>,
+    pub private_metadata: Option<Vec<crate::common::MetadataInput>>,
 
 }
 
@@ -7102,16 +11097,16 @@ pub struct CollectionSortingInput {
 pub struct CollectionWhereInput {
 
     #[graphql(name = "metadata")]
-    pub metadata: Vec<MetadataFilter>,
+    pub metadata: Option<Vec<MetadataFilter>>,
 
     #[graphql(name = "ids")]
-    pub ids: Vec<ID>,
+    pub ids: Option<Vec<ID>>,
 
     #[graphql(name = "AND")]
-    pub and: Vec<CollectionWhereInput>,
+    pub and: Option<Vec<CollectionWhereInput>>,
 
     #[graphql(name = "OR")]
-    pub or: Vec<CollectionWhereInput>,
+    pub or: Option<Vec<CollectionWhereInput>>,
 
 }
 
@@ -7134,10 +11129,10 @@ pub struct ConfigurationItemInput {
 pub struct ContainsFilterInput {
 
     #[graphql(name = "containsAny")]
-    pub contains_any: Vec<String>,
+    pub contains_any: Option<Vec<String>>,
 
     #[graphql(name = "containsAll")]
-    pub contains_all: Vec<String>,
+    pub contains_all: Option<Vec<String>>,
 
 }
 
@@ -7150,10 +11145,10 @@ pub struct CountryCodeEnumFilterInput {
     pub eq: Option<CountryCode>,
 
     #[graphql(name = "oneOf")]
-    pub one_of: Vec<CountryCode>,
+    pub one_of: Option<Vec<CountryCode>>,
 
     #[graphql(name = "notOneOf")]
-    pub not_one_of: Vec<CountryCode>,
+    pub not_one_of: Option<Vec<CountryCode>>,
 
 }
 
@@ -7195,6 +11190,22 @@ pub struct CountryRateUpdateInput {
 
 
 #[derive(InputObject, Clone, Debug)]
+#[graphql(name = "CustomerBulkUpdateInput")]
+pub struct CustomerBulkUpdateInput {
+
+    #[graphql(name = "id")]
+    pub id: Option<ID>,
+
+    #[graphql(name = "externalReference")]
+    pub external_reference: Option<String>,
+
+    #[graphql(name = "input")]
+    pub input: CustomerInput,
+
+}
+
+
+#[derive(InputObject, Clone, Debug)]
 #[graphql(name = "CustomerFilterInput")]
 pub struct CustomerFilterInput {
 
@@ -7211,10 +11222,10 @@ pub struct CustomerFilterInput {
     pub search: Option<String>,
 
     #[graphql(name = "metadata")]
-    pub metadata: Vec<MetadataFilter>,
+    pub metadata: Option<Vec<MetadataFilter>>,
 
     #[graphql(name = "ids")]
-    pub ids: Vec<ID>,
+    pub ids: Option<Vec<ID>>,
 
     #[graphql(name = "updatedAt")]
     pub updated_at: Option<DateTimeRangeInput>,
@@ -7248,10 +11259,10 @@ pub struct CustomerInput {
     pub note: Option<String>,
 
     #[graphql(name = "metadata")]
-    pub metadata: Vec<crate::common::MetadataInput>,
+    pub metadata: Option<Vec<crate::common::MetadataInput>>,
 
     #[graphql(name = "privateMetadata")]
-    pub private_metadata: Vec<crate::common::MetadataInput>,
+    pub private_metadata: Option<Vec<crate::common::MetadataInput>>,
 
     #[graphql(name = "languageCode")]
     pub language_code: Option<LanguageCodeEnum>,
@@ -7266,7 +11277,7 @@ pub struct CustomerInput {
     pub customer_type: Option<ID>,
 
     #[graphql(name = "attributes")]
-    pub attributes: Vec<AttributeValueInput>,
+    pub attributes: Option<Vec<AttributeValueInput>>,
 
 }
 
@@ -7279,7 +11290,7 @@ pub struct CustomerOrderWhereInput {
     pub metadata: Option<MetadataFilterInput>,
 
     #[graphql(name = "ids")]
-    pub ids: Vec<ID>,
+    pub ids: Option<Vec<ID>>,
 
     #[graphql(name = "number")]
     pub number: Option<IntFilterInput>,
@@ -7327,7 +11338,7 @@ pub struct CustomerOrderWhereInput {
     pub has_invoices: Option<bool>,
 
     #[graphql(name = "invoices")]
-    pub invoices: Vec<InvoiceFilterInput>,
+    pub invoices: Option<Vec<InvoiceFilterInput>>,
 
     #[graphql(name = "hasFulfillments")]
     pub has_fulfillments: Option<bool>,
@@ -7351,10 +11362,10 @@ pub struct CustomerOrderWhereInput {
     pub shipping_address: Option<AddressFilterInput>,
 
     #[graphql(name = "AND")]
-    pub and: Vec<CustomerOrderWhereInput>,
+    pub and: Option<Vec<CustomerOrderWhereInput>>,
 
     #[graphql(name = "OR")]
-    pub or: Vec<CustomerOrderWhereInput>,
+    pub or: Option<Vec<CustomerOrderWhereInput>>,
 
 }
 
@@ -7412,7 +11423,7 @@ pub struct CustomerTypeWhereInput {
     pub metadata: Option<MetadataFilterInput>,
 
     #[graphql(name = "ids")]
-    pub ids: Vec<ID>,
+    pub ids: Option<Vec<ID>>,
 
     #[graphql(name = "name")]
     pub name: Option<StringFilterInput>,
@@ -7424,10 +11435,10 @@ pub struct CustomerTypeWhereInput {
     pub is_default: Option<bool>,
 
     #[graphql(name = "AND")]
-    pub and: Vec<CustomerTypeWhereInput>,
+    pub and: Option<Vec<CustomerTypeWhereInput>>,
 
     #[graphql(name = "OR")]
-    pub or: Vec<CustomerTypeWhereInput>,
+    pub or: Option<Vec<CustomerTypeWhereInput>>,
 
 }
 
@@ -7440,7 +11451,7 @@ pub struct CustomerWhereInput {
     pub metadata: Option<MetadataFilterInput>,
 
     #[graphql(name = "ids")]
-    pub ids: Vec<ID>,
+    pub ids: Option<Vec<ID>>,
 
     #[graphql(name = "email")]
     pub email: Option<StringFilterInput>,
@@ -7473,13 +11484,13 @@ pub struct CustomerWhereInput {
     pub customer_type: Option<GlobalIDFilterInput>,
 
     #[graphql(name = "attributes")]
-    pub attributes: Vec<AssignedAttributeWhereInput>,
+    pub attributes: Option<Vec<AssignedAttributeWhereInput>>,
 
     #[graphql(name = "AND")]
-    pub and: Vec<CustomerWhereInput>,
+    pub and: Option<Vec<CustomerWhereInput>>,
 
     #[graphql(name = "OR")]
-    pub or: Vec<CustomerWhereInput>,
+    pub or: Option<Vec<CustomerWhereInput>>,
 
 }
 
@@ -7505,7 +11516,7 @@ pub struct DateTimeFilterInput {
     pub eq: Option<DateTime<Utc>>,
 
     #[graphql(name = "oneOf")]
-    pub one_of: Vec<DateTime<Utc>>,
+    pub one_of: Option<Vec<DateTime<Utc>>>,
 
     #[graphql(name = "range")]
     pub range: Option<DateTimeRangeInput>,
@@ -7534,7 +11545,7 @@ pub struct DecimalFilterInput {
     pub eq: Option<GenDecimal>,
 
     #[graphql(name = "oneOf")]
-    pub one_of: Vec<GenDecimal>,
+    pub one_of: Option<Vec<GenDecimal>>,
 
     #[graphql(name = "range")]
     pub range: Option<DecimalRangeInput>,
@@ -7566,10 +11577,10 @@ pub struct DiscountedObjectWhereInput {
     pub base_total_price: Option<DecimalFilterInput>,
 
     #[graphql(name = "AND")]
-    pub and: Vec<DiscountedObjectWhereInput>,
+    pub and: Option<Vec<DiscountedObjectWhereInput>>,
 
     #[graphql(name = "OR")]
-    pub or: Vec<DiscountedObjectWhereInput>,
+    pub or: Option<Vec<DiscountedObjectWhereInput>>,
 
 }
 
@@ -7621,16 +11632,16 @@ pub struct DraftOrderCreateInput {
     pub external_reference: Option<String>,
 
     #[graphql(name = "metadata")]
-    pub metadata: Vec<crate::common::MetadataInput>,
+    pub metadata: Option<Vec<crate::common::MetadataInput>>,
 
     #[graphql(name = "privateMetadata")]
-    pub private_metadata: Vec<crate::common::MetadataInput>,
+    pub private_metadata: Option<Vec<crate::common::MetadataInput>>,
 
     #[graphql(name = "languageCode")]
     pub language_code: Option<LanguageCodeEnum>,
 
     #[graphql(name = "lines")]
-    pub lines: Vec<OrderLineCreateInput>,
+    pub lines: Option<Vec<OrderLineCreateInput>>,
 
 }
 
@@ -7682,10 +11693,10 @@ pub struct DraftOrderInput {
     pub external_reference: Option<String>,
 
     #[graphql(name = "metadata")]
-    pub metadata: Vec<crate::common::MetadataInput>,
+    pub metadata: Option<Vec<crate::common::MetadataInput>>,
 
     #[graphql(name = "privateMetadata")]
-    pub private_metadata: Vec<crate::common::MetadataInput>,
+    pub private_metadata: Option<Vec<crate::common::MetadataInput>>,
 
     #[graphql(name = "languageCode")]
     pub language_code: Option<LanguageCodeEnum>,
@@ -7701,7 +11712,7 @@ pub struct DraftOrderWhereInput {
     pub metadata: Option<MetadataFilterInput>,
 
     #[graphql(name = "ids")]
-    pub ids: Vec<ID>,
+    pub ids: Option<Vec<ID>>,
 
     #[graphql(name = "number")]
     pub number: Option<IntFilterInput>,
@@ -7734,13 +11745,13 @@ pub struct DraftOrderWhereInput {
     pub voucher_code: Option<StringFilterInput>,
 
     #[graphql(name = "lines")]
-    pub lines: Vec<LinesFilterInput>,
+    pub lines: Option<Vec<LinesFilterInput>>,
 
     #[graphql(name = "linesCount")]
     pub lines_count: Option<IntFilterInput>,
 
     #[graphql(name = "transactions")]
-    pub transactions: Vec<TransactionFilterInput>,
+    pub transactions: Option<Vec<TransactionFilterInput>>,
 
     #[graphql(name = "totalGross")]
     pub total_gross: Option<PriceFilterInput>,
@@ -7752,7 +11763,7 @@ pub struct DraftOrderWhereInput {
     pub product_type_id: Option<GlobalIDFilterInput>,
 
     #[graphql(name = "events")]
-    pub events: Vec<OrderEventFilterInput>,
+    pub events: Option<Vec<OrderEventFilterInput>>,
 
     #[graphql(name = "billingAddress")]
     pub billing_address: Option<AddressFilterInput>,
@@ -7761,10 +11772,10 @@ pub struct DraftOrderWhereInput {
     pub shipping_address: Option<AddressFilterInput>,
 
     #[graphql(name = "AND")]
-    pub and: Vec<DraftOrderWhereInput>,
+    pub and: Option<Vec<DraftOrderWhereInput>>,
 
     #[graphql(name = "OR")]
-    pub or: Vec<DraftOrderWhereInput>,
+    pub or: Option<Vec<DraftOrderWhereInput>>,
 
 }
 
@@ -7809,20 +11820,55 @@ pub struct EventDeliverySortingInput {
 
 
 #[derive(InputObject, Clone, Debug)]
+#[graphql(name = "ExportFileFilterInput")]
+pub struct ExportFileFilterInput {
+
+    #[graphql(name = "createdAt")]
+    pub created_at: Option<DateTimeRangeInput>,
+
+    #[graphql(name = "updatedAt")]
+    pub updated_at: Option<DateTimeRangeInput>,
+
+    #[graphql(name = "status")]
+    pub status: Option<JobStatusEnum>,
+
+    #[graphql(name = "user")]
+    pub user: Option<String>,
+
+    #[graphql(name = "app")]
+    pub app: Option<String>,
+
+}
+
+
+#[derive(InputObject, Clone, Debug)]
+#[graphql(name = "ExportFileSortingInput")]
+pub struct ExportFileSortingInput {
+
+    #[graphql(name = "direction")]
+    pub direction: OrderDirection,
+
+    #[graphql(name = "field")]
+    pub field: ExportFileSortField,
+
+}
+
+
+#[derive(InputObject, Clone, Debug)]
 #[graphql(name = "ExportInfoInput")]
 pub struct ExportInfoInput {
 
     #[graphql(name = "attributes")]
-    pub attributes: Vec<ID>,
+    pub attributes: Option<Vec<ID>>,
 
     #[graphql(name = "warehouses")]
-    pub warehouses: Vec<ID>,
+    pub warehouses: Option<Vec<ID>>,
 
     #[graphql(name = "channels")]
-    pub channels: Vec<ID>,
+    pub channels: Option<Vec<ID>>,
 
     #[graphql(name = "fields")]
-    pub fields: Vec<ProductFieldEnum>,
+    pub fields: Option<Vec<ProductFieldEnum>>,
 
 }
 
@@ -7838,13 +11884,29 @@ pub struct ExportProductsInput {
     pub filter: Option<ProductFilterInput>,
 
     #[graphql(name = "ids")]
-    pub ids: Vec<ID>,
+    pub ids: Option<Vec<ID>>,
 
     #[graphql(name = "exportInfo")]
     pub export_info: Option<ExportInfoInput>,
 
     #[graphql(name = "fileType")]
     pub file_type: FileTypesEnum,
+
+}
+
+
+#[derive(InputObject, Clone, Debug)]
+#[graphql(name = "ExternalNotificationTriggerInput")]
+pub struct ExternalNotificationTriggerInput {
+
+    #[graphql(name = "ids")]
+    pub ids: Vec<ID>,
+
+    #[graphql(name = "extraPayload")]
+    pub extra_payload: Option<GenJSONString>,
+
+    #[graphql(name = "externalEventType")]
+    pub external_event_type: String,
 
 }
 
@@ -7883,7 +11945,7 @@ pub struct FulfillmentStatusEnumFilterInput {
     pub eq: Option<FulfillmentStatus>,
 
     #[graphql(name = "oneOf")]
-    pub one_of: Vec<FulfillmentStatus>,
+    pub one_of: Option<Vec<FulfillmentStatus>>,
 
 }
 
@@ -7938,7 +12000,7 @@ pub struct GiftCardBulkCreateInput {
     pub balance: PriceInput,
 
     #[graphql(name = "tags")]
-    pub tags: Vec<String>,
+    pub tags: Option<Vec<String>>,
 
     #[graphql(name = "expiryDate")]
     pub expiry_date: Option<DateTime<Utc>>,
@@ -7954,16 +12016,16 @@ pub struct GiftCardBulkCreateInput {
 pub struct GiftCardCreateInput {
 
     #[graphql(name = "addTags")]
-    pub add_tags: Vec<String>,
+    pub add_tags: Option<Vec<String>>,
 
     #[graphql(name = "expiryDate")]
     pub expiry_date: Option<DateTime<Utc>>,
 
     #[graphql(name = "metadata")]
-    pub metadata: Vec<crate::common::MetadataInput>,
+    pub metadata: Option<Vec<crate::common::MetadataInput>>,
 
     #[graphql(name = "privateMetadata")]
-    pub private_metadata: Vec<crate::common::MetadataInput>,
+    pub private_metadata: Option<Vec<crate::common::MetadataInput>>,
 
     #[graphql(name = "startDate")]
     pub start_date: Option<DateTime<Utc>>,
@@ -7996,6 +12058,19 @@ pub struct GiftCardCreateInput {
 
 
 #[derive(InputObject, Clone, Debug)]
+#[graphql(name = "GiftCardEventFilterInput")]
+pub struct GiftCardEventFilterInput {
+
+    #[graphql(name = "type")]
+    pub r#type: Option<GiftCardEventsEnum>,
+
+    #[graphql(name = "orders")]
+    pub orders: Option<Vec<ID>>,
+
+}
+
+
+#[derive(InputObject, Clone, Debug)]
 #[graphql(name = "GiftCardFilterInput")]
 pub struct GiftCardFilterInput {
 
@@ -8003,19 +12078,19 @@ pub struct GiftCardFilterInput {
     pub is_active: Option<bool>,
 
     #[graphql(name = "metadata")]
-    pub metadata: Vec<MetadataFilter>,
+    pub metadata: Option<Vec<MetadataFilter>>,
 
     #[graphql(name = "tags")]
-    pub tags: Vec<String>,
+    pub tags: Option<Vec<String>>,
 
     #[graphql(name = "products")]
-    pub products: Vec<ID>,
+    pub products: Option<Vec<ID>>,
 
     #[graphql(name = "usedBy")]
-    pub used_by: Vec<ID>,
+    pub used_by: Option<Vec<ID>>,
 
     #[graphql(name = "assignedTo")]
-    pub assigned_to: Vec<ID>,
+    pub assigned_to: Option<Vec<ID>>,
 
     #[graphql(name = "used")]
     pub used: Option<bool>,
@@ -8111,16 +12186,16 @@ pub struct GiftCardTagFilterInput {
 pub struct GiftCardUpdateInput {
 
     #[graphql(name = "addTags")]
-    pub add_tags: Vec<String>,
+    pub add_tags: Option<Vec<String>>,
 
     #[graphql(name = "expiryDate")]
     pub expiry_date: Option<DateTime<Utc>>,
 
     #[graphql(name = "metadata")]
-    pub metadata: Vec<crate::common::MetadataInput>,
+    pub metadata: Option<Vec<crate::common::MetadataInput>>,
 
     #[graphql(name = "privateMetadata")]
-    pub private_metadata: Vec<crate::common::MetadataInput>,
+    pub private_metadata: Option<Vec<crate::common::MetadataInput>>,
 
     #[graphql(name = "startDate")]
     pub start_date: Option<DateTime<Utc>>,
@@ -8129,7 +12204,7 @@ pub struct GiftCardUpdateInput {
     pub end_date: Option<DateTime<Utc>>,
 
     #[graphql(name = "removeTags")]
-    pub remove_tags: Vec<String>,
+    pub remove_tags: Option<Vec<String>>,
 
     #[graphql(name = "balanceAmount")]
     pub balance_amount: Option<GenPositiveDecimal>,
@@ -8145,7 +12220,7 @@ pub struct GlobalIDFilterInput {
     pub eq: Option<ID>,
 
     #[graphql(name = "oneOf")]
-    pub one_of: Vec<ID>,
+    pub one_of: Option<Vec<ID>>,
 
 }
 
@@ -8158,7 +12233,7 @@ pub struct IntFilterInput {
     pub eq: Option<i32>,
 
     #[graphql(name = "oneOf")]
-    pub one_of: Vec<i32>,
+    pub one_of: Option<Vec<i32>>,
 
     #[graphql(name = "range")]
     pub range: Option<IntRangeInput>,
@@ -8175,6 +12250,25 @@ pub struct IntRangeInput {
 
     #[graphql(name = "lte")]
     pub lte: Option<i32>,
+
+}
+
+
+#[derive(InputObject, Clone, Debug)]
+#[graphql(name = "InvoiceCreateInput")]
+pub struct InvoiceCreateInput {
+
+    #[graphql(name = "number")]
+    pub number: String,
+
+    #[graphql(name = "url")]
+    pub url: String,
+
+    #[graphql(name = "metadata")]
+    pub metadata: Option<Vec<crate::common::MetadataInput>>,
+
+    #[graphql(name = "privateMetadata")]
+    pub private_metadata: Option<Vec<crate::common::MetadataInput>>,
 
 }
 
@@ -8207,7 +12301,36 @@ pub struct MeasurementUnitsEnumFilterInput {
     pub eq: Option<MeasurementUnitsEnum>,
 
     #[graphql(name = "oneOf")]
-    pub one_of: Vec<MeasurementUnitsEnum>,
+    pub one_of: Option<Vec<MeasurementUnitsEnum>>,
+
+}
+
+
+#[derive(InputObject, Clone, Debug)]
+#[graphql(name = "MediaInput")]
+pub struct MediaInput {
+
+    #[graphql(name = "alt")]
+    pub alt: Option<String>,
+
+    #[graphql(name = "image")]
+    pub image: Option<GenUpload>,
+
+    #[graphql(name = "mediaUrl")]
+    pub media_url: Option<String>,
+
+}
+
+
+#[derive(InputObject, Clone, Debug)]
+#[graphql(name = "MediaSortingInput")]
+pub struct MediaSortingInput {
+
+    #[graphql(name = "direction")]
+    pub direction: OrderDirection,
+
+    #[graphql(name = "field")]
+    pub field: MediaChoicesSortField,
 
 }
 
@@ -8223,7 +12346,26 @@ pub struct MenuCreateInput {
     pub slug: Option<String>,
 
     #[graphql(name = "items")]
-    pub items: Vec<MenuItemInput>,
+    pub items: Option<Vec<MenuItemInput>>,
+
+}
+
+
+#[derive(InputObject, Clone, Debug)]
+#[graphql(name = "MenuFilterInput")]
+pub struct MenuFilterInput {
+
+    #[graphql(name = "search")]
+    pub search: Option<String>,
+
+    #[graphql(name = "slug")]
+    pub slug: Option<Vec<String>>,
+
+    #[graphql(name = "metadata")]
+    pub metadata: Option<Vec<MetadataFilter>>,
+
+    #[graphql(name = "slugs")]
+    pub slugs: Option<Vec<String>>,
 
 }
 
@@ -8270,6 +12412,19 @@ pub struct MenuItemCreateInput {
 
 
 #[derive(InputObject, Clone, Debug)]
+#[graphql(name = "MenuItemFilterInput")]
+pub struct MenuItemFilterInput {
+
+    #[graphql(name = "search")]
+    pub search: Option<String>,
+
+    #[graphql(name = "metadata")]
+    pub metadata: Option<Vec<MetadataFilter>>,
+
+}
+
+
+#[derive(InputObject, Clone, Debug)]
 #[graphql(name = "MenuItemInput")]
 pub struct MenuItemInput {
 
@@ -8303,6 +12458,19 @@ pub struct MenuItemMoveInput {
 
     #[graphql(name = "sortOrder")]
     pub sort_order: Option<i32>,
+
+}
+
+
+#[derive(InputObject, Clone, Debug)]
+#[graphql(name = "MenuItemSortingInput")]
+pub struct MenuItemSortingInput {
+
+    #[graphql(name = "direction")]
+    pub direction: OrderDirection,
+
+    #[graphql(name = "field")]
+    pub field: MenuItemsSortField,
 
 }
 
@@ -8354,7 +12522,7 @@ pub struct MetadataValueFilterInput {
     pub eq: Option<String>,
 
     #[graphql(name = "oneOf")]
-    pub one_of: Vec<String>,
+    pub one_of: Option<Vec<String>>,
 
 }
 
@@ -8403,7 +12571,306 @@ pub struct OrderAuthorizeStatusEnumFilterInput {
     pub eq: Option<OrderAuthorizeStatusEnum>,
 
     #[graphql(name = "oneOf")]
-    pub one_of: Vec<OrderAuthorizeStatusEnum>,
+    pub one_of: Option<Vec<OrderAuthorizeStatusEnum>>,
+
+}
+
+
+#[derive(InputObject, Clone, Debug)]
+#[graphql(name = "OrderBulkCreateDeliveryMethodInput")]
+pub struct OrderBulkCreateDeliveryMethodInput {
+
+    #[graphql(name = "warehouseId")]
+    pub warehouse_id: Option<ID>,
+
+    #[graphql(name = "warehouseName")]
+    pub warehouse_name: Option<String>,
+
+    #[graphql(name = "shippingMethodId")]
+    pub shipping_method_id: Option<ID>,
+
+    #[graphql(name = "shippingMethodName")]
+    pub shipping_method_name: Option<String>,
+
+    #[graphql(name = "shippingPrice")]
+    pub shipping_price: Option<TaxedMoneyInput>,
+
+    #[graphql(name = "shippingTaxRate")]
+    pub shipping_tax_rate: Option<GenPositiveDecimal>,
+
+    #[graphql(name = "shippingTaxClassId")]
+    pub shipping_tax_class_id: Option<ID>,
+
+    #[graphql(name = "shippingTaxClassName")]
+    pub shipping_tax_class_name: Option<String>,
+
+    #[graphql(name = "shippingTaxClassMetadata")]
+    pub shipping_tax_class_metadata: Option<Vec<crate::common::MetadataInput>>,
+
+    #[graphql(name = "shippingTaxClassPrivateMetadata")]
+    pub shipping_tax_class_private_metadata: Option<Vec<crate::common::MetadataInput>>,
+
+}
+
+
+#[derive(InputObject, Clone, Debug)]
+#[graphql(name = "OrderBulkCreateFulfillmentInput")]
+pub struct OrderBulkCreateFulfillmentInput {
+
+    #[graphql(name = "trackingCode")]
+    pub tracking_code: Option<String>,
+
+    #[graphql(name = "lines")]
+    pub lines: Option<Vec<OrderBulkCreateFulfillmentLineInput>>,
+
+}
+
+
+#[derive(InputObject, Clone, Debug)]
+#[graphql(name = "OrderBulkCreateFulfillmentLineInput")]
+pub struct OrderBulkCreateFulfillmentLineInput {
+
+    #[graphql(name = "variantId")]
+    pub variant_id: Option<ID>,
+
+    #[graphql(name = "variantSku")]
+    pub variant_sku: Option<String>,
+
+    #[graphql(name = "variantExternalReference")]
+    pub variant_external_reference: Option<String>,
+
+    #[graphql(name = "quantity")]
+    pub quantity: i32,
+
+    #[graphql(name = "warehouse")]
+    pub warehouse: ID,
+
+    #[graphql(name = "orderLineIndex")]
+    pub order_line_index: i32,
+
+}
+
+
+#[derive(InputObject, Clone, Debug)]
+#[graphql(name = "OrderBulkCreateInput")]
+pub struct OrderBulkCreateInput {
+
+    #[graphql(name = "externalReference")]
+    pub external_reference: Option<String>,
+
+    #[graphql(name = "channel")]
+    pub channel: String,
+
+    #[graphql(name = "createdAt")]
+    pub created_at: DateTime<Utc>,
+
+    #[graphql(name = "status")]
+    pub status: Option<OrderStatus>,
+
+    #[graphql(name = "user")]
+    pub user: OrderBulkCreateUserInput,
+
+    #[graphql(name = "billingAddress")]
+    pub billing_address: AddressInput,
+
+    #[graphql(name = "shippingAddress")]
+    pub shipping_address: Option<AddressInput>,
+
+    #[graphql(name = "currency")]
+    pub currency: String,
+
+    #[graphql(name = "metadata")]
+    pub metadata: Option<Vec<crate::common::MetadataInput>>,
+
+    #[graphql(name = "privateMetadata")]
+    pub private_metadata: Option<Vec<crate::common::MetadataInput>>,
+
+    #[graphql(name = "customerNote")]
+    pub customer_note: Option<String>,
+
+    #[graphql(name = "notes")]
+    pub notes: Option<Vec<OrderBulkCreateNoteInput>>,
+
+    #[graphql(name = "languageCode")]
+    pub language_code: LanguageCodeEnum,
+
+    #[graphql(name = "displayGrossPrices")]
+    pub display_gross_prices: Option<bool>,
+
+    #[graphql(name = "weight")]
+    pub weight: Option<GenWeightScalar>,
+
+    #[graphql(name = "redirectUrl")]
+    pub redirect_url: Option<String>,
+
+    #[graphql(name = "lines")]
+    pub lines: Vec<OrderBulkCreateOrderLineInput>,
+
+    #[graphql(name = "deliveryMethod")]
+    pub delivery_method: Option<OrderBulkCreateDeliveryMethodInput>,
+
+    #[graphql(name = "giftCards")]
+    pub gift_cards: Option<Vec<String>>,
+
+    #[graphql(name = "voucherCode")]
+    pub voucher_code: Option<String>,
+
+    #[graphql(name = "discounts")]
+    pub discounts: Option<Vec<OrderDiscountCommonInput>>,
+
+    #[graphql(name = "fulfillments")]
+    pub fulfillments: Option<Vec<OrderBulkCreateFulfillmentInput>>,
+
+    #[graphql(name = "transactions")]
+    pub transactions: Option<Vec<TransactionCreateInput>>,
+
+    #[graphql(name = "invoices")]
+    pub invoices: Option<Vec<OrderBulkCreateInvoiceInput>>,
+
+}
+
+
+#[derive(InputObject, Clone, Debug)]
+#[graphql(name = "OrderBulkCreateInvoiceInput")]
+pub struct OrderBulkCreateInvoiceInput {
+
+    #[graphql(name = "createdAt")]
+    pub created_at: DateTime<Utc>,
+
+    #[graphql(name = "number")]
+    pub number: Option<String>,
+
+    #[graphql(name = "url")]
+    pub url: Option<String>,
+
+    #[graphql(name = "metadata")]
+    pub metadata: Option<Vec<crate::common::MetadataInput>>,
+
+    #[graphql(name = "privateMetadata")]
+    pub private_metadata: Option<Vec<crate::common::MetadataInput>>,
+
+}
+
+
+#[derive(InputObject, Clone, Debug)]
+#[graphql(name = "OrderBulkCreateNoteInput")]
+pub struct OrderBulkCreateNoteInput {
+
+    #[graphql(name = "message")]
+    pub message: String,
+
+    #[graphql(name = "date")]
+    pub date: Option<DateTime<Utc>>,
+
+    #[graphql(name = "userId")]
+    pub user_id: Option<ID>,
+
+    #[graphql(name = "userEmail")]
+    pub user_email: Option<ID>,
+
+    #[graphql(name = "userExternalReference")]
+    pub user_external_reference: Option<ID>,
+
+    #[graphql(name = "appId")]
+    pub app_id: Option<ID>,
+
+}
+
+
+#[derive(InputObject, Clone, Debug)]
+#[graphql(name = "OrderBulkCreateOrderLineInput")]
+pub struct OrderBulkCreateOrderLineInput {
+
+    #[graphql(name = "variantId")]
+    pub variant_id: Option<ID>,
+
+    #[graphql(name = "variantSku")]
+    pub variant_sku: Option<String>,
+
+    #[graphql(name = "variantExternalReference")]
+    pub variant_external_reference: Option<String>,
+
+    #[graphql(name = "variantName")]
+    pub variant_name: Option<String>,
+
+    #[graphql(name = "productName")]
+    pub product_name: Option<String>,
+
+    #[graphql(name = "productSku")]
+    pub product_sku: Option<String>,
+
+    #[graphql(name = "translatedVariantName")]
+    pub translated_variant_name: Option<String>,
+
+    #[graphql(name = "translatedProductName")]
+    pub translated_product_name: Option<String>,
+
+    #[graphql(name = "createdAt")]
+    pub created_at: DateTime<Utc>,
+
+    #[graphql(name = "isShippingRequired")]
+    pub is_shipping_required: bool,
+
+    #[graphql(name = "isGiftCard")]
+    pub is_gift_card: bool,
+
+    #[graphql(name = "quantity")]
+    pub quantity: i32,
+
+    #[graphql(name = "totalPrice")]
+    pub total_price: TaxedMoneyInput,
+
+    #[graphql(name = "undiscountedTotalPrice")]
+    pub undiscounted_total_price: TaxedMoneyInput,
+
+    #[graphql(name = "unitDiscountReason")]
+    pub unit_discount_reason: Option<String>,
+
+    #[graphql(name = "unitDiscountType")]
+    pub unit_discount_type: Option<DiscountValueTypeEnum>,
+
+    #[graphql(name = "unitDiscountValue")]
+    pub unit_discount_value: Option<GenPositiveDecimal>,
+
+    #[graphql(name = "warehouse")]
+    pub warehouse: ID,
+
+    #[graphql(name = "metadata")]
+    pub metadata: Option<Vec<crate::common::MetadataInput>>,
+
+    #[graphql(name = "privateMetadata")]
+    pub private_metadata: Option<Vec<crate::common::MetadataInput>>,
+
+    #[graphql(name = "taxRate")]
+    pub tax_rate: Option<GenPositiveDecimal>,
+
+    #[graphql(name = "taxClassId")]
+    pub tax_class_id: Option<ID>,
+
+    #[graphql(name = "taxClassName")]
+    pub tax_class_name: Option<String>,
+
+    #[graphql(name = "taxClassMetadata")]
+    pub tax_class_metadata: Option<Vec<crate::common::MetadataInput>>,
+
+    #[graphql(name = "taxClassPrivateMetadata")]
+    pub tax_class_private_metadata: Option<Vec<crate::common::MetadataInput>>,
+
+}
+
+
+#[derive(InputObject, Clone, Debug)]
+#[graphql(name = "OrderBulkCreateUserInput")]
+pub struct OrderBulkCreateUserInput {
+
+    #[graphql(name = "id")]
+    pub id: Option<ID>,
+
+    #[graphql(name = "email")]
+    pub email: Option<String>,
+
+    #[graphql(name = "externalReference")]
+    pub external_reference: Option<String>,
 
 }
 
@@ -8416,7 +12883,7 @@ pub struct OrderChargeStatusEnumFilterInput {
     pub eq: Option<OrderChargeStatusEnum>,
 
     #[graphql(name = "oneOf")]
-    pub one_of: Vec<OrderChargeStatusEnum>,
+    pub one_of: Option<Vec<OrderChargeStatusEnum>>,
 
 }
 
@@ -8451,10 +12918,10 @@ pub struct OrderDraftFilterInput {
     pub search: Option<String>,
 
     #[graphql(name = "metadata")]
-    pub metadata: Vec<MetadataFilter>,
+    pub metadata: Option<Vec<MetadataFilter>>,
 
     #[graphql(name = "channels")]
-    pub channels: Vec<ID>,
+    pub channels: Option<Vec<ID>>,
 
 }
 
@@ -8480,7 +12947,65 @@ pub struct OrderEventTypeEnumFilterInput {
     pub eq: Option<OrderEventsEnum>,
 
     #[graphql(name = "oneOf")]
-    pub one_of: Vec<OrderEventsEnum>,
+    pub one_of: Option<Vec<OrderEventsEnum>>,
+
+}
+
+
+#[derive(InputObject, Clone, Debug)]
+#[graphql(name = "OrderFilterInput")]
+pub struct OrderFilterInput {
+
+    #[graphql(name = "paymentStatus")]
+    pub payment_status: Option<Vec<PaymentChargeStatusEnum>>,
+
+    #[graphql(name = "status")]
+    pub status: Option<Vec<OrderStatusFilter>>,
+
+    #[graphql(name = "customer")]
+    pub customer: Option<String>,
+
+    #[graphql(name = "created")]
+    pub created: Option<DateRangeInput>,
+
+    #[graphql(name = "search")]
+    pub search: Option<String>,
+
+    #[graphql(name = "metadata")]
+    pub metadata: Option<Vec<MetadataFilter>>,
+
+    #[graphql(name = "channels")]
+    pub channels: Option<Vec<ID>>,
+
+    #[graphql(name = "authorizeStatus")]
+    pub authorize_status: Option<Vec<OrderAuthorizeStatusEnum>>,
+
+    #[graphql(name = "chargeStatus")]
+    pub charge_status: Option<Vec<OrderChargeStatusEnum>>,
+
+    #[graphql(name = "updatedAt")]
+    pub updated_at: Option<DateTimeRangeInput>,
+
+    #[graphql(name = "isClickAndCollect")]
+    pub is_click_and_collect: Option<bool>,
+
+    #[graphql(name = "ids")]
+    pub ids: Option<Vec<ID>>,
+
+    #[graphql(name = "checkoutTokens")]
+    pub checkout_tokens: Option<Vec<String>>,
+
+    #[graphql(name = "giftCardUsed")]
+    pub gift_card_used: Option<bool>,
+
+    #[graphql(name = "giftCardBought")]
+    pub gift_card_bought: Option<bool>,
+
+    #[graphql(name = "numbers")]
+    pub numbers: Option<Vec<String>>,
+
+    #[graphql(name = "checkoutIds")]
+    pub checkout_ids: Option<Vec<ID>>,
 
 }
 
@@ -8544,7 +13069,7 @@ pub struct OrderGrantRefundCreateInput {
     pub reason_reference: Option<ID>,
 
     #[graphql(name = "lines")]
-    pub lines: Vec<OrderGrantRefundCreateLineInput>,
+    pub lines: Option<Vec<OrderGrantRefundCreateLineInput>>,
 
     #[graphql(name = "grantRefundForShipping")]
     pub grant_refund_for_shipping: Option<bool>,
@@ -8588,10 +13113,10 @@ pub struct OrderGrantRefundUpdateInput {
     pub reason_reference: Option<ID>,
 
     #[graphql(name = "addLines")]
-    pub add_lines: Vec<OrderGrantRefundUpdateLineAddInput>,
+    pub add_lines: Option<Vec<OrderGrantRefundUpdateLineAddInput>>,
 
     #[graphql(name = "removeLines")]
-    pub remove_lines: Vec<ID>,
+    pub remove_lines: Option<Vec<ID>>,
 
     #[graphql(name = "grantRefundForShipping")]
     pub grant_refund_for_shipping: Option<bool>,
@@ -8668,10 +13193,10 @@ pub struct OrderPredicateInput {
     pub discounted_object_predicate: Option<DiscountedObjectWhereInput>,
 
     #[graphql(name = "AND")]
-    pub and: Vec<OrderPredicateInput>,
+    pub and: Option<Vec<OrderPredicateInput>>,
 
     #[graphql(name = "OR")]
-    pub or: Vec<OrderPredicateInput>,
+    pub or: Option<Vec<OrderPredicateInput>>,
 
 }
 
@@ -8707,10 +13232,10 @@ pub struct OrderRefundLineInput {
 pub struct OrderRefundProductsInput {
 
     #[graphql(name = "orderLines")]
-    pub order_lines: Vec<OrderRefundLineInput>,
+    pub order_lines: Option<Vec<OrderRefundLineInput>>,
 
     #[graphql(name = "fulfillmentLines")]
-    pub fulfillment_lines: Vec<OrderRefundFulfillmentLineInput>,
+    pub fulfillment_lines: Option<Vec<OrderRefundFulfillmentLineInput>>,
 
     #[graphql(name = "amountToRefund")]
     pub amount_to_refund: Option<GenPositiveDecimal>,
@@ -8770,10 +13295,10 @@ pub struct OrderReturnLineInput {
 pub struct OrderReturnProductsInput {
 
     #[graphql(name = "orderLines")]
-    pub order_lines: Vec<OrderReturnLineInput>,
+    pub order_lines: Option<Vec<OrderReturnLineInput>>,
 
     #[graphql(name = "fulfillmentLines")]
-    pub fulfillment_lines: Vec<OrderReturnFulfillmentLineInput>,
+    pub fulfillment_lines: Option<Vec<OrderReturnFulfillmentLineInput>>,
 
     #[graphql(name = "amountToRefund")]
     pub amount_to_refund: Option<GenPositiveDecimal>,
@@ -8848,7 +13373,7 @@ pub struct OrderStatusEnumFilterInput {
     pub eq: Option<OrderStatus>,
 
     #[graphql(name = "oneOf")]
-    pub one_of: Vec<OrderStatus>,
+    pub one_of: Option<Vec<OrderStatus>>,
 
 }
 
@@ -8870,10 +13395,10 @@ pub struct OrderUpdateInput {
     pub external_reference: Option<String>,
 
     #[graphql(name = "metadata")]
-    pub metadata: Vec<crate::common::MetadataInput>,
+    pub metadata: Option<Vec<crate::common::MetadataInput>>,
 
     #[graphql(name = "privateMetadata")]
-    pub private_metadata: Vec<crate::common::MetadataInput>,
+    pub private_metadata: Option<Vec<crate::common::MetadataInput>>,
 
     #[graphql(name = "languageCode")]
     pub language_code: Option<LanguageCodeEnum>,
@@ -8899,7 +13424,7 @@ pub struct OrderWhereInput {
     pub metadata: Option<MetadataFilterInput>,
 
     #[graphql(name = "ids")]
-    pub ids: Vec<ID>,
+    pub ids: Option<Vec<ID>>,
 
     #[graphql(name = "number")]
     pub number: Option<IntFilterInput>,
@@ -8950,22 +13475,22 @@ pub struct OrderWhereInput {
     pub has_invoices: Option<bool>,
 
     #[graphql(name = "invoices")]
-    pub invoices: Vec<InvoiceFilterInput>,
+    pub invoices: Option<Vec<InvoiceFilterInput>>,
 
     #[graphql(name = "hasFulfillments")]
     pub has_fulfillments: Option<bool>,
 
     #[graphql(name = "fulfillments")]
-    pub fulfillments: Vec<FulfillmentFilterInput>,
+    pub fulfillments: Option<Vec<FulfillmentFilterInput>>,
 
     #[graphql(name = "lines")]
-    pub lines: Vec<LinesFilterInput>,
+    pub lines: Option<Vec<LinesFilterInput>>,
 
     #[graphql(name = "linesCount")]
     pub lines_count: Option<IntFilterInput>,
 
     #[graphql(name = "transactions")]
-    pub transactions: Vec<TransactionFilterInput>,
+    pub transactions: Option<Vec<TransactionFilterInput>>,
 
     #[graphql(name = "totalGross")]
     pub total_gross: Option<PriceFilterInput>,
@@ -8977,7 +13502,7 @@ pub struct OrderWhereInput {
     pub product_type_id: Option<GlobalIDFilterInput>,
 
     #[graphql(name = "events")]
-    pub events: Vec<OrderEventFilterInput>,
+    pub events: Option<Vec<OrderEventFilterInput>>,
 
     #[graphql(name = "billingAddress")]
     pub billing_address: Option<AddressFilterInput>,
@@ -8986,10 +13511,10 @@ pub struct OrderWhereInput {
     pub shipping_address: Option<AddressFilterInput>,
 
     #[graphql(name = "AND")]
-    pub and: Vec<OrderWhereInput>,
+    pub and: Option<Vec<OrderWhereInput>>,
 
     #[graphql(name = "OR")]
-    pub or: Vec<OrderWhereInput>,
+    pub or: Option<Vec<OrderWhereInput>>,
 
 }
 
@@ -9018,7 +13543,7 @@ pub struct PageCreateInput {
     pub content: Option<GenJSONString>,
 
     #[graphql(name = "attributes")]
-    pub attributes: Vec<AttributeValueInput>,
+    pub attributes: Option<Vec<AttributeValueInput>>,
 
     #[graphql(name = "isPublished")]
     pub is_published: Option<bool>,
@@ -9046,16 +13571,16 @@ pub struct PageFilterInput {
     pub search: Option<String>,
 
     #[graphql(name = "metadata")]
-    pub metadata: Vec<MetadataFilter>,
+    pub metadata: Option<Vec<MetadataFilter>>,
 
     #[graphql(name = "pageTypes")]
-    pub page_types: Vec<ID>,
+    pub page_types: Option<Vec<ID>>,
 
     #[graphql(name = "ids")]
-    pub ids: Vec<ID>,
+    pub ids: Option<Vec<ID>>,
 
     #[graphql(name = "slugs")]
-    pub slugs: Vec<String>,
+    pub slugs: Option<Vec<String>>,
 
 }
 
@@ -9074,7 +13599,7 @@ pub struct PageInput {
     pub content: Option<GenJSONString>,
 
     #[graphql(name = "attributes")]
-    pub attributes: Vec<AttributeValueInput>,
+    pub attributes: Option<Vec<AttributeValueInput>>,
 
     #[graphql(name = "isPublished")]
     pub is_published: Option<bool>,
@@ -9137,7 +13662,7 @@ pub struct PageTypeCreateInput {
     pub slug: Option<String>,
 
     #[graphql(name = "addAttributes")]
-    pub add_attributes: Vec<ID>,
+    pub add_attributes: Option<Vec<ID>>,
 
 }
 
@@ -9150,7 +13675,7 @@ pub struct PageTypeFilterInput {
     pub search: Option<String>,
 
     #[graphql(name = "slugs")]
-    pub slugs: Vec<String>,
+    pub slugs: Option<Vec<String>>,
 
 }
 
@@ -9179,10 +13704,10 @@ pub struct PageTypeUpdateInput {
     pub slug: Option<String>,
 
     #[graphql(name = "addAttributes")]
-    pub add_attributes: Vec<ID>,
+    pub add_attributes: Option<Vec<ID>>,
 
     #[graphql(name = "removeAttributes")]
-    pub remove_attributes: Vec<ID>,
+    pub remove_attributes: Option<Vec<ID>>,
 
 }
 
@@ -9195,7 +13720,7 @@ pub struct PageWhereInput {
     pub metadata: Option<MetadataFilterInput>,
 
     #[graphql(name = "ids")]
-    pub ids: Vec<ID>,
+    pub ids: Option<Vec<ID>>,
 
     #[graphql(name = "slug")]
     pub slug: Option<StringFilterInput>,
@@ -9204,13 +13729,83 @@ pub struct PageWhereInput {
     pub page_type: Option<GlobalIDFilterInput>,
 
     #[graphql(name = "attributes")]
-    pub attributes: Vec<AssignedAttributeWhereInput>,
+    pub attributes: Option<Vec<AssignedAttributeWhereInput>>,
 
     #[graphql(name = "AND")]
-    pub and: Vec<PageWhereInput>,
+    pub and: Option<Vec<PageWhereInput>>,
 
     #[graphql(name = "OR")]
-    pub or: Vec<PageWhereInput>,
+    pub or: Option<Vec<PageWhereInput>>,
+
+}
+
+
+#[derive(InputObject, Clone, Debug)]
+#[graphql(name = "PaymentCheckBalanceInput")]
+pub struct PaymentCheckBalanceInput {
+
+    #[graphql(name = "gatewayId")]
+    pub gateway_id: String,
+
+    #[graphql(name = "method")]
+    pub method: String,
+
+    #[graphql(name = "channel")]
+    pub channel: String,
+
+    #[graphql(name = "card")]
+    pub card: CardInput,
+
+}
+
+
+#[derive(InputObject, Clone, Debug)]
+#[graphql(name = "PaymentFilterInput")]
+pub struct PaymentFilterInput {
+
+    #[graphql(name = "ids")]
+    pub ids: Option<Vec<ID>>,
+
+    #[graphql(name = "checkouts")]
+    pub checkouts: Option<Vec<ID>>,
+
+}
+
+
+#[derive(InputObject, Clone, Debug)]
+#[graphql(name = "PaymentGatewayToInitialize")]
+pub struct PaymentGatewayToInitialize {
+
+    #[graphql(name = "id")]
+    pub id: String,
+
+    #[graphql(name = "data")]
+    pub data: Option<serde_json::Value>,
+
+}
+
+
+#[derive(InputObject, Clone, Debug)]
+#[graphql(name = "PaymentInput")]
+pub struct PaymentInput {
+
+    #[graphql(name = "gateway")]
+    pub gateway: String,
+
+    #[graphql(name = "token")]
+    pub token: Option<String>,
+
+    #[graphql(name = "amount")]
+    pub amount: Option<GenPositiveDecimal>,
+
+    #[graphql(name = "returnUrl")]
+    pub return_url: Option<String>,
+
+    #[graphql(name = "storePaymentMethod")]
+    pub store_payment_method: Option<StorePaymentMethodEnum>,
+
+    #[graphql(name = "metadata")]
+    pub metadata: Option<Vec<crate::common::MetadataInput>>,
 
 }
 
@@ -9262,7 +13857,7 @@ pub struct PaymentMethodTypeEnumFilterInput {
     pub eq: Option<PaymentMethodTypeEnum>,
 
     #[graphql(name = "oneOf")]
-    pub one_of: Vec<PaymentMethodTypeEnum>,
+    pub one_of: Option<Vec<PaymentMethodTypeEnum>>,
 
 }
 
@@ -9291,13 +13886,13 @@ pub struct PaymentSettingsInput {
 pub struct PermissionGroupCreateInput {
 
     #[graphql(name = "addPermissions")]
-    pub add_permissions: Vec<PermissionEnum>,
+    pub add_permissions: Option<Vec<PermissionEnum>>,
 
     #[graphql(name = "addUsers")]
-    pub add_users: Vec<ID>,
+    pub add_users: Option<Vec<ID>>,
 
     #[graphql(name = "addChannels")]
-    pub add_channels: Vec<ID>,
+    pub add_channels: Option<Vec<ID>>,
 
     #[graphql(name = "name")]
     pub name: String,
@@ -9316,7 +13911,7 @@ pub struct PermissionGroupFilterInput {
     pub search: Option<String>,
 
     #[graphql(name = "ids")]
-    pub ids: Vec<ID>,
+    pub ids: Option<Vec<ID>>,
 
 }
 
@@ -9339,25 +13934,25 @@ pub struct PermissionGroupSortingInput {
 pub struct PermissionGroupUpdateInput {
 
     #[graphql(name = "addPermissions")]
-    pub add_permissions: Vec<PermissionEnum>,
+    pub add_permissions: Option<Vec<PermissionEnum>>,
 
     #[graphql(name = "addUsers")]
-    pub add_users: Vec<ID>,
+    pub add_users: Option<Vec<ID>>,
 
     #[graphql(name = "addChannels")]
-    pub add_channels: Vec<ID>,
+    pub add_channels: Option<Vec<ID>>,
 
     #[graphql(name = "name")]
     pub name: Option<String>,
 
     #[graphql(name = "removePermissions")]
-    pub remove_permissions: Vec<PermissionEnum>,
+    pub remove_permissions: Option<Vec<PermissionEnum>>,
 
     #[graphql(name = "removeUsers")]
-    pub remove_users: Vec<ID>,
+    pub remove_users: Option<Vec<ID>>,
 
     #[graphql(name = "removeChannels")]
-    pub remove_channels: Vec<ID>,
+    pub remove_channels: Option<Vec<ID>>,
 
     #[graphql(name = "restrictedAccessToChannels")]
     pub restricted_access_to_channels: Option<bool>,
@@ -9415,7 +14010,7 @@ pub struct PluginUpdateInput {
     pub active: Option<bool>,
 
     #[graphql(name = "configuration")]
-    pub configuration: Vec<ConfigurationItemInput>,
+    pub configuration: Option<Vec<ConfigurationItemInput>>,
 
 }
 
@@ -9489,6 +14084,89 @@ pub struct ProductAttributeAssignmentUpdateInput {
 
 
 #[derive(InputObject, Clone, Debug)]
+#[graphql(name = "ProductBulkCreateInput")]
+pub struct ProductBulkCreateInput {
+
+    #[graphql(name = "attributes")]
+    pub attributes: Option<Vec<AttributeValueInput>>,
+
+    #[graphql(name = "category")]
+    pub category: Option<ID>,
+
+    #[graphql(name = "chargeTaxes")]
+    pub charge_taxes: Option<bool>,
+
+    #[graphql(name = "collections")]
+    pub collections: Option<Vec<ID>>,
+
+    #[graphql(name = "description")]
+    pub description: Option<GenJSONString>,
+
+    #[graphql(name = "name")]
+    pub name: Option<String>,
+
+    #[graphql(name = "slug")]
+    pub slug: Option<String>,
+
+    #[graphql(name = "taxClass")]
+    pub tax_class: Option<ID>,
+
+    #[graphql(name = "taxCode")]
+    pub tax_code: Option<String>,
+
+    #[graphql(name = "seo")]
+    pub seo: Option<SeoInput>,
+
+    #[graphql(name = "weight")]
+    pub weight: Option<GenWeightScalar>,
+
+    #[graphql(name = "rating")]
+    pub rating: Option<f64>,
+
+    #[graphql(name = "metadata")]
+    pub metadata: Option<Vec<crate::common::MetadataInput>>,
+
+    #[graphql(name = "privateMetadata")]
+    pub private_metadata: Option<Vec<crate::common::MetadataInput>>,
+
+    #[graphql(name = "externalReference")]
+    pub external_reference: Option<String>,
+
+    #[graphql(name = "productType")]
+    pub product_type: ID,
+
+    #[graphql(name = "media")]
+    pub media: Option<Vec<MediaInput>>,
+
+    #[graphql(name = "channelListings")]
+    pub channel_listings: Option<Vec<ProductChannelListingCreateInput>>,
+
+    #[graphql(name = "variants")]
+    pub variants: Option<Vec<ProductVariantBulkCreateInput>>,
+
+}
+
+
+#[derive(InputObject, Clone, Debug)]
+#[graphql(name = "ProductBulkTranslateInput")]
+pub struct ProductBulkTranslateInput {
+
+    #[graphql(name = "id")]
+    pub id: Option<ID>,
+
+    #[graphql(name = "externalReference")]
+    pub external_reference: Option<String>,
+
+    #[graphql(name = "languageCode")]
+    pub language_code: LanguageCodeEnum,
+
+    #[graphql(name = "translationFields")]
+    pub translation_fields: TranslationInput,
+
+}
+
+
+#[derive(InputObject, Clone, Debug)]
 #[graphql(name = "ProductChannelListingAddInput")]
 pub struct ProductChannelListingAddInput {
 
@@ -9517,10 +14195,35 @@ pub struct ProductChannelListingAddInput {
     pub available_for_purchase_at: Option<DateTime<Utc>>,
 
     #[graphql(name = "addVariants")]
-    pub add_variants: Vec<ID>,
+    pub add_variants: Option<Vec<ID>>,
 
     #[graphql(name = "removeVariants")]
-    pub remove_variants: Vec<ID>,
+    pub remove_variants: Option<Vec<ID>>,
+
+}
+
+
+#[derive(InputObject, Clone, Debug)]
+#[graphql(name = "ProductChannelListingCreateInput")]
+pub struct ProductChannelListingCreateInput {
+
+    #[graphql(name = "channelId")]
+    pub channel_id: ID,
+
+    #[graphql(name = "isPublished")]
+    pub is_published: Option<bool>,
+
+    #[graphql(name = "publishedAt")]
+    pub published_at: Option<DateTime<Utc>>,
+
+    #[graphql(name = "visibleInListings")]
+    pub visible_in_listings: Option<bool>,
+
+    #[graphql(name = "isAvailableForPurchase")]
+    pub is_available_for_purchase: Option<bool>,
+
+    #[graphql(name = "availableForPurchaseAt")]
+    pub available_for_purchase_at: Option<DateTime<Utc>>,
 
 }
 
@@ -9530,10 +14233,10 @@ pub struct ProductChannelListingAddInput {
 pub struct ProductChannelListingUpdateInput {
 
     #[graphql(name = "updateChannels")]
-    pub update_channels: Vec<ProductChannelListingAddInput>,
+    pub update_channels: Option<Vec<ProductChannelListingAddInput>>,
 
     #[graphql(name = "removeChannels")]
-    pub remove_channels: Vec<ID>,
+    pub remove_channels: Option<Vec<ID>>,
 
 }
 
@@ -9543,7 +14246,7 @@ pub struct ProductChannelListingUpdateInput {
 pub struct ProductCreateInput {
 
     #[graphql(name = "attributes")]
-    pub attributes: Vec<AttributeValueInput>,
+    pub attributes: Option<Vec<AttributeValueInput>>,
 
     #[graphql(name = "category")]
     pub category: Option<ID>,
@@ -9552,7 +14255,7 @@ pub struct ProductCreateInput {
     pub charge_taxes: Option<bool>,
 
     #[graphql(name = "collections")]
-    pub collections: Vec<ID>,
+    pub collections: Option<Vec<ID>>,
 
     #[graphql(name = "description")]
     pub description: Option<GenJSONString>,
@@ -9579,10 +14282,10 @@ pub struct ProductCreateInput {
     pub rating: Option<f64>,
 
     #[graphql(name = "metadata")]
-    pub metadata: Vec<crate::common::MetadataInput>,
+    pub metadata: Option<Vec<crate::common::MetadataInput>>,
 
     #[graphql(name = "privateMetadata")]
-    pub private_metadata: Vec<crate::common::MetadataInput>,
+    pub private_metadata: Option<Vec<crate::common::MetadataInput>>,
 
     #[graphql(name = "externalReference")]
     pub external_reference: Option<String>,
@@ -9601,16 +14304,16 @@ pub struct ProductFilterInput {
     pub is_published: Option<bool>,
 
     #[graphql(name = "collections")]
-    pub collections: Vec<ID>,
+    pub collections: Option<Vec<ID>>,
 
     #[graphql(name = "categories")]
-    pub categories: Vec<ID>,
+    pub categories: Option<Vec<ID>>,
 
     #[graphql(name = "hasCategory")]
     pub has_category: Option<bool>,
 
     #[graphql(name = "attributes")]
-    pub attributes: Vec<AttributeInput>,
+    pub attributes: Option<Vec<AttributeInput>>,
 
     #[graphql(name = "stockAvailability")]
     pub stock_availability: Option<StockAvailability>,
@@ -9622,7 +14325,7 @@ pub struct ProductFilterInput {
     pub search: Option<String>,
 
     #[graphql(name = "metadata")]
-    pub metadata: Vec<MetadataFilter>,
+    pub metadata: Option<Vec<MetadataFilter>>,
 
     #[graphql(name = "publishedFrom")]
     pub published_from: Option<DateTime<Utc>>,
@@ -9646,16 +14349,16 @@ pub struct ProductFilterInput {
     pub updated_at: Option<DateTimeRangeInput>,
 
     #[graphql(name = "productTypes")]
-    pub product_types: Vec<ID>,
+    pub product_types: Option<Vec<ID>>,
 
     #[graphql(name = "giftCard")]
     pub gift_card: Option<bool>,
 
     #[graphql(name = "ids")]
-    pub ids: Vec<ID>,
+    pub ids: Option<Vec<ID>>,
 
     #[graphql(name = "slugs")]
-    pub slugs: Vec<String>,
+    pub slugs: Option<Vec<String>>,
 
     #[graphql(name = "channel")]
     pub channel: Option<String>,
@@ -9668,7 +14371,7 @@ pub struct ProductFilterInput {
 pub struct ProductInput {
 
     #[graphql(name = "attributes")]
-    pub attributes: Vec<AttributeValueInput>,
+    pub attributes: Option<Vec<AttributeValueInput>>,
 
     #[graphql(name = "category")]
     pub category: Option<ID>,
@@ -9677,7 +14380,7 @@ pub struct ProductInput {
     pub charge_taxes: Option<bool>,
 
     #[graphql(name = "collections")]
-    pub collections: Vec<ID>,
+    pub collections: Option<Vec<ID>>,
 
     #[graphql(name = "description")]
     pub description: Option<GenJSONString>,
@@ -9704,10 +14407,10 @@ pub struct ProductInput {
     pub rating: Option<f64>,
 
     #[graphql(name = "metadata")]
-    pub metadata: Vec<crate::common::MetadataInput>,
+    pub metadata: Option<Vec<crate::common::MetadataInput>>,
 
     #[graphql(name = "privateMetadata")]
-    pub private_metadata: Vec<crate::common::MetadataInput>,
+    pub private_metadata: Option<Vec<crate::common::MetadataInput>>,
 
     #[graphql(name = "externalReference")]
     pub external_reference: Option<String>,
@@ -9768,7 +14471,7 @@ pub struct ProductOrder {
 pub struct ProductStockFilterInput {
 
     #[graphql(name = "warehouseIds")]
-    pub warehouse_ids: Vec<ID>,
+    pub warehouse_ids: Option<Vec<ID>>,
 
     #[graphql(name = "quantity")]
     pub quantity: Option<IntRangeInput>,
@@ -9790,16 +14493,16 @@ pub struct ProductTypeFilterInput {
     pub product_type: Option<ProductTypeEnum>,
 
     #[graphql(name = "metadata")]
-    pub metadata: Vec<MetadataFilter>,
+    pub metadata: Option<Vec<MetadataFilter>>,
 
     #[graphql(name = "kind")]
     pub kind: Option<ProductTypeKindEnum>,
 
     #[graphql(name = "ids")]
-    pub ids: Vec<ID>,
+    pub ids: Option<Vec<ID>>,
 
     #[graphql(name = "slugs")]
-    pub slugs: Vec<String>,
+    pub slugs: Option<Vec<String>>,
 
 }
 
@@ -9821,10 +14524,10 @@ pub struct ProductTypeInput {
     pub has_variants: Option<bool>,
 
     #[graphql(name = "productAttributes")]
-    pub product_attributes: Vec<ID>,
+    pub product_attributes: Option<Vec<ID>>,
 
     #[graphql(name = "variantAttributes")]
-    pub variant_attributes: Vec<ID>,
+    pub variant_attributes: Option<Vec<ID>>,
 
     #[graphql(name = "isShippingRequired")]
     pub is_shipping_required: Option<bool>,
@@ -9877,19 +14580,38 @@ pub struct ProductVariantBulkCreateInput {
     pub quantity_limit_per_customer: Option<i32>,
 
     #[graphql(name = "metadata")]
-    pub metadata: Vec<crate::common::MetadataInput>,
+    pub metadata: Option<Vec<crate::common::MetadataInput>>,
 
     #[graphql(name = "privateMetadata")]
-    pub private_metadata: Vec<crate::common::MetadataInput>,
+    pub private_metadata: Option<Vec<crate::common::MetadataInput>>,
 
     #[graphql(name = "externalReference")]
     pub external_reference: Option<String>,
 
     #[graphql(name = "stocks")]
-    pub stocks: Vec<StockInput>,
+    pub stocks: Option<Vec<StockInput>>,
 
     #[graphql(name = "channelListings")]
-    pub channel_listings: Vec<ProductVariantChannelListingAddInput>,
+    pub channel_listings: Option<Vec<ProductVariantChannelListingAddInput>>,
+
+}
+
+
+#[derive(InputObject, Clone, Debug)]
+#[graphql(name = "ProductVariantBulkTranslateInput")]
+pub struct ProductVariantBulkTranslateInput {
+
+    #[graphql(name = "id")]
+    pub id: Option<ID>,
+
+    #[graphql(name = "externalReference")]
+    pub external_reference: Option<String>,
+
+    #[graphql(name = "languageCode")]
+    pub language_code: LanguageCodeEnum,
+
+    #[graphql(name = "translationFields")]
+    pub translation_fields: NameTranslationInput,
 
 }
 
@@ -9899,7 +14621,7 @@ pub struct ProductVariantBulkCreateInput {
 pub struct ProductVariantBulkUpdateInput {
 
     #[graphql(name = "attributes")]
-    pub attributes: Vec<BulkAttributeValueInput>,
+    pub attributes: Option<Vec<BulkAttributeValueInput>>,
 
     #[graphql(name = "sku")]
     pub sku: Option<String>,
@@ -9917,10 +14639,10 @@ pub struct ProductVariantBulkUpdateInput {
     pub quantity_limit_per_customer: Option<i32>,
 
     #[graphql(name = "metadata")]
-    pub metadata: Vec<crate::common::MetadataInput>,
+    pub metadata: Option<Vec<crate::common::MetadataInput>>,
 
     #[graphql(name = "privateMetadata")]
-    pub private_metadata: Vec<crate::common::MetadataInput>,
+    pub private_metadata: Option<Vec<crate::common::MetadataInput>>,
 
     #[graphql(name = "externalReference")]
     pub external_reference: Option<String>,
@@ -9961,13 +14683,13 @@ pub struct ProductVariantChannelListingAddInput {
 pub struct ProductVariantChannelListingUpdateInput {
 
     #[graphql(name = "create")]
-    pub create: Vec<ProductVariantChannelListingAddInput>,
+    pub create: Option<Vec<ProductVariantChannelListingAddInput>>,
 
     #[graphql(name = "update")]
-    pub update: Vec<ChannelListingUpdateInput>,
+    pub update: Option<Vec<ChannelListingUpdateInput>>,
 
     #[graphql(name = "remove")]
-    pub remove: Vec<ID>,
+    pub remove: Option<Vec<ID>>,
 
 }
 
@@ -9995,10 +14717,10 @@ pub struct ProductVariantCreateInput {
     pub quantity_limit_per_customer: Option<i32>,
 
     #[graphql(name = "metadata")]
-    pub metadata: Vec<crate::common::MetadataInput>,
+    pub metadata: Option<Vec<crate::common::MetadataInput>>,
 
     #[graphql(name = "privateMetadata")]
-    pub private_metadata: Vec<crate::common::MetadataInput>,
+    pub private_metadata: Option<Vec<crate::common::MetadataInput>>,
 
     #[graphql(name = "externalReference")]
     pub external_reference: Option<String>,
@@ -10007,7 +14729,7 @@ pub struct ProductVariantCreateInput {
     pub product: ID,
 
     #[graphql(name = "stocks")]
-    pub stocks: Vec<StockInput>,
+    pub stocks: Option<Vec<StockInput>>,
 
 }
 
@@ -10020,10 +14742,10 @@ pub struct ProductVariantFilterInput {
     pub search: Option<String>,
 
     #[graphql(name = "sku")]
-    pub sku: Vec<String>,
+    pub sku: Option<Vec<String>>,
 
     #[graphql(name = "metadata")]
-    pub metadata: Vec<MetadataFilter>,
+    pub metadata: Option<Vec<MetadataFilter>>,
 
     #[graphql(name = "updatedAt")]
     pub updated_at: Option<DateTimeRangeInput>,
@@ -10036,7 +14758,7 @@ pub struct ProductVariantFilterInput {
 pub struct ProductVariantInput {
 
     #[graphql(name = "attributes")]
-    pub attributes: Vec<AttributeValueInput>,
+    pub attributes: Option<Vec<AttributeValueInput>>,
 
     #[graphql(name = "sku")]
     pub sku: Option<String>,
@@ -10054,10 +14776,10 @@ pub struct ProductVariantInput {
     pub quantity_limit_per_customer: Option<i32>,
 
     #[graphql(name = "metadata")]
-    pub metadata: Vec<crate::common::MetadataInput>,
+    pub metadata: Option<Vec<crate::common::MetadataInput>>,
 
     #[graphql(name = "privateMetadata")]
-    pub private_metadata: Vec<crate::common::MetadataInput>,
+    pub private_metadata: Option<Vec<crate::common::MetadataInput>>,
 
     #[graphql(name = "externalReference")]
     pub external_reference: Option<String>,
@@ -10083,13 +14805,13 @@ pub struct ProductVariantSortingInput {
 pub struct ProductVariantStocksUpdateInput {
 
     #[graphql(name = "create")]
-    pub create: Vec<StockInput>,
+    pub create: Option<Vec<StockInput>>,
 
     #[graphql(name = "update")]
-    pub update: Vec<StockUpdateInput>,
+    pub update: Option<Vec<StockUpdateInput>>,
 
     #[graphql(name = "remove")]
-    pub remove: Vec<ID>,
+    pub remove: Option<Vec<ID>>,
 
 }
 
@@ -10099,10 +14821,10 @@ pub struct ProductVariantStocksUpdateInput {
 pub struct ProductVariantWhereInput {
 
     #[graphql(name = "metadata")]
-    pub metadata: Vec<MetadataFilter>,
+    pub metadata: Option<Vec<MetadataFilter>>,
 
     #[graphql(name = "ids")]
-    pub ids: Vec<ID>,
+    pub ids: Option<Vec<ID>>,
 
     #[graphql(name = "sku")]
     pub sku: Option<StringFilterInput>,
@@ -10111,7 +14833,7 @@ pub struct ProductVariantWhereInput {
     pub updated_at: Option<DateTimeRangeInput>,
 
     #[graphql(name = "attributes")]
-    pub attributes: Vec<AssignedAttributeWhereInput>,
+    pub attributes: Option<Vec<AssignedAttributeWhereInput>>,
 
     #[graphql(name = "stockAvailability")]
     pub stock_availability: Option<StockAvailability>,
@@ -10120,10 +14842,10 @@ pub struct ProductVariantWhereInput {
     pub stocks: Option<ProductStockFilterInput>,
 
     #[graphql(name = "AND")]
-    pub and: Vec<ProductVariantWhereInput>,
+    pub and: Option<Vec<ProductVariantWhereInput>>,
 
     #[graphql(name = "OR")]
-    pub or: Vec<ProductVariantWhereInput>,
+    pub or: Option<Vec<ProductVariantWhereInput>>,
 
 }
 
@@ -10133,10 +14855,10 @@ pub struct ProductVariantWhereInput {
 pub struct ProductWhereInput {
 
     #[graphql(name = "metadata")]
-    pub metadata: Vec<MetadataFilter>,
+    pub metadata: Option<Vec<MetadataFilter>>,
 
     #[graphql(name = "ids")]
-    pub ids: Vec<ID>,
+    pub ids: Option<Vec<ID>>,
 
     #[graphql(name = "name")]
     pub name: Option<StringFilterInput>,
@@ -10178,7 +14900,7 @@ pub struct ProductWhereInput {
     pub minimal_price: Option<DecimalFilterInput>,
 
     #[graphql(name = "attributes")]
-    pub attributes: Vec<AttributeInput>,
+    pub attributes: Option<Vec<AttributeInput>>,
 
     #[graphql(name = "stockAvailability")]
     pub stock_availability: Option<StockAvailability>,
@@ -10193,10 +14915,10 @@ pub struct ProductWhereInput {
     pub updated_at: Option<DateTimeFilterInput>,
 
     #[graphql(name = "AND")]
-    pub and: Vec<ProductWhereInput>,
+    pub and: Option<Vec<ProductWhereInput>>,
 
     #[graphql(name = "OR")]
-    pub or: Vec<ProductWhereInput>,
+    pub or: Option<Vec<ProductWhereInput>>,
 
 }
 
@@ -10221,7 +14943,7 @@ pub struct PromotionCreateInput {
     pub r#type: PromotionTypeEnum,
 
     #[graphql(name = "rules")]
-    pub rules: Vec<PromotionRuleInput>,
+    pub rules: Option<Vec<PromotionRuleInput>>,
 
 }
 
@@ -10252,10 +14974,10 @@ pub struct PromotionRuleCreateInput {
     pub reward_type: Option<RewardTypeEnum>,
 
     #[graphql(name = "channels")]
-    pub channels: Vec<ID>,
+    pub channels: Option<Vec<ID>>,
 
     #[graphql(name = "gifts")]
-    pub gifts: Vec<ID>,
+    pub gifts: Option<Vec<ID>>,
 
     #[graphql(name = "promotion")]
     pub promotion: ID,
@@ -10289,10 +15011,23 @@ pub struct PromotionRuleInput {
     pub reward_type: Option<RewardTypeEnum>,
 
     #[graphql(name = "channels")]
-    pub channels: Vec<ID>,
+    pub channels: Option<Vec<ID>>,
 
     #[graphql(name = "gifts")]
-    pub gifts: Vec<ID>,
+    pub gifts: Option<Vec<ID>>,
+
+}
+
+
+#[derive(InputObject, Clone, Debug)]
+#[graphql(name = "PromotionRuleTranslationInput")]
+pub struct PromotionRuleTranslationInput {
+
+    #[graphql(name = "name")]
+    pub name: Option<String>,
+
+    #[graphql(name = "description")]
+    pub description: Option<serde_json::Value>,
 
 }
 
@@ -10323,16 +15058,16 @@ pub struct PromotionRuleUpdateInput {
     pub reward_type: Option<RewardTypeEnum>,
 
     #[graphql(name = "addChannels")]
-    pub add_channels: Vec<ID>,
+    pub add_channels: Option<Vec<ID>>,
 
     #[graphql(name = "removeChannels")]
-    pub remove_channels: Vec<ID>,
+    pub remove_channels: Option<Vec<ID>>,
 
     #[graphql(name = "addGifts")]
-    pub add_gifts: Vec<ID>,
+    pub add_gifts: Option<Vec<ID>>,
 
     #[graphql(name = "removeGifts")]
-    pub remove_gifts: Vec<ID>,
+    pub remove_gifts: Option<Vec<ID>>,
 
 }
 
@@ -10351,6 +15086,19 @@ pub struct PromotionSortingInput {
 
 
 #[derive(InputObject, Clone, Debug)]
+#[graphql(name = "PromotionTranslationInput")]
+pub struct PromotionTranslationInput {
+
+    #[graphql(name = "name")]
+    pub name: Option<String>,
+
+    #[graphql(name = "description")]
+    pub description: Option<serde_json::Value>,
+
+}
+
+
+#[derive(InputObject, Clone, Debug)]
 #[graphql(name = "PromotionTypeEnumFilterInput")]
 pub struct PromotionTypeEnumFilterInput {
 
@@ -10358,7 +15106,7 @@ pub struct PromotionTypeEnumFilterInput {
     pub eq: Option<PromotionTypeEnum>,
 
     #[graphql(name = "oneOf")]
-    pub one_of: Vec<PromotionTypeEnum>,
+    pub one_of: Option<Vec<PromotionTypeEnum>>,
 
 }
 
@@ -10387,10 +15135,10 @@ pub struct PromotionUpdateInput {
 pub struct PromotionWhereInput {
 
     #[graphql(name = "metadata")]
-    pub metadata: Vec<MetadataFilter>,
+    pub metadata: Option<Vec<MetadataFilter>>,
 
     #[graphql(name = "ids")]
-    pub ids: Vec<ID>,
+    pub ids: Option<Vec<ID>>,
 
     #[graphql(name = "name")]
     pub name: Option<StringFilterInput>,
@@ -10408,10 +15156,10 @@ pub struct PromotionWhereInput {
     pub r#type: Option<PromotionTypeEnumFilterInput>,
 
     #[graphql(name = "AND")]
-    pub and: Vec<PromotionWhereInput>,
+    pub and: Option<Vec<PromotionWhereInput>>,
 
     #[graphql(name = "OR")]
-    pub or: Vec<PromotionWhereInput>,
+    pub or: Option<Vec<PromotionWhereInput>>,
 
 }
 
@@ -10469,11 +15217,37 @@ pub struct ReturnSettingsUpdateInput {
 
 
 #[derive(InputObject, Clone, Debug)]
+#[graphql(name = "SaleChannelListingAddInput")]
+pub struct SaleChannelListingAddInput {
+
+    #[graphql(name = "channelId")]
+    pub channel_id: ID,
+
+    #[graphql(name = "discountValue")]
+    pub discount_value: GenPositiveDecimal,
+
+}
+
+
+#[derive(InputObject, Clone, Debug)]
+#[graphql(name = "SaleChannelListingInput")]
+pub struct SaleChannelListingInput {
+
+    #[graphql(name = "addChannels")]
+    pub add_channels: Option<Vec<SaleChannelListingAddInput>>,
+
+    #[graphql(name = "removeChannels")]
+    pub remove_channels: Option<Vec<ID>>,
+
+}
+
+
+#[derive(InputObject, Clone, Debug)]
 #[graphql(name = "SaleFilterInput")]
 pub struct SaleFilterInput {
 
     #[graphql(name = "status")]
-    pub status: Vec<DiscountStatusEnum>,
+    pub status: Option<Vec<DiscountStatusEnum>>,
 
     #[graphql(name = "saleType")]
     pub sale_type: Option<DiscountValueTypeEnum>,
@@ -10485,10 +15259,44 @@ pub struct SaleFilterInput {
     pub search: Option<String>,
 
     #[graphql(name = "metadata")]
-    pub metadata: Vec<MetadataFilter>,
+    pub metadata: Option<Vec<MetadataFilter>>,
 
     #[graphql(name = "updatedAt")]
     pub updated_at: Option<DateTimeRangeInput>,
+
+}
+
+
+#[derive(InputObject, Clone, Debug)]
+#[graphql(name = "SaleInput")]
+pub struct SaleInput {
+
+    #[graphql(name = "name")]
+    pub name: Option<String>,
+
+    #[graphql(name = "type")]
+    pub r#type: Option<DiscountValueTypeEnum>,
+
+    #[graphql(name = "value")]
+    pub value: Option<GenPositiveDecimal>,
+
+    #[graphql(name = "products")]
+    pub products: Option<Vec<ID>>,
+
+    #[graphql(name = "variants")]
+    pub variants: Option<Vec<ID>>,
+
+    #[graphql(name = "categories")]
+    pub categories: Option<Vec<ID>>,
+
+    #[graphql(name = "collections")]
+    pub collections: Option<Vec<ID>>,
+
+    #[graphql(name = "startDate")]
+    pub start_date: Option<DateTime<Utc>>,
+
+    #[graphql(name = "endDate")]
+    pub end_date: Option<DateTime<Utc>>,
 
 }
 
@@ -10546,10 +15354,10 @@ pub struct ShippingMethodChannelListingAddInput {
 pub struct ShippingMethodChannelListingInput {
 
     #[graphql(name = "addChannels")]
-    pub add_channels: Vec<ShippingMethodChannelListingAddInput>,
+    pub add_channels: Option<Vec<ShippingMethodChannelListingAddInput>>,
 
     #[graphql(name = "removeChannels")]
-    pub remove_channels: Vec<ID>,
+    pub remove_channels: Option<Vec<ID>>,
 
 }
 
@@ -10606,10 +15414,10 @@ pub struct ShippingPriceInput {
     pub shipping_zone: Option<ID>,
 
     #[graphql(name = "addPostalCodeRules")]
-    pub add_postal_code_rules: Vec<ShippingPostalCodeRulesCreateInputRange>,
+    pub add_postal_code_rules: Option<Vec<ShippingPostalCodeRulesCreateInputRange>>,
 
     #[graphql(name = "deletePostalCodeRules")]
-    pub delete_postal_code_rules: Vec<ID>,
+    pub delete_postal_code_rules: Option<Vec<ID>>,
 
     #[graphql(name = "inclusionType")]
     pub inclusion_type: Option<PostalCodeRuleInclusionTypeEnum>,
@@ -10644,16 +15452,16 @@ pub struct ShippingZoneCreateInput {
     pub description: Option<String>,
 
     #[graphql(name = "countries")]
-    pub countries: Vec<String>,
+    pub countries: Option<Vec<String>>,
 
     #[graphql(name = "default")]
     pub default: Option<bool>,
 
     #[graphql(name = "addWarehouses")]
-    pub add_warehouses: Vec<ID>,
+    pub add_warehouses: Option<Vec<ID>>,
 
     #[graphql(name = "addChannels")]
-    pub add_channels: Vec<ID>,
+    pub add_channels: Option<Vec<ID>>,
 
 }
 
@@ -10666,7 +15474,7 @@ pub struct ShippingZoneFilterInput {
     pub search: Option<String>,
 
     #[graphql(name = "channels")]
-    pub channels: Vec<ID>,
+    pub channels: Option<Vec<ID>>,
 
 }
 
@@ -10682,22 +15490,22 @@ pub struct ShippingZoneUpdateInput {
     pub description: Option<String>,
 
     #[graphql(name = "countries")]
-    pub countries: Vec<String>,
+    pub countries: Option<Vec<String>>,
 
     #[graphql(name = "default")]
     pub default: Option<bool>,
 
     #[graphql(name = "addWarehouses")]
-    pub add_warehouses: Vec<ID>,
+    pub add_warehouses: Option<Vec<ID>>,
 
     #[graphql(name = "addChannels")]
-    pub add_channels: Vec<ID>,
+    pub add_channels: Option<Vec<ID>>,
 
     #[graphql(name = "removeWarehouses")]
-    pub remove_warehouses: Vec<ID>,
+    pub remove_warehouses: Option<Vec<ID>>,
 
     #[graphql(name = "removeChannels")]
-    pub remove_channels: Vec<ID>,
+    pub remove_channels: Option<Vec<ID>>,
 
 }
 
@@ -10755,10 +15563,10 @@ pub struct ShopSettingsInput {
     pub allow_storefront_traffic: Option<bool>,
 
     #[graphql(name = "metadata")]
-    pub metadata: Vec<crate::common::MetadataInput>,
+    pub metadata: Option<Vec<crate::common::MetadataInput>>,
 
     #[graphql(name = "privateMetadata")]
-    pub private_metadata: Vec<crate::common::MetadataInput>,
+    pub private_metadata: Option<Vec<crate::common::MetadataInput>>,
 
     #[graphql(name = "preserveAllAddressFields")]
     pub preserve_all_address_fields: Option<bool>,
@@ -10788,6 +15596,19 @@ pub struct ShopSettingsInput {
 
 
 #[derive(InputObject, Clone, Debug)]
+#[graphql(name = "ShopSettingsTranslationInput")]
+pub struct ShopSettingsTranslationInput {
+
+    #[graphql(name = "headerText")]
+    pub header_text: Option<String>,
+
+    #[graphql(name = "description")]
+    pub description: Option<String>,
+
+}
+
+
+#[derive(InputObject, Clone, Debug)]
 #[graphql(name = "StaffCreateInput")]
 pub struct StaffCreateInput {
 
@@ -10807,13 +15628,13 @@ pub struct StaffCreateInput {
     pub note: Option<String>,
 
     #[graphql(name = "metadata")]
-    pub metadata: Vec<crate::common::MetadataInput>,
+    pub metadata: Option<Vec<crate::common::MetadataInput>>,
 
     #[graphql(name = "privateMetadata")]
-    pub private_metadata: Vec<crate::common::MetadataInput>,
+    pub private_metadata: Option<Vec<crate::common::MetadataInput>>,
 
     #[graphql(name = "addGroups")]
-    pub add_groups: Vec<ID>,
+    pub add_groups: Option<Vec<ID>>,
 
     #[graphql(name = "redirectUrl")]
     pub redirect_url: Option<String>,
@@ -10857,16 +15678,16 @@ pub struct StaffUpdateInput {
     pub note: Option<String>,
 
     #[graphql(name = "metadata")]
-    pub metadata: Vec<crate::common::MetadataInput>,
+    pub metadata: Option<Vec<crate::common::MetadataInput>>,
 
     #[graphql(name = "privateMetadata")]
-    pub private_metadata: Vec<crate::common::MetadataInput>,
+    pub private_metadata: Option<Vec<crate::common::MetadataInput>>,
 
     #[graphql(name = "addGroups")]
-    pub add_groups: Vec<ID>,
+    pub add_groups: Option<Vec<ID>>,
 
     #[graphql(name = "removeGroups")]
-    pub remove_groups: Vec<ID>,
+    pub remove_groups: Option<Vec<ID>>,
 
 }
 
@@ -10882,7 +15703,42 @@ pub struct StaffUserInput {
     pub search: Option<String>,
 
     #[graphql(name = "ids")]
-    pub ids: Vec<ID>,
+    pub ids: Option<Vec<ID>>,
+
+}
+
+
+#[derive(InputObject, Clone, Debug)]
+#[graphql(name = "StockBulkUpdateInput")]
+pub struct StockBulkUpdateInput {
+
+    #[graphql(name = "variantId")]
+    pub variant_id: Option<ID>,
+
+    #[graphql(name = "variantExternalReference")]
+    pub variant_external_reference: Option<String>,
+
+    #[graphql(name = "warehouseId")]
+    pub warehouse_id: Option<ID>,
+
+    #[graphql(name = "warehouseExternalReference")]
+    pub warehouse_external_reference: Option<String>,
+
+    #[graphql(name = "quantity")]
+    pub quantity: i32,
+
+}
+
+
+#[derive(InputObject, Clone, Debug)]
+#[graphql(name = "StockFilterInput")]
+pub struct StockFilterInput {
+
+    #[graphql(name = "quantity")]
+    pub quantity: Option<f64>,
+
+    #[graphql(name = "search")]
+    pub search: Option<String>,
 
 }
 
@@ -10931,7 +15787,7 @@ pub struct StringFilterInput {
     pub eq: Option<String>,
 
     #[graphql(name = "oneOf")]
-    pub one_of: Vec<String>,
+    pub one_of: Option<Vec<String>>,
 
 }
 
@@ -10944,7 +15800,7 @@ pub struct TaxClassCreateInput {
     pub name: String,
 
     #[graphql(name = "createCountryRates")]
-    pub create_country_rates: Vec<CountryRateInput>,
+    pub create_country_rates: Option<Vec<CountryRateInput>>,
 
 }
 
@@ -10954,13 +15810,13 @@ pub struct TaxClassCreateInput {
 pub struct TaxClassFilterInput {
 
     #[graphql(name = "metadata")]
-    pub metadata: Vec<MetadataFilter>,
+    pub metadata: Option<Vec<MetadataFilter>>,
 
     #[graphql(name = "ids")]
-    pub ids: Vec<ID>,
+    pub ids: Option<Vec<ID>>,
 
     #[graphql(name = "countries")]
-    pub countries: Vec<CountryCode>,
+    pub countries: Option<Vec<CountryCode>>,
 
 }
 
@@ -10999,10 +15855,10 @@ pub struct TaxClassUpdateInput {
     pub name: Option<String>,
 
     #[graphql(name = "updateCountryRates")]
-    pub update_country_rates: Vec<CountryRateUpdateInput>,
+    pub update_country_rates: Option<Vec<CountryRateUpdateInput>>,
 
     #[graphql(name = "removeCountryRates")]
-    pub remove_country_rates: Vec<CountryCode>,
+    pub remove_country_rates: Option<Vec<CountryCode>>,
 
 }
 
@@ -11012,10 +15868,10 @@ pub struct TaxClassUpdateInput {
 pub struct TaxConfigurationFilterInput {
 
     #[graphql(name = "metadata")]
-    pub metadata: Vec<MetadataFilter>,
+    pub metadata: Option<Vec<MetadataFilter>>,
 
     #[graphql(name = "ids")]
-    pub ids: Vec<ID>,
+    pub ids: Option<Vec<ID>>,
 
 }
 
@@ -11062,16 +15918,29 @@ pub struct TaxConfigurationUpdateInput {
     pub prices_entered_with_tax: Option<bool>,
 
     #[graphql(name = "updateCountriesConfiguration")]
-    pub update_countries_configuration: Vec<TaxConfigurationPerCountryInput>,
+    pub update_countries_configuration: Option<Vec<TaxConfigurationPerCountryInput>>,
 
     #[graphql(name = "removeCountriesConfiguration")]
-    pub remove_countries_configuration: Vec<CountryCode>,
+    pub remove_countries_configuration: Option<Vec<CountryCode>>,
 
     #[graphql(name = "useWeightedTaxForShipping")]
     pub use_weighted_tax_for_shipping: Option<bool>,
 
     #[graphql(name = "taxAppId")]
     pub tax_app_id: Option<String>,
+
+}
+
+
+#[derive(InputObject, Clone, Debug)]
+#[graphql(name = "TaxedMoneyInput")]
+pub struct TaxedMoneyInput {
+
+    #[graphql(name = "gross")]
+    pub gross: GenPositiveDecimal,
+
+    #[graphql(name = "net")]
+    pub net: GenPositiveDecimal,
 
 }
 
@@ -11103,7 +15972,7 @@ pub struct TransactionCreateInput {
     pub psp_reference: Option<String>,
 
     #[graphql(name = "availableActions")]
-    pub available_actions: Vec<TransactionActionEnum>,
+    pub available_actions: Option<Vec<TransactionActionEnum>>,
 
     #[graphql(name = "amountAuthorized")]
     pub amount_authorized: Option<MoneyInput>,
@@ -11118,16 +15987,29 @@ pub struct TransactionCreateInput {
     pub amount_canceled: Option<MoneyInput>,
 
     #[graphql(name = "metadata")]
-    pub metadata: Vec<crate::common::MetadataInput>,
+    pub metadata: Option<Vec<crate::common::MetadataInput>>,
 
     #[graphql(name = "privateMetadata")]
-    pub private_metadata: Vec<crate::common::MetadataInput>,
+    pub private_metadata: Option<Vec<crate::common::MetadataInput>>,
 
     #[graphql(name = "externalUrl")]
     pub external_url: Option<String>,
 
     #[graphql(name = "paymentMethodDetails")]
     pub payment_method_details: Option<PaymentMethodDetailsInput>,
+
+}
+
+
+#[derive(InputObject, Clone, Debug)]
+#[graphql(name = "TransactionEventFilterInput")]
+pub struct TransactionEventFilterInput {
+
+    #[graphql(name = "createdAt")]
+    pub created_at: Option<DateTimeRangeInput>,
+
+    #[graphql(name = "type")]
+    pub r#type: Option<TransactionEventTypeEnumFilterInput>,
 
 }
 
@@ -11146,6 +16028,19 @@ pub struct TransactionEventInput {
 
 
 #[derive(InputObject, Clone, Debug)]
+#[graphql(name = "TransactionEventTypeEnumFilterInput")]
+pub struct TransactionEventTypeEnumFilterInput {
+
+    #[graphql(name = "eq")]
+    pub eq: Option<TransactionEventTypeEnum>,
+
+    #[graphql(name = "oneOf")]
+    pub one_of: Option<Vec<TransactionEventTypeEnum>>,
+
+}
+
+
+#[derive(InputObject, Clone, Debug)]
 #[graphql(name = "TransactionFilterInput")]
 pub struct TransactionFilterInput {
 
@@ -11157,6 +16052,93 @@ pub struct TransactionFilterInput {
 
     #[graphql(name = "metadata")]
     pub metadata: Option<MetadataFilterInput>,
+
+}
+
+
+#[derive(InputObject, Clone, Debug)]
+#[graphql(name = "TransactionSortingInput")]
+pub struct TransactionSortingInput {
+
+    #[graphql(name = "direction")]
+    pub direction: OrderDirection,
+
+    #[graphql(name = "field")]
+    pub field: TransactionSortField,
+
+}
+
+
+#[derive(InputObject, Clone, Debug)]
+#[graphql(name = "TransactionUpdateInput")]
+pub struct TransactionUpdateInput {
+
+    #[graphql(name = "name")]
+    pub name: Option<String>,
+
+    #[graphql(name = "message")]
+    pub message: Option<String>,
+
+    #[graphql(name = "pspReference")]
+    pub psp_reference: Option<String>,
+
+    #[graphql(name = "availableActions")]
+    pub available_actions: Option<Vec<TransactionActionEnum>>,
+
+    #[graphql(name = "amountAuthorized")]
+    pub amount_authorized: Option<MoneyInput>,
+
+    #[graphql(name = "amountCharged")]
+    pub amount_charged: Option<MoneyInput>,
+
+    #[graphql(name = "amountRefunded")]
+    pub amount_refunded: Option<MoneyInput>,
+
+    #[graphql(name = "amountCanceled")]
+    pub amount_canceled: Option<MoneyInput>,
+
+    #[graphql(name = "metadata")]
+    pub metadata: Option<Vec<crate::common::MetadataInput>>,
+
+    #[graphql(name = "privateMetadata")]
+    pub private_metadata: Option<Vec<crate::common::MetadataInput>>,
+
+    #[graphql(name = "externalUrl")]
+    pub external_url: Option<String>,
+
+    #[graphql(name = "paymentMethodDetails")]
+    pub payment_method_details: Option<PaymentMethodDetailsInput>,
+
+}
+
+
+#[derive(InputObject, Clone, Debug)]
+#[graphql(name = "TransactionWhereInput")]
+pub struct TransactionWhereInput {
+
+    #[graphql(name = "ids")]
+    pub ids: Option<Vec<ID>>,
+
+    #[graphql(name = "pspReference")]
+    pub psp_reference: Option<StringFilterInput>,
+
+    #[graphql(name = "appIdentifier")]
+    pub app_identifier: Option<StringFilterInput>,
+
+    #[graphql(name = "createdAt")]
+    pub created_at: Option<DateTimeRangeInput>,
+
+    #[graphql(name = "modifiedAt")]
+    pub modified_at: Option<DateTimeRangeInput>,
+
+    #[graphql(name = "events")]
+    pub events: Option<Vec<TransactionEventFilterInput>>,
+
+    #[graphql(name = "AND")]
+    pub and: Option<Vec<TransactionWhereInput>>,
+
+    #[graphql(name = "OR")]
+    pub or: Option<Vec<TransactionWhereInput>>,
 
 }
 
@@ -11191,7 +16173,26 @@ pub struct UUIDFilterInput {
     pub eq: Option<String>,
 
     #[graphql(name = "oneOf")]
-    pub one_of: Vec<String>,
+    pub one_of: Option<Vec<String>>,
+
+}
+
+
+#[derive(InputObject, Clone, Debug)]
+#[graphql(name = "UpdateInvoiceInput")]
+pub struct UpdateInvoiceInput {
+
+    #[graphql(name = "number")]
+    pub number: Option<String>,
+
+    #[graphql(name = "url")]
+    pub url: Option<String>,
+
+    #[graphql(name = "metadata")]
+    pub metadata: Option<Vec<crate::common::MetadataInput>>,
+
+    #[graphql(name = "privateMetadata")]
+    pub private_metadata: Option<Vec<crate::common::MetadataInput>>,
 
 }
 
@@ -11222,10 +16223,10 @@ pub struct UserCreateInput {
     pub note: Option<String>,
 
     #[graphql(name = "metadata")]
-    pub metadata: Vec<crate::common::MetadataInput>,
+    pub metadata: Option<Vec<crate::common::MetadataInput>>,
 
     #[graphql(name = "privateMetadata")]
-    pub private_metadata: Vec<crate::common::MetadataInput>,
+    pub private_metadata: Option<Vec<crate::common::MetadataInput>>,
 
     #[graphql(name = "languageCode")]
     pub language_code: Option<LanguageCodeEnum>,
@@ -11240,7 +16241,7 @@ pub struct UserCreateInput {
     pub customer_type: Option<ID>,
 
     #[graphql(name = "attributes")]
-    pub attributes: Vec<AttributeValueInput>,
+    pub attributes: Option<Vec<AttributeValueInput>>,
 
     #[graphql(name = "redirectUrl")]
     pub redirect_url: Option<String>,
@@ -11285,10 +16286,10 @@ pub struct VoucherChannelListingAddInput {
 pub struct VoucherChannelListingInput {
 
     #[graphql(name = "addChannels")]
-    pub add_channels: Vec<VoucherChannelListingAddInput>,
+    pub add_channels: Option<Vec<VoucherChannelListingAddInput>>,
 
     #[graphql(name = "removeChannels")]
-    pub remove_channels: Vec<ID>,
+    pub remove_channels: Option<Vec<ID>>,
 
 }
 
@@ -11298,13 +16299,13 @@ pub struct VoucherChannelListingInput {
 pub struct VoucherFilterInput {
 
     #[graphql(name = "status")]
-    pub status: Vec<DiscountStatusEnum>,
+    pub status: Option<Vec<DiscountStatusEnum>>,
 
     #[graphql(name = "timesUsed")]
     pub times_used: Option<IntRangeInput>,
 
     #[graphql(name = "discountType")]
-    pub discount_type: Vec<VoucherDiscountType>,
+    pub discount_type: Option<Vec<VoucherDiscountType>>,
 
     #[graphql(name = "started")]
     pub started: Option<DateTimeRangeInput>,
@@ -11313,10 +16314,10 @@ pub struct VoucherFilterInput {
     pub search: Option<String>,
 
     #[graphql(name = "metadata")]
-    pub metadata: Vec<MetadataFilter>,
+    pub metadata: Option<Vec<MetadataFilter>>,
 
     #[graphql(name = "ids")]
-    pub ids: Vec<ID>,
+    pub ids: Option<Vec<ID>>,
 
 }
 
@@ -11335,7 +16336,7 @@ pub struct VoucherInput {
     pub code: Option<String>,
 
     #[graphql(name = "addCodes")]
-    pub add_codes: Vec<String>,
+    pub add_codes: Option<Vec<String>>,
 
     #[graphql(name = "startDate")]
     pub start_date: Option<DateTime<Utc>>,
@@ -11347,22 +16348,22 @@ pub struct VoucherInput {
     pub discount_value_type: Option<DiscountValueTypeEnum>,
 
     #[graphql(name = "products")]
-    pub products: Vec<ID>,
+    pub products: Option<Vec<ID>>,
 
     #[graphql(name = "variants")]
-    pub variants: Vec<ID>,
+    pub variants: Option<Vec<ID>>,
 
     #[graphql(name = "collections")]
-    pub collections: Vec<ID>,
+    pub collections: Option<Vec<ID>>,
 
     #[graphql(name = "categories")]
-    pub categories: Vec<ID>,
+    pub categories: Option<Vec<ID>>,
 
     #[graphql(name = "minCheckoutItemsQuantity")]
     pub min_checkout_items_quantity: Option<i32>,
 
     #[graphql(name = "countries")]
-    pub countries: Vec<String>,
+    pub countries: Option<Vec<String>>,
 
     #[graphql(name = "applyOncePerOrder")]
     pub apply_once_per_order: Option<bool>,
@@ -11418,7 +16419,7 @@ pub struct WarehouseCreateInput {
     pub address: AddressInput,
 
     #[graphql(name = "shippingZones")]
-    pub shipping_zones: Vec<ID>,
+    pub shipping_zones: Option<Vec<ID>>,
 
 }
 
@@ -11431,22 +16432,22 @@ pub struct WarehouseFilterInput {
     pub click_and_collect_option: Option<WarehouseClickAndCollectOptionEnum>,
 
     #[graphql(name = "metadata")]
-    pub metadata: Vec<MetadataFilter>,
+    pub metadata: Option<Vec<MetadataFilter>>,
 
     #[graphql(name = "search")]
     pub search: Option<String>,
 
     #[graphql(name = "ids")]
-    pub ids: Vec<ID>,
+    pub ids: Option<Vec<ID>>,
 
     #[graphql(name = "isPrivate")]
     pub is_private: Option<bool>,
 
     #[graphql(name = "channels")]
-    pub channels: Vec<ID>,
+    pub channels: Option<Vec<ID>>,
 
     #[graphql(name = "slugs")]
-    pub slugs: Vec<String>,
+    pub slugs: Option<Vec<String>>,
 
 }
 
@@ -11506,13 +16507,13 @@ pub struct WebhookCreateInput {
     pub target_url: Option<String>,
 
     #[graphql(name = "events")]
-    pub events: Vec<WebhookEventTypeEnum>,
+    pub events: Option<Vec<WebhookEventTypeEnum>>,
 
     #[graphql(name = "asyncEvents")]
-    pub async_events: Vec<WebhookEventTypeAsyncEnum>,
+    pub async_events: Option<Vec<WebhookEventTypeAsyncEnum>>,
 
     #[graphql(name = "syncEvents")]
-    pub sync_events: Vec<WebhookEventTypeSyncEnum>,
+    pub sync_events: Option<Vec<WebhookEventTypeSyncEnum>>,
 
     #[graphql(name = "app")]
     pub app: Option<ID>,
@@ -11546,13 +16547,13 @@ pub struct WebhookUpdateInput {
     pub target_url: Option<String>,
 
     #[graphql(name = "events")]
-    pub events: Vec<WebhookEventTypeEnum>,
+    pub events: Option<Vec<WebhookEventTypeEnum>>,
 
     #[graphql(name = "asyncEvents")]
-    pub async_events: Vec<WebhookEventTypeAsyncEnum>,
+    pub async_events: Option<Vec<WebhookEventTypeAsyncEnum>>,
 
     #[graphql(name = "syncEvents")]
-    pub sync_events: Vec<WebhookEventTypeSyncEnum>,
+    pub sync_events: Option<Vec<WebhookEventTypeSyncEnum>>,
 
     #[graphql(name = "app")]
     pub app: Option<ID>,
@@ -17284,6 +22285,9 @@ pub struct PageType {
     #[graphql(name = "name")]
     pub name: Option<String>,
 
+    #[graphql(name = "slug")]
+    pub slug: Option<String>,
+
     #[graphql(name = "attributes")]
     pub attributes: Vec<Box<Attribute>>,
 
@@ -21569,6 +26573,9 @@ pub struct Warehouse {
     #[graphql(name = "name")]
     pub name: Option<String>,
 
+    #[graphql(name = "slug")]
+    pub slug: Option<String>,
+
     #[graphql(name = "email")]
     pub email: Option<String>,
 
@@ -22368,7 +27375,7 @@ impl GenQuery {
     }
 
     #[graphql(name = "productVariants")]
-    async fn product_variants(&self, #[graphql(name = "ids")] _arg_ids: Vec<ID>, #[graphql(name = "channel")] _arg_channel: Option<String>, #[graphql(name = "filter")] _arg_filter: Option<ProductVariantFilterInput>, #[graphql(name = "where")] _arg_where: Option<ProductVariantWhereInput>, #[graphql(name = "search")] _arg_search: Option<String>, #[graphql(name = "sortBy")] _arg_sort_by: Option<ProductVariantSortingInput>, #[graphql(name = "before")] _arg_before: Option<String>, #[graphql(name = "after")] _arg_after: Option<String>, #[graphql(name = "first")] _arg_first: Option<i32>, #[graphql(name = "last")] _arg_last: Option<i32>) -> Option<ProductVariantCountableConnection> {
+    async fn product_variants(&self, #[graphql(name = "ids")] _arg_ids: Option<Vec<ID>>, #[graphql(name = "channel")] _arg_channel: Option<String>, #[graphql(name = "filter")] _arg_filter: Option<ProductVariantFilterInput>, #[graphql(name = "where")] _arg_where: Option<ProductVariantWhereInput>, #[graphql(name = "search")] _arg_search: Option<String>, #[graphql(name = "sortBy")] _arg_sort_by: Option<ProductVariantSortingInput>, #[graphql(name = "before")] _arg_before: Option<String>, #[graphql(name = "after")] _arg_after: Option<String>, #[graphql(name = "first")] _arg_first: Option<i32>, #[graphql(name = "last")] _arg_last: Option<i32>) -> Option<ProductVariantCountableConnection> {
 
         Some(ProductVariantCountableConnection { total_count: None, edges: vec![], page_info: Some(PageInfo { has_next_page: false, has_previous_page: false, start_cursor: None, end_cursor: None }) })
 
@@ -23084,7 +28091,7 @@ impl GenMutation {
     }
 
     #[graphql(name = "productVariantBulkDelete")]
-    async fn product_variant_bulk_delete(&self, #[graphql(name = "ids")] _arg_ids: Vec<ID>, #[graphql(name = "skus")] _arg_skus: Vec<String>) -> Option<ProductVariantBulkDelete> {
+    async fn product_variant_bulk_delete(&self, #[graphql(name = "ids")] _arg_ids: Option<Vec<ID>>, #[graphql(name = "skus")] _arg_skus: Option<Vec<String>>) -> Option<ProductVariantBulkDelete> {
 
         Some(ProductVariantBulkDelete { errors: vec![] })
 
@@ -23098,7 +28105,7 @@ impl GenMutation {
     }
 
     #[graphql(name = "productVariantStocksDelete")]
-    async fn product_variant_stocks_delete(&self, #[graphql(name = "sku")] _arg_sku: Option<String>, #[graphql(name = "variantId")] _arg_variant_id: Option<ID>, #[graphql(name = "warehouseIds")] _arg_warehouse_ids: Vec<ID>) -> Option<ProductVariantStocksDelete> {
+    async fn product_variant_stocks_delete(&self, #[graphql(name = "sku")] _arg_sku: Option<String>, #[graphql(name = "variantId")] _arg_variant_id: Option<ID>, #[graphql(name = "warehouseIds")] _arg_warehouse_ids: Option<Vec<ID>>) -> Option<ProductVariantStocksDelete> {
 
         Some(ProductVariantStocksDelete { product_variant: None, errors: vec![] })
 

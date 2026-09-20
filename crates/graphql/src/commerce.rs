@@ -276,6 +276,7 @@ impl CommerceQuery {
             private_metadata: vec![],
             metadata: vec![],
             name: Some(w.name),
+            slug: None,
             email: None,
             is_private: None,
             address: None,
@@ -287,9 +288,10 @@ impl CommerceQuery {
     async fn menus(
         &self, ctx: &Context<'_>,
         first: Option<i32>, after: Option<String>, before: Option<String>, last: Option<i32>,
+        channel: Option<String>, filter: Option<gen::MenuFilterInput>,
         #[graphql(name = "sortBy")] sort_by: Option<gen::MenuSortingInput>,
     ) -> Result<gen::MenuCountableConnection> {
-        let _ = (before, last, sort_by);
+        let _ = (before, last, channel, filter, sort_by);
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
         use sea_orm::EntityTrait;
         let rows = rustygod_db::entities::menu_menu::Entity::find().all(db).await.map_err(|e| Error::new(e.to_string()))?;
@@ -308,9 +310,10 @@ impl CommerceQuery {
     async fn tax_classes(
         &self, ctx: &Context<'_>,
         first: Option<i32>, after: Option<String>, before: Option<String>, last: Option<i32>,
+        filter: Option<gen::TaxClassFilterInput>,
         #[graphql(name = "sortBy")] sort_by: Option<gen::TaxClassSortingInput>,
     ) -> Result<gen::TaxClassCountableConnection> {
-        let _ = (before, last, sort_by);
+        let _ = (before, last, filter, sort_by);
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
         let off = after.and_then(|c| crate::common::decode_cursor(&c)).unwrap_or(0);
         let lim = first.unwrap_or(100).clamp(1, 100) as usize;
@@ -335,9 +338,9 @@ impl CommerceQuery {
     async fn pages(
         &self, ctx: &Context<'_>,
         first: Option<i32>, after: Option<String>, before: Option<String>, last: Option<i32>,
-        filter: Option<gen::PageFilterInput>, #[graphql(name = "sortBy")] sort_by: Option<gen::PageSortingInput>, #[graphql(name = "where")] where_input: Option<gen::PageWhereInput>,
+        filter: Option<gen::PageFilterInput>, #[graphql(name = "sortBy")] sort_by: Option<gen::PageSortingInput>, #[graphql(name = "where")] where_input: Option<gen::PageWhereInput>, search: Option<String>,
     ) -> Result<gen::PageCountableConnection> {
-        let _ = (before, last, filter, sort_by, where_input);
+        let _ = (before, last, filter, sort_by, where_input, search);
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
         let off = after.and_then(|c| crate::common::decode_cursor(&c)).unwrap_or(0);
         let lim = first.unwrap_or(100).clamp(1, 100) as usize;
@@ -385,9 +388,24 @@ impl CommerceQuery {
         Ok(gen::PromotionCountableConnection { edges, page_info: Some(crate::common::PageInfo { has_next_page: false, has_previous_page: false, start_cursor: None, end_cursor: None }) })
     }
 
-    async fn menu(&self, ctx: &Context<'_>, slug: String) -> Result<Option<gen::Menu>> {
+    /// Saleor `menu(channel, id, name, slug)` — resolve by id, slug, or name.
+    async fn menu(&self, ctx: &Context<'_>, channel: Option<String>, id: Option<ID>, name: Option<String>, slug: Option<String>) -> Result<Option<gen::Menu>> {
+        let _ = channel;
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
-        let m = rustygod_db::commerce::get_menu(db, &slug).await.map_err(|e| Error::new(e.to_string()))?;
+        let resolved_slug: Option<String> = if let Some(s) = slug { Some(s) } else if let Some(n) = name {
+            use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
+            rustygod_db::entities::menu_menu::Entity::find()
+                .filter(rustygod_db::entities::menu_menu::Column::Name.eq(n))
+                .one(db).await.map_err(|e| Error::new(e.to_string()))?.map(|m| m.slug)
+        } else if let Some(i) = id {
+            use sea_orm::EntityTrait;
+            let pk: i32 = i.0.parse().unwrap_or(-1);
+            rustygod_db::entities::menu_menu::Entity::find_by_id(pk).one(db).await.map_err(|e| Error::new(e.to_string()))?.map(|m| m.slug)
+        } else { None };
+        let m = match resolved_slug {
+            Some(s) => rustygod_db::commerce::get_menu(db, &s).await.map_err(|e| Error::new(e.to_string()))?,
+            None => None,
+        };
         Ok(m.map(|x| gen::Menu {
             id: Some(ID(x.id.to_string())),
             private_metadata: vec![],
@@ -451,27 +469,11 @@ async fn all_permissions(ctx: &Context<'_>) -> Vec<GqlPermission> {
     rows.into_iter().map(|(code, name)| GqlPermission { code: crate::common::permission_enum_code(&code), name }).collect()
 }
 
-/// Static country list for `shop { countries }` (Saleor builds this from
-/// `django-countries` + shipping-zone filter; Dashboard only needs shape).
-fn all_countries() -> Vec<GqlCountryDisplay> {
-    const COUNTRIES: &[(&str, &str)] = &[
-        ("AF", "Afghanistan"), ("DE", "Germany"), ("FR", "France"),
-        ("GB", "United Kingdom"), ("IR", "Iran"), ("NL", "Netherlands"),
-        ("PL", "Poland"), ("US", "United States"),
-    ];
-    COUNTRIES.iter().map(|(code, name)| GqlCountryDisplay { code: code.to_string(), country: name.to_string() }).collect()
-}
-
-#[derive(InputObject, Clone, Debug)]
-pub struct ShopSettingsInput {
-    pub metadata: Option<Vec<crate::common::MetadataInput>>,
-}
-
 #[derive(SimpleObject, Clone)]
 #[graphql(name = "ShopSettingsUpdate")]
 pub struct GqlShopSettingsUpdate {
-    pub shop: Option<GqlShop>,
-    pub errors: Vec<crate::common::GqlError>,
+    pub shop: Option<gen::Shop>,
+    pub errors: Vec<gen::ShopError>,
 }
 
 #[derive(Default)]
@@ -479,18 +481,22 @@ pub struct CommerceMutation;
 
 #[Object]
 impl CommerceMutation {
-    /// Dashboard shop navigation pins (`UpdateShopNavigationPins`): merges
-    /// `metadata` into `site_sitesettings.metadata` (same JSON dict Django
-    /// uses) and returns the refreshed `shop`.
+    /// Dashboard shop settings + navigation pins (`ShopSettingsUpdate`,
+    /// `UpdateShopNavigationPins`, `OrderSettingsUpdate`,
+    /// `UpdateDefaultWeightUnit`): Saleor's `ShopSettingsInput` in,
+    /// `{ shop errors }` out. Metadata merges into
+    /// `site_sitesettings.metadata` (same JSON dict Django uses); name and
+    /// description persist to the real site rows; remaining scalars are
+    /// accepted-ignored until their domain ports land.
     async fn shop_settings_update(
         &self,
         ctx: &Context<'_>,
-        input: ShopSettingsInput,
+        input: gen::ShopSettingsInput,
     ) -> Result<GqlShopSettingsUpdate> {
         let g = ctx.data::<GqlContext>()?;
         let db = g.db()?;
-        if let Some(meta) = input.metadata {
-            use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, Set};
+        use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, Set};
+        if let Some(meta) = input.metadata.clone().or(input.private_metadata.clone()) {
             if let Some(row) = rustygod_db::entities::site_sitesettings::Entity::find()
                 .filter(rustygod_db::entities::site_sitesettings::Column::Id.eq(1))
                 .one(db)
@@ -502,51 +508,34 @@ impl CommerceMutation {
                     &meta,
                 );
                 let mut am: rustygod_db::entities::site_sitesettings::ActiveModel = row.into();
-                am.metadata = Set(merged);
+                if input.private_metadata.is_some() {
+                    am.private_metadata = Set(merged.clone());
+                } else {
+                    am.metadata = Set(merged);
+                }
                 am.update(db).await.map_err(|e| Error::new(e.to_string()))?;
             }
         }
-        let (site_name, site_desc) = site_info(ctx).await;
-        let shop_metadata = site_metadata(ctx).await;
-        Ok(GqlShopSettingsUpdate {
-            shop: Some(GqlShop {
-                id: ID("Shop:1".into()),
-                name: site_name,
-                description: site_desc,
-                version: "3.24.0-a.0".into(),
-                schema_version: "3.24".into(),
-                domain: GqlDomain { host: "localhost:8000".into(), ssl_enabled: false, url: "http://localhost:8000/".into() },
-                countries: all_countries(),
-                default_country: Some(GqlCountryDisplay { code: "US".into(), country: "United States".into() }),
-                languages: vec![GqlLanguageDisplay { code: "EN".into(), language: "English".into() }],
-                permissions: all_permissions(ctx).await,
-                default_weight_unit: Some("KG".into()),
-                header_text: None,
-                track_inventory_by_default: Some(true),
-                fulfillment_auto_approve: true,
-                fulfillment_allow_unpaid: true,
-                available_external_authentications: vec![],
-                password_login_mode: "ENABLED".into(),
-                allow_storefront_traffic: true,
-                use_legacy_update_webhook_emission: Some(false),
-                use_legacy_shipping_zone_stock_availability: false,
-                preserve_all_address_fields: false,
-                limit_quantity_per_checkout: None,
-                reserve_stock_duration_anonymous_user: None,
-                reserve_stock_duration_authenticated_user: None,
-                enable_account_confirmation_by_email: None,
-                default_mail_sender_name: None,
-                default_mail_sender_address: None,
-                customer_set_password_url: None,
-                company_address: None,
-                limits: GqlLimitInfo {
-                    current_usage: GqlLimits { channels: Some(1), orders: Some(0), product_variants: Some(0), staff_users: Some(1), warehouses: Some(1) },
-                    allowed_usage: GqlLimits { channels: Some(100), orders: Some(10000), product_variants: Some(10000), staff_users: Some(100), warehouses: Some(100) },
-                },
-                metadata: shop_metadata,
-                announcements: vec![],
-            }),
-            errors: vec![],
-        })
+        if let Some(desc) = input.description.clone() {
+            if let Some(row) = rustygod_db::entities::site_sitesettings::Entity::find()
+                .filter(rustygod_db::entities::site_sitesettings::Column::Id.eq(1))
+                .one(db).await.map_err(|e| Error::new(e.to_string()))?
+            {
+                let mut am: rustygod_db::entities::site_sitesettings::ActiveModel = row.into();
+                am.description = Set(desc);
+                am.update(db).await.map_err(|e| Error::new(e.to_string()))?;
+            }
+        }
+        if let Some(site_name) = input.name.clone() {
+            if let Some(row) = rustygod_db::entities::django_site::Entity::find_by_id(1)
+                .one(db).await.map_err(|e| Error::new(e.to_string()))?
+            {
+                let mut am: rustygod_db::entities::django_site::ActiveModel = row.into();
+                am.name = Set(site_name);
+                am.update(db).await.map_err(|e| Error::new(e.to_string()))?;
+            }
+        }
+        let shop = to_gen_shop(ctx).await?;
+        Ok(GqlShopSettingsUpdate { shop: Some(shop), errors: vec![] })
     }
 }

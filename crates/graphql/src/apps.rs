@@ -156,8 +156,9 @@ impl AppsQuery {
         first: Option<i32>,
         last: Option<i32>,
         filter: Option<gen::AppFilterInput>,
+        #[graphql(name = "sortBy")] sort_by: Option<gen::AppSortingInput>,
     ) -> Result<GqlAppConnection> {
-        let _ = (before, last, filter);
+        let _ = (before, last, filter, sort_by);
         let g = ctx.data::<GqlContext>()?;
         let db = g.db()?;
         let rows = load_apps(db).await.map_err(|e| Error::new(e.to_string()))?;

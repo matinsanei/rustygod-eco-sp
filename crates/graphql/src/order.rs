@@ -242,9 +242,9 @@ impl OrderQuery {
     async fn orders(
         &self, ctx: &Context<'_>,
         first: Option<i32>, after: Option<String>, before: Option<String>, last: Option<i32>,
-        #[graphql(name = "sortBy")] sort_by: Option<gen::OrderSortingInput>, #[graphql(name = "where")] where_input: Option<gen::OrderWhereInput>, search: Option<String>,
+        #[graphql(name = "sortBy")] sort_by: Option<gen::OrderSortingInput>, filter: Option<gen::OrderFilterInput>, #[graphql(name = "where")] where_input: Option<gen::OrderWhereInput>, search: Option<String>,
     ) -> Result<GqlOrderConnection> {
-        let _ = (before, last, sort_by, where_input, search);
+        let _ = (before, last, sort_by, filter, where_input, search);
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
         let off = after.and_then(|c| decode_cursor(&c)).unwrap_or(0);
         let lim = first.unwrap_or(20).clamp(1, 100) as usize;
@@ -287,17 +287,27 @@ impl OrderMutation {
         Ok(GqlOrderCancel { order: Some(to_gen_order(&h, ls)), errors: vec![] })
     }
 
-    async fn order_fulfill(&self, ctx: &Context<'_>, order_id: ID, lines: Vec<FulfillLineInput>) -> Result<String> {
+    /// Saleor `orderFulfill(order: ID, input: OrderFulfillInput!)`
+    /// (dashboard `FulfillOrder`). One FulfillItem per stock entry.
+    async fn order_fulfill(&self, ctx: &Context<'_>, order: Option<ID>, input: gen::OrderFulfillInput) -> Result<Option<gen::OrderFulfill>> {
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
         authorize(ctx, crate::context::MANAGE_ORDERS).await?;
-        let oid = parse_id(&order_id.0);
-        let items: Vec<rustygod_db::fulfillment::FulfillItem> = lines.into_iter().map(|l| {
-            let lid = parse_id(&l.order_line_id.0);
-            let sid: Option<i32> = l.stock_id.and_then(|s| s.0.parse::<i32>().ok());
-            rustygod_db::fulfillment::FulfillItem { order_line_id: lid, quantity: l.quantity, stock_id: sid }
-        }).collect();
-        let f = rustygod_db::fulfillment::create_fulfillment(db, oid, &items, "").await.map_err(|e| Error::new(e.to_string()))?;
-        Ok(f.id.to_string())
+        let oid = parse_id(&order.map(|o| o.0).unwrap_or_default());
+        let mut items: Vec<rustygod_db::fulfillment::FulfillItem> = vec![];
+        for l in input.lines {
+            let lid = parse_id(&l.order_line_id.map(|i| i.0).unwrap_or_default());
+            for s in l.stocks {
+                items.push(rustygod_db::fulfillment::FulfillItem {
+                    order_line_id: lid,
+                    quantity: s.quantity,
+                    stock_id: s.warehouse.0.parse::<i32>().ok(),
+                });
+            }
+        }
+        let tracking = input.tracking_number.unwrap_or_default();
+        rustygod_db::fulfillment::create_fulfillment(db, oid, &items, &tracking).await.map_err(|e| Error::new(e.to_string()))?;
+        let order_view = rustygod_db::order_store::get_order_rows(db, oid).await.map_err(|e| Error::new(e.to_string()))?.map(|(h, ll)| to_gen_order(&h, ll));
+        Ok(Some(gen::OrderFulfill { order: order_view, errors: vec![] }))
     }
 
     async fn order_return_lines(&self, ctx: &Context<'_>, order_id: ID, lines: Vec<ReturnLineInput>, reason: String, restock: Option<bool>) -> Result<String> {
