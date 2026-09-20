@@ -47,8 +47,12 @@ Because the ceiling is structural: GIL-bound request handling, ORM-per-row overh
 │    147 entities generated 1:1 from live PostgreSQL       │
 │    same tables · same constraints · same rows            │
 │                                                          │
-│  crates/server  tonic gRPC services                      │
-│    ProductService · CheckoutService · OrderService       │
+│  crates/graphql GraphQL BFF (enterprise, thin)           │
+│    Saleor-compatible /graphql/ — same DB, same logic     │
+│    catalog · checkout · order · payment · commerce       │
+│                                                          │
+│  crates/server  tonic gRPC + Axum GraphQL (dual-stack)   │
+│    gRPC :50051 · GraphQL :8000 · metrics :9000            │
 └──────────────────────┬──────────────────────────────────┘
                        │  RUSTYGOD_DATABASE_URL
                        ▼
@@ -84,7 +88,7 @@ profile. Next: per-query shaping + k6 suite (Phase 2).
 psql $DATABASE_URL -c "select count(*) from product_product;"
 # 2. Point Rust at it — no dump, no ETL, no downtime window:
 export RUSTYGOD_DATABASE_URL="postgres://saleor:saleor@db:5432/saleor"
-./rustygod-server   # gRPC on 127.0.0.1:50051
+./rustygod-server   # gRPC on 127.0.0.1:50051 + GraphQL on http://127.0.0.1:8000/graphql
 ```
 
 Unset `RUSTYGOD_DATABASE_URL` and the server runs the offline in-memory demo instead.
@@ -99,7 +103,8 @@ cargo test          # 87/87 green: unit + comparative + flow contracts
 
 # Against the real database:
 export RUSTYGOD_DATABASE_URL="postgres://saleor:saleor@localhost:5432/saleor"
-./target/debug/rustygod-server
+./target/debug/rustygod-server   # gRPC :50051 + GraphQL :8000 + metrics :9000
+# Dashboard: API_URL=http://localhost:8000/graphql pnpm dev
 ```
 
 Spin up a Saleor database locally (from the [Saleor](https://github.com/saleor/saleor) repo):
@@ -156,9 +161,11 @@ service SemanticSearch  { SearchProducts }   # pg_trgm today, vectors next — s
 service Recommender     { RecommendProducts } # co-occurrence from Django order lines
 service ChatAgent       { Chat (server-streaming) } # retrieval-grounded assistant
 service PaymentService  { CreateTransaction · GetTransaction · Authorize · Charge · Refund · Cancel }
-service WebhookService  { TriggerEvent · GetDelivery · ListAttempts · SendDelivery · DueDeliveries }
-service AuthService     { Login · RefreshToken · VerifyToken · CheckPermission · CreateAppToken · VerifyAppToken · RevokeAppToken }
-```
+  service WebhookService  { TriggerEvent · GetDelivery · ListAttempts · SendDelivery · DueDeliveries }
+  service AuthService     { Login · RefreshToken · VerifyToken · CheckPermission · CreateAppToken · VerifyAppToken · RevokeAppToken }
+  ```
+
+  GraphQL BFF (same binary, `/graphql`): `Query { products, checkout, order, orders, channels, transaction }` + `Mutation { createCheckout, checkoutAddLines, checkoutComplete, orderCancel, orderFulfill, ... }` — thin calls into the same `db::*` the gRPC services use. Dashboard points `API_URL=http://localhost:8000/graphql` (no schema 1:1 yet — subset, strangler-style).
 
 Money is `{ currency, amount<string> }` — decimals cross the wire as strings, exactly like
 Saleor's serializers. IDs are strings carrying Django's integer PKs, so existing tooling

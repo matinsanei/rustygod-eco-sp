@@ -96,6 +96,43 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .map_err(|e| format!("metrics listener: {e}"))?;
     tracing::info!("prometheus metrics on {metrics_addr}");
 
+    // GraphQL BFF (enterprise): same Postgres + same domain logic, thin
+    // translation for the existing Dashboard (Apollo). Saleor's
+    // `API_URL=http://localhost:8000/graphql/` points here.
+    let gql_addr: std::net::SocketAddr = std::env::var("RUSTYGOD_GRAPHQL_ADDR")
+        .unwrap_or_else(|_| "127.0.0.1:8000".to_string())
+        .parse()?;
+    let gql_schema = rustygod_graphql::build_schema(db.clone());
+    let gql_app = {
+        use axum::{routing::get, Router, Extension, Json};
+        use async_graphql::http::GraphiQLSource;
+        async fn handler(
+            Extension(schema): Extension<rustygod_graphql::AppSchema>,
+            headers: axum::http::HeaderMap,
+            Json(mut req): Json<async_graphql::Request>,
+        ) -> Json<async_graphql::Response> {
+            if let Some(bearer) = headers.get(axum::http::header::AUTHORIZATION)
+                .and_then(|v| v.to_str().ok())
+                .and_then(|s| s.strip_prefix("Bearer ").or_else(|| s.strip_prefix("bearer ")))
+                .map(|s| s.to_string())
+            {
+                req = req.data(rustygod_graphql::context::Bearer(bearer));
+            }
+            Json(schema.execute(req).await)
+        }
+        async fn graphiql() -> axum::response::Html<String> {
+            axum::response::Html(GraphiQLSource::build().endpoint("/graphql").finish())
+        }
+        Router::new()
+            .route("/graphql", get(graphiql).post(handler))
+            .layer(Extension(gql_schema))
+    };
+    let gql_listener = tokio::net::TcpListener::bind(gql_addr).await?;
+    tracing::info!("GraphQL BFF listening on http://{gql_addr}/graphql (playground GET /graphql)");
+    tokio::spawn(async move {
+        axum::serve(gql_listener, gql_app).await.unwrap();
+    });
+
     tonic::transport::Server::builder()
         .layer(tower_http::trace::TraceLayer::new_for_grpc())
         .layer(rustygod_server::telemetry::MetricsLayer::default())
