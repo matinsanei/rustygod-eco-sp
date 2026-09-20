@@ -281,5 +281,6 @@ async fn collect_permissions(db: &sea_orm::DatabaseConnection, user_id: i32) -> 
         }
     }
     codes.sort(); codes.dedup();
-    Ok(codes)
+    // Saleor returns PermissionEnum names (MANAGE_PRODUCTS), not raw codenames.
+    Ok(codes.into_iter().map(|c| crate::common::permission_enum_code(&c)).collect())
 }

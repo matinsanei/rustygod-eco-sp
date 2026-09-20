@@ -2,6 +2,46 @@
 
 use async_graphql::*;
 
+/// Saleor `Permission.code` is the `PermissionEnum` NAME
+/// (`format_permissions_for_display` does
+/// `PermissionEnum.get(f"{app_label}.{codename}")`), NOT the raw DB codename.
+/// Map extracted verbatim from
+/// `saleor-core/saleor/permission/enums.py`; unknown codenames fall back to
+/// uppercased codename (Saleor's naming convention). The Dashboard gates every
+/// sidebar section on these values (`MANAGE_PRODUCTS`, ...), so lowercase
+/// codes hide the whole menu.
+pub fn permission_enum_code(codename: &str) -> String {
+    match codename {
+        "handle_checkouts" => "HANDLE_CHECKOUTS",
+        "handle_payments" => "HANDLE_PAYMENTS",
+        "handle_taxes" => "HANDLE_TAXES",
+        "impersonate_user" => "IMPERSONATE_USER",
+        "manage_apps" => "MANAGE_APPS",
+        "manage_channels" => "MANAGE_CHANNELS",
+        "manage_checkouts" => "MANAGE_CHECKOUTS",
+        "manage_customer_types_and_attributes" => "MANAGE_CUSTOMER_TYPES_AND_ATTRIBUTES",
+        "manage_discounts" => "MANAGE_DISCOUNTS",
+        "manage_gift_card" => "MANAGE_GIFT_CARD",
+        "manage_menus" => "MANAGE_MENUS",
+        "manage_observability" => "MANAGE_OBSERVABILITY",
+        "manage_orders" => "MANAGE_ORDERS",
+        "manage_orders_import" => "MANAGE_ORDERS_IMPORT",
+        "manage_pages" => "MANAGE_PAGES",
+        "manage_page_types_and_attributes" => "MANAGE_PAGE_TYPES_AND_ATTRIBUTES",
+        "manage_plugins" => "MANAGE_PLUGINS",
+        "manage_products" => "MANAGE_PRODUCTS",
+        "manage_product_types_and_attributes" => "MANAGE_PRODUCT_TYPES_AND_ATTRIBUTES",
+        "manage_settings" => "MANAGE_SETTINGS",
+        "manage_shipping" => "MANAGE_SHIPPING",
+        "manage_staff" => "MANAGE_STAFF",
+        "manage_taxes" => "MANAGE_TAXES",
+        "manage_translations" => "MANAGE_TRANSLATIONS",
+        "manage_users" => "MANAGE_USERS",
+        other => return other.to_uppercase(),
+    }
+    .to_string()
+}
+
 #[derive(SimpleObject, Clone)]
 pub struct PageInfo {
     #[graphql(name = "hasNextPage")]

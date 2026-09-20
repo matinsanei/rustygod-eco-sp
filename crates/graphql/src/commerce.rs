@@ -448,7 +448,7 @@ async fn all_permissions(ctx: &Context<'_>) -> Vec<GqlPermission> {
         .order_by_asc(rustygod_db::entities::permission_permission::Column::Codename)
         .into_tuple::<(String, String)>()
         .all(db).await.unwrap_or_default();
-    rows.into_iter().map(|(code, name)| GqlPermission { code, name }).collect()
+    rows.into_iter().map(|(code, name)| GqlPermission { code: crate::common::permission_enum_code(&code), name }).collect()
 }
 
 /// Static country list for `shop { countries }` (Saleor builds this from
