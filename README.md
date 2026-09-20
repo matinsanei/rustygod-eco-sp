@@ -2,11 +2,12 @@
 
 **[Saleor](https://github.com/saleor/saleor), rewritten in Rust. Same PostgreSQL. Zero data migration. Just swap the image.**
 
-[![Rust](https://img.shields.io/badge/rust-stable-orange.svg)](https://www.rust-lang.org)
+[![Rust](https://img.shields.io/badge/rust-1.93-orange?logo=rust&logoColor=white)](https://www.rust-lang.org)
 [![gRPC](https://img.shields.io/badge/api-gRPC%20%2B%20GraphQL-blue.svg)](https://github.com/hyperium/tonic)
 [![License](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-215%20passing-brightgreen.svg)](#behavioral-contract)
-[![Contract Tests](https://img.shields.io/badge/contract%20tests-120%2F120%20green-brightgreen.svg)](#behavioral-contract)
+[![Tests](https://img.shields.io/badge/tests-215-brightgreen.svg)](#behavioral-contract)
+[![Contract Tests](https://img.shields.io/badge/contract_tests-119-brightgreen.svg)](#behavioral-contract)
+[![Dashboard](https://img.shields.io/badge/dashboard_ops-457%2F457-brightgreen.svg)](#graphql-bff-enterprise)
 
 [Saleor](https://github.com/saleor/saleor) is a great commerce engine trapped in a slow body: Python/Django, gigabytes of RAM,
 GraphQL overhead on every hot path. **rustygod-saleor** is a ground-up Rust rewrite that runs
@@ -48,12 +49,14 @@ Because the ceiling is structural: GIL-bound request handling, ORM-per-row overh
 │    147 entities generated 1:1 from live PostgreSQL       │
 │    same tables · same constraints · same rows            │
 │                                                          │
-│  crates/graphql GraphQL BFF (enterprise, thin)           │
+│  crates/graphql GraphQL BFF (enterprise, thin + generated)         │
 │    Saleor-compatible /graphql/ — same DB, same logic     │
-│    catalog · checkout · order · payment · commerce       │
+│    69 query roots · 244 mutation roots · 457/457 Dashboard ops green │
+│    catalog · checkout · order · payment · commerce · apps             │
 │                                                          │
-│  crates/server  tonic gRPC + Axum GraphQL (dual-stack)   │
+│  crates/server  tonic gRPC (21 services) + Axum GraphQL   │
 │    gRPC :50051 · GraphQL :8000 · metrics :9000            │
+│    modes: api · worker · beat · check · migrate · seed    │
 └──────────────────────┬──────────────────────────────────┘
                        │  RUSTYGOD_DATABASE_URL
                        ▼
@@ -98,13 +101,21 @@ Django keeps working throughout — both read the same rows.
 ## Quickstart
 
 ```bash
-# Prerequisites: Rust stable, a Saleor PostgreSQL (see below for the dev one)
+# Prerequisites: Rust 1.93+, a Saleor PostgreSQL (see below for the dev one)
 cargo build
-cargo test          # 215 tests passing (120 contract + unit): checkout, payment, discount, giftcard, order, promotion, guest-link, GraphQL
+# Run tests per package with -j2 (full-workspace parallel builds can OOM small machines):
+cargo test -j2 -p rustygod-graphql --test schema_sdl   # 3/3 green, no DB needed
+cargo test -j2 -p rustygod-db --test contract_guest    # DB contract smoke vs live rows
+# Totals: 215 tests (119 DB contracts vs Django rows + unit + flow + SDL)
 
 # Against the real database:
 export RUSTYGOD_DATABASE_URL="postgres://saleor:saleor@localhost:5432/saleor"
-./target/debug/rustygod-server   # gRPC :50051 + GraphQL :8000 + metrics :9000
+./target/debug/rustygod-server          # api: gRPC :50051 + GraphQL :8000 + metrics :9000
+./target/debug/rustygod-server worker   # webhook outbox delivery (celery-worker equivalent)
+./target/debug/rustygod-server beat     # periodic scheduler (celery-beat equivalent, 20 entries)
+./target/debug/rustygod-server check    # readiness probe (DB + key tables)
+./target/debug/rustygod-server migrate  # Saleor's own Django DDL (manage.py migrate)
+./target/debug/rustygod-server seed --createsuperuser  # Saleor's own populatedb mock data
 # Dashboard (existing Saleor Dashboard): API_URL=http://localhost:8000/graphql pnpm --filter dashboard dev
 ```
 
@@ -140,7 +151,7 @@ Porting order follows blast radius: **checkout → payment → discount → inve
 Each domain lands with its contract tests before the next begins. The full 1,219-file suite
 is not ported line-by-line — it is *distilled* into contracts per domain (see Roadmap).
 
-## API (gRPC)
+## API (gRPC — 21 services)
 
 ```proto
 service ProductService  { GetProduct · ListProducts · CreateProduct · GetCategory ·
@@ -168,7 +179,13 @@ service PaymentService  { CreateTransaction · GetTransaction · Authorize · Ch
   service AuthService     { Login · RefreshToken · VerifyToken · CheckPermission · CreateAppToken · VerifyAppToken · RevokeAppToken }
   ```
 
-  GraphQL BFF (same binary, `/graphql`): `Query { products, checkout, order, orders, channels, transaction }` + `Mutation { createCheckout, checkoutAddLines, checkoutComplete, orderCancel, orderFulfill, ... }` — thin calls into the same `db::*` the gRPC services use. Dashboard points `API_URL=http://localhost:8000/graphql` (no schema 1:1 yet — subset, strangler-style).
+  GraphQL BFF (same binary, `/graphql`): **69 query roots + 244 mutation roots**
+  (live SDL counts) generated from Saleor's own `schema.graphql`
+  (`scripts/schema_codegen.py` → `crates/graphql/src/gen.rs`, never hand-edited;
+  `scripts/check_input_nullability.py` pins all 3,243 input fields to Saleor
+  nullability). All **457/457 Dashboard operations validate**
+  (`scripts/verify_dashboard_ops.py`) — the stock Saleor Dashboard runs against
+  it with `API_URL=http://localhost:8000/graphql`.
 
 Money is `{ currency, amount<string> }` — decimals cross the wire as strings, exactly like
 Saleor's serializers. IDs are strings carrying Django's integer PKs, so existing tooling
@@ -222,7 +239,7 @@ order #522 minted live during development). Known edge, documented in
 - [x] Product relations (MPTT category tree, channel-aware collections, types, attributes, media)
 - [x] Commerce services (discount/shipping/giftcard/menu/page/account/channel/tax/warehouse) — now also via GraphQL `channels/warehouses/taxClasses/shippingMethods/pages/promotions/menu`
 - [x] AI layer v1 (`rustygod-ai`): `Embedder`/`VectorStore` traits with deterministic local backends, pg_trgm search, co-occurrence recommender, streaming grounded chat
-- [x] 120 contract tests green (unit + comparative vs Django rows + service flow + audit + GraphQL SDL)
+- [x] 119 contract tests green (unit + comparative vs Django rows + service flow + audit + GraphQL SDL)
 - [x] Promotion engine (catalogue + **order promotions**: gift XOR discount, max-saving winner, voucher precedence, `is_gift` carry + allocation)
 - [x] Payments (TransactionItem event-group recalc + PSP dedup/async/3DS per-checkout R3 guard, `adjust_authorization`)
 - [x] Webhooks (fan-out with channel filter, HMAC-SHA256, attempt log, success/failed, backoff + sweeper)
