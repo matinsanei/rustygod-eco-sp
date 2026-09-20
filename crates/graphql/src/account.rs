@@ -104,6 +104,64 @@ impl AccountQuery {
     }
 }
 
+#[derive(SimpleObject, Clone)]
+pub struct GqlTokenCreate {
+    pub token: String,
+    #[graphql(name = "refreshToken")]
+    pub refresh_token: String,
+    pub errors: Vec<GqlAccountError>,
+}
+
+#[derive(SimpleObject, Clone)]
+pub struct GqlAccountError {
+    pub field: Option<String>,
+    pub message: String,
+    pub code: String,
+}
+
+#[derive(Default)]
+pub struct AccountMutation;
+
+#[Object]
+impl AccountMutation {
+    /// Dashboard login: mirrors `saleor/account` tokenCreate (email+password → RS256 JWTs).
+    /// Uses the same `RSA_PRIVATE_KEY` and `account_user` rows Django uses.
+    async fn token_create(&self, ctx: &Context<'_>, email: String, password: String) -> Result<GqlTokenCreate> {
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let Some((user, hash)) = rustygod_db::auth::find_for_login(db, &email).await.map_err(|e| Error::new(e.to_string()))? else {
+            return Ok(GqlTokenCreate { token: String::new(), refresh_token: String::new(), errors: vec![GqlAccountError { field: Some("email".into()), message: "Invalid credentials".into(), code: "INVALID_CREDENTIALS".into() }] });
+        };
+        if !user.is_active {
+            return Ok(GqlTokenCreate { token: String::new(), refresh_token: String::new(), errors: vec![GqlAccountError { field: None, message: "User is inactive".into(), code: "INACTIVE".into() }] });
+        }
+        let ok = match rustygod_core::auth::verify_password(&password, &hash) {
+            rustygod_core::auth::PasswordCheck::Ok => true,
+            _ => false,
+        };
+        if !ok {
+            return Ok(GqlTokenCreate { token: String::new(), refresh_token: String::new(), errors: vec![GqlAccountError { field: Some("password".into()), message: "Invalid credentials".into(), code: "INVALID_CREDENTIALS".into() }] });
+        }
+        let pair = rustygod_core::auth::mint_tokens("http://localhost:8000/graphql/", &user.email, user.id, user.is_staff, &user.jwt_token_key).map_err(|e| Error::new(format!("mint: {e}")))?;
+        Ok(GqlTokenCreate { token: pair.access, refresh_token: pair.refresh, errors: vec![] })
+    }
+
+    async fn token_refresh(&self, ctx: &Context<'_>, refresh_token: String) -> Result<GqlTokenCreate> {
+        let claims = rustygod_core::auth::decode(&refresh_token).map_err(|e| Error::new(format!("auth: {e}")))?;
+        if claims.token_type != rustygod_core::auth::TOKEN_TYPE_REFRESH {
+            return Ok(GqlTokenCreate { token: String::new(), refresh_token: String::new(), errors: vec![GqlAccountError { field: None, message: "Invalid refresh token".into(), code: "INVALID".into() }] });
+        }
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let uid = rustygod_core::auth::parse_user_global_id(&claims.user_id).unwrap_or(0);
+        let user = rustygod_db::entities::account_user::Entity::find_by_id(uid).one(db).await.map_err(|e| Error::new(e.to_string()))?.ok_or_else(|| Error::new("user not found"))?;
+        // Rotate check: Django invalidates refresh if jwt_token_key changed.
+        if user.jwt_token_key != claims.token {
+            return Ok(GqlTokenCreate { token: String::new(), refresh_token: String::new(), errors: vec![GqlAccountError { field: None, message: "Token expired".into(), code: "EXPIRED".into() }] });
+        }
+        let pair = rustygod_core::auth::mint_tokens("http://localhost:8000/graphql/", &user.email, user.id, user.is_staff, &user.jwt_token_key).map_err(|e| Error::new(format!("mint: {e}")))?;
+        Ok(GqlTokenCreate { token: pair.access, refresh_token: pair.refresh, errors: vec![] })
+    }
+}
+
 async fn collect_permissions(db: &sea_orm::DatabaseConnection, user_id: i32) -> Result<Vec<String>, sea_orm::DbErr> {
     use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QuerySelect};
     use rustygod_db::entities::{account_user_user_permissions, permission_permission, account_user_groups, account_group_permissions};

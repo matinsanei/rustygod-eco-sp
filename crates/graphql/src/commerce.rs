@@ -26,11 +26,26 @@ pub struct GqlMenu { pub id: ID, pub slug: String, pub name: String }
 #[derive(SimpleObject, Clone)]
 pub struct GqlPromotion { pub id: ID, pub name: String, pub r#type: String }
 
+#[derive(SimpleObject, Clone)]
+pub struct GqlExternalAuth { pub id: ID, pub name: String }
+
+#[derive(SimpleObject, Clone)]
+pub struct GqlShop {
+    #[graphql(name = "availableExternalAuthentications")]
+    pub available_external_authentications: Vec<GqlExternalAuth>,
+    #[graphql(name = "passwordLoginMode")]
+    pub password_login_mode: String,
+}
+
 #[derive(Default)]
 pub struct CommerceQuery;
 
 #[Object]
 impl CommerceQuery {
+    async fn shop(&self, _ctx: &Context<'_>) -> Result<GqlShop> {
+        Ok(GqlShop { available_external_authentications: vec![], password_login_mode: "ENABLED".into() })
+    }
+
     async fn channels(&self, ctx: &Context<'_>) -> Result<Vec<GqlChannel>> {
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
         let rows = rustygod_db::commerce::list_channels(db).await.map_err(|e| Error::new(e.to_string()))?;
