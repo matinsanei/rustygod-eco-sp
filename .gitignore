@@ -7,3 +7,6 @@ backups/
 *.dump
 node_modules/
 sdk/ts/dist/
+__pycache__/
+*.pyc
+/target/
