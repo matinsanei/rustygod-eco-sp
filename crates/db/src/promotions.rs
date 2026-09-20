@@ -545,8 +545,12 @@ pub async fn checkout_voucher_total(
     db: &impl sea_orm::ConnectionTrait,
     checkout_token: Uuid,
 ) -> Result<Decimal> {
+    // Scoped to voucher rows: ORDER_PROMOTION discounts live in the same
+    // table (T3) and have their own totals term — unfiltered sums would
+    // double-count them here.
     let rows = discount_checkoutdiscount::Entity::find()
         .filter(discount_checkoutdiscount::Column::CheckoutId.eq(checkout_token))
+        .filter(discount_checkoutdiscount::Column::Type.eq("voucher"))
         .all(db)
         .await?;
     Ok(rows.iter().map(|r| r.amount_value).sum())

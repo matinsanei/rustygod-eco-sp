@@ -1,14 +1,14 @@
 # 📋 Audit Report — rustygod-saleor vs the E-Commerce Engine Checklist
 
-Date: 2026-09-18 · Last update: T2 paid cancel + return+refund.
+Date: 2026-09-18 · Last update: T3 order promotions (gifts + discounts).
 Method: every item verified against code + green tests (no vibes).
 Score: ✅ = 1, ⚠️ = 0.5, ❌ = 0.
 
-## Overall: 74% (53.5 / 72)
+## Overall: 76% (54.5 / 72)
 
 | Section | Score | Before this session |
 |---|---|---|
-| §1 Features (37) | **70%** (22 ✅ · 8 ⚠️ · 7 ❌) | ~49% |
+| §1 Features (37) | **73%** (23 ✅ · 8 ⚠️ · 6 ❌) | ~49% |
 | §2 Risks (10) | **90%** (8 ✅ · 2 ⚠️) | ~25% |
 | §3 Edge cases (15) | **63%** (8 ✅ · 3 ⚠️ · 4 ❌) | ~13% |
 | §4 Reconciliation (10) | **90%** (8 ✅ · 2 ⚠️) | ~10% |
@@ -25,9 +25,10 @@ Score: ✅ = 1, ⚠️ = 0.5, ❌ = 0.
 | 18 | Events | ⚠️ was ❌ | PLACED + draft/invoice/giftcard events; not every transition |
 | 19 | Granted refunds | ✅ was ❌ | `granted_refunds.rs` create/execute/get + 3 RPCs, `contract_granted_refunds.rs` (5) |
 | 9 | Order cancel (paid too) | ✅ was ⚠️ | atomic grant+refund+release, can_cancel gate, `contract_cancel.rs` (5) |
+| 10 | Order promotions (gifts+discounts) | ✅ was ❌ | `order_promotions.rs` (gift XOR discount, voucher precedence, complete carry), `contract_order_promotions.rs` (6) |
 
-Still ❌ (7): GraphQL gateway (by design), payment orchestration,
-translations, CSV, thumbnails, site settings, preorder, schedulers.
+Still ❌ (6): GraphQL gateway (by design), translations,
+CSV, thumbnails, site settings, preorder, schedulers.
 Still ⚠️ (8): full fulfillment (no approve/replace; return+refund
 lines DONE via `ReturnOrderLines`), tax (flat-rate only),
 attributes/product-writes/customer-accounts (reads > writes),
@@ -50,7 +51,7 @@ PSP-triple dedup, per-checkout in-flight guard). 8 ✅ · 2 ⚠️ (R2, R10) = *
 | R6 | Deadlock | ✅ | documented lock order 1→4 |
 | R7 | Complete idempotency | ✅ | token-stamped replay test |
 | R8 | Webhook after commit | ⚠️ | after-commit + pending/backoff; at-least-once duplicates possible |
-| R9 | Expired reservations | ⚠️ | `reserved_until` honored; no background sweeper |
+| R9 | Expired reservations | ⚠️ | sweeper: reservations+deliveries; checkout expiry still pending (E10) |
 | R10 | Zero-total orders | ⚠️ | totals floor at zero; no dedicated status test |
 
 ## §3 Edge cases
@@ -76,10 +77,10 @@ decided ≤ moved, success grants linked).
 
 ## Top 3 remaining financial risks
 
-1. **Payment orchestration** — single manual gateway; no PSP, no 3DS.
-2. **No checkout auto-complete** (E10) — sweeper clears reservations +
+1. **No checkout auto-complete** (E10) — sweeper clears reservations +
    deliveries, but expired checkouts linger (neither completed nor deleted).
-3. **Guest→user + address linking** (E3/E11) — completion doesn't attach identity/addresses.
+2. **Guest→user + address linking** (E3/E11) — completion doesn't attach identity/addresses.
+3. **Real PSP** — engine (dedup/async/3DS) shipped; no Stripe/Adyen HTTP, so no live 3DS settlement.
 
 ## How to re-run this audit
 
@@ -88,8 +89,9 @@ cargo test --workspace 2>&1 | grep -cE "test .* ok$"   # must equal checks below
 # R1/R7: contract_complete (3) · RC*: reconcile asserts inside it (9/9)
 # R4: contract_promotions · R5: contract_giftcards · events: contract_drafts/invoices
 # RC2: contract_granted_refunds (5, incl. live reconcile parity assert)
-# R3/E9: contract_psp (10: dedup, async, 3DS, adjustment, in-flight guard)
-# PSP math: payment_calc (12: cutoff, timestamp race, psp-less rules)
+# R3/E9: contract_psp (10: dedup, async, 3DS, adjustment, in-flight guard) + seq-refund regression
+# PSP math: payment_calc (12: cutoff, timestamp race, psp-less rules) + discount_math now 8 (order predicate)
 # E7/E14: contract_returns (3) + contract_cancel (5: paid, split, refusal)
+# T3: contract_order_promotions (6) + checkout total + gift allocation
 # E2E: order_cancel_flow (return → refused cancel → full return, RPC)
 ```

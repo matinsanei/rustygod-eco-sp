@@ -55,6 +55,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 quantity: 2,
                 unit_price: None,
                 total_price: None,
+                is_gift: false,
             }],
         })
         .await?

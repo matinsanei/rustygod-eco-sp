@@ -27,7 +27,11 @@ export interface CheckoutLine {
   variantId: string;
   quantity: number;
   unitPrice: Money | undefined;
-  totalPrice: Money | undefined;
+  totalPrice:
+    | Money
+    | undefined;
+  /** Free promotion gift (T3): priced zero on the wire, stocked for real. */
+  isGift: boolean;
 }
 
 export interface Checkout {
@@ -79,6 +83,24 @@ export interface CompleteCheckoutResponse {
 }
 
 /**
+ * Re-evaluates order promotions (T3): winner discount or gift applied,
+ * stale cleared. Mutations trigger this automatically; the RPC exposes it
+ * for previews and explicit refreshes.
+ */
+export interface RefreshOrderPromotionRequest {
+  checkoutId: string;
+}
+
+export interface RefreshOrderPromotionResponse {
+  /** none|discount|gift */
+  applied: string;
+  ruleId: string;
+  amount: string;
+  giftVariantId: string;
+  errors: Error[];
+}
+
+/**
  * Applies a voucher code (entire_order / specific_product), mirroring
  * saleor's checkout voucher flow: validates, stamps voucher_code, writes
  * discount rows, refreshes totals.
@@ -99,7 +121,7 @@ export interface ApplyVoucherResponse {
 }
 
 function createBaseCheckoutLine(): CheckoutLine {
-  return { variantId: "", quantity: 0, unitPrice: undefined, totalPrice: undefined };
+  return { variantId: "", quantity: 0, unitPrice: undefined, totalPrice: undefined, isGift: false };
 }
 
 export const CheckoutLine: MessageFns<CheckoutLine> = {
@@ -115,6 +137,9 @@ export const CheckoutLine: MessageFns<CheckoutLine> = {
     }
     if (message.totalPrice !== undefined) {
       Money.encode(message.totalPrice, writer.uint32(34).fork()).join();
+    }
+    if (message.isGift !== false) {
+      writer.uint32(40).bool(message.isGift);
     }
     return writer;
   },
@@ -164,6 +189,14 @@ export const CheckoutLine: MessageFns<CheckoutLine> = {
             message.totalPrice = Money.decode(reader, reader.uint32());
             continue;
           }
+          case 5: {
+            if (tag !== 40) {
+              break;
+            }
+
+            message.isGift = reader.bool();
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -189,6 +222,7 @@ export const CheckoutLine: MessageFns<CheckoutLine> = {
     message.totalPrice = (object.totalPrice !== undefined && object.totalPrice !== null)
       ? Money.fromPartial(object.totalPrice)
       : undefined;
+    message.isGift = object.isGift ?? false;
     return message;
   },
 };
@@ -826,6 +860,166 @@ export const CompleteCheckoutResponse: MessageFns<CompleteCheckoutResponse> = {
   },
 };
 
+function createBaseRefreshOrderPromotionRequest(): RefreshOrderPromotionRequest {
+  return { checkoutId: "" };
+}
+
+export const RefreshOrderPromotionRequest: MessageFns<RefreshOrderPromotionRequest> = {
+  encode(message: RefreshOrderPromotionRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.checkoutId !== "") {
+      writer.uint32(10).string(message.checkoutId);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): RefreshOrderPromotionRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseRefreshOrderPromotionRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.checkoutId = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<RefreshOrderPromotionRequest>, I>>(base?: I): RefreshOrderPromotionRequest {
+    return RefreshOrderPromotionRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<RefreshOrderPromotionRequest>, I>>(object: I): RefreshOrderPromotionRequest {
+    const message = createBaseRefreshOrderPromotionRequest();
+    message.checkoutId = object.checkoutId ?? "";
+    return message;
+  },
+};
+
+function createBaseRefreshOrderPromotionResponse(): RefreshOrderPromotionResponse {
+  return { applied: "", ruleId: "", amount: "", giftVariantId: "", errors: [] };
+}
+
+export const RefreshOrderPromotionResponse: MessageFns<RefreshOrderPromotionResponse> = {
+  encode(message: RefreshOrderPromotionResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.applied !== "") {
+      writer.uint32(10).string(message.applied);
+    }
+    if (message.ruleId !== "") {
+      writer.uint32(18).string(message.ruleId);
+    }
+    if (message.amount !== "") {
+      writer.uint32(26).string(message.amount);
+    }
+    if (message.giftVariantId !== "") {
+      writer.uint32(34).string(message.giftVariantId);
+    }
+    for (const v of message.errors) {
+      Error.encode(v!, writer.uint32(42).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): RefreshOrderPromotionResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseRefreshOrderPromotionResponse();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.applied = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.ruleId = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.amount = reader.string();
+            continue;
+          }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.giftVariantId = reader.string();
+            continue;
+          }
+          case 5: {
+            if (tag !== 42) {
+              break;
+            }
+
+            message.errors.push(Error.decode(reader, reader.uint32()));
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  create<I extends Exact<DeepPartial<RefreshOrderPromotionResponse>, I>>(base?: I): RefreshOrderPromotionResponse {
+    return RefreshOrderPromotionResponse.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<RefreshOrderPromotionResponse>, I>>(
+    object: I,
+  ): RefreshOrderPromotionResponse {
+    const message = createBaseRefreshOrderPromotionResponse();
+    message.applied = object.applied ?? "";
+    message.ruleId = object.ruleId ?? "";
+    message.amount = object.amount ?? "";
+    message.giftVariantId = object.giftVariantId ?? "";
+    message.errors = object.errors?.map((e) => Error.fromPartial(e)) || [];
+    return message;
+  },
+};
+
 function createBaseApplyVoucherRequest(): ApplyVoucherRequest {
   return { checkoutId: "", code: "" };
 }
@@ -1074,6 +1268,17 @@ export const CheckoutServiceService = {
       Buffer.from(ApplyVoucherResponse.encode(value).finish()),
     responseDeserialize: (value: Buffer): ApplyVoucherResponse => ApplyVoucherResponse.decode(value),
   },
+  refreshOrderPromotion: {
+    path: "/rustygod.checkout.CheckoutService/RefreshOrderPromotion" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: RefreshOrderPromotionRequest): Buffer =>
+      Buffer.from(RefreshOrderPromotionRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): RefreshOrderPromotionRequest => RefreshOrderPromotionRequest.decode(value),
+    responseSerialize: (value: RefreshOrderPromotionResponse): Buffer =>
+      Buffer.from(RefreshOrderPromotionResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): RefreshOrderPromotionResponse => RefreshOrderPromotionResponse.decode(value),
+  },
 } as const;
 
 export interface CheckoutServiceServer extends UntypedServiceImplementation {
@@ -1082,6 +1287,7 @@ export interface CheckoutServiceServer extends UntypedServiceImplementation {
   addLines: handleUnaryCall<AddLinesRequest, AddLinesResponse>;
   completeCheckout: handleUnaryCall<CompleteCheckoutRequest, CompleteCheckoutResponse>;
   applyVoucher: handleUnaryCall<ApplyVoucherRequest, ApplyVoucherResponse>;
+  refreshOrderPromotion: handleUnaryCall<RefreshOrderPromotionRequest, RefreshOrderPromotionResponse>;
 }
 
 export interface CheckoutServiceClient extends Client {
@@ -1159,6 +1365,21 @@ export interface CheckoutServiceClient extends Client {
     metadata: Metadata,
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: ApplyVoucherResponse) => void,
+  ): ClientUnaryCall;
+  refreshOrderPromotion(
+    request: RefreshOrderPromotionRequest,
+    callback: (error: ServiceError | null, response: RefreshOrderPromotionResponse) => void,
+  ): ClientUnaryCall;
+  refreshOrderPromotion(
+    request: RefreshOrderPromotionRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: RefreshOrderPromotionResponse) => void,
+  ): ClientUnaryCall;
+  refreshOrderPromotion(
+    request: RefreshOrderPromotionRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: RefreshOrderPromotionResponse) => void,
   ): ClientUnaryCall;
 }
 

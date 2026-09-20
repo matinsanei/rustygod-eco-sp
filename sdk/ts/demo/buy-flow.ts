@@ -64,7 +64,7 @@ async function main() {
   const withLines: AddLinesResponse = await call((cb) =>
     checkoutSvc.addLines({
       checkoutId: coId,
-      lines: [{ variantId, quantity: 2, unitPrice: undefined, totalPrice: undefined }],
+      lines: [{ variantId, quantity: 2, unitPrice: undefined, totalPrice: undefined, isGift: false }],
     }, cb),
   );
   failIfErrors(withLines, 'add-lines');

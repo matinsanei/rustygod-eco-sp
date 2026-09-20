@@ -149,6 +149,10 @@ pub async fn complete_checkout(
         .await?;
     let order_id: Uuid = order.id.parse().map_err(|_| fail("minted bad order id"))?;
 
+    // 2b. Order-promotion carry (T3): ORDER_PROMOTION discount row +
+    // gift order line, same transaction as the mint.
+    crate::order_promotions::carry_to_order(&txn, token, order_id).await?;
+
     // 3. Voucher usage (locked increment, R4).
     if let Some(code) = co.voucher_code.clone() {
         let email = co.email.clone().filter(|e| !e.is_empty());
@@ -156,8 +160,15 @@ pub async fn complete_checkout(
     }
 
     // 4. Gift cards, greedy over active attached balances (R5).
+    // Cover base: the MINTED order total (post order-promotion discount),
+    // not the pre-discount domain total — Django charges gift cards on the
+    // discounted total too.
     let cards = giftcards::checkout_cards(&txn, token).await?;
     if !cards.is_empty() {
+        let minted_total: Decimal = order_store::get_order_rows(&txn, order_id)
+            .await?
+            .map(|(h, _)| h.total_gross_amount)
+            .unwrap_or(Decimal::ZERO);
         let balances: Vec<Decimal> = cards
             .iter()
             .filter(|c| {
@@ -170,8 +181,7 @@ pub async fn complete_checkout(
             })
             .map(|c| c.current_balance_amount)
             .collect();
-        let total: Decimal = cards.first().map(|_| domain.total().amount).unwrap_or(Decimal::ZERO);
-        let mut remaining = rustygod_core::giftcard::cover_total(total, &balances).0;
+        let mut remaining = rustygod_core::giftcard::cover_total(minted_total, &balances).0;
         for card in cards.iter().filter(|c| c.currency == co.currency) {
             if remaining <= Decimal::ZERO {
                 break;

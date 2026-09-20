@@ -328,7 +328,14 @@ pub async fn mint_from_checkout(
 
     let email = checkout.email.clone();
     let currency = checkout.currency.clone();
-    let total = checkout.total();
+    // Payable total minus the order-promotion discount (gifts already
+    // contribute zero via domain total). Django's order total carries the
+    // ORDER_PROMOTION discount the same way.
+    let mut total = checkout.total();
+    if let Ok(token) = checkout.id.parse::<Uuid>() {
+        let promo = crate::order_promotions::order_promotion_total(db, token).await?;
+        total.amount = (total.amount - promo).max(Decimal::ZERO);
+    }
     let auto_confirm: Option<bool> = channel_channel::Entity::find_by_id(channel_id)
         .select_only()
         .column(channel_channel::Column::AutomaticallyConfirmAllNewOrders)
@@ -350,6 +357,7 @@ pub async fn mint_from_checkout(
         user_id: None,
         status,
     };
+    // All domain lines incl. gifts (carry_to_order adds the gift rows next).
     let (id, number) =
         create_order_row(db, &new, total.amount, checkout.lines.len() as i32).await?;
 
@@ -361,6 +369,11 @@ pub async fn mint_from_checkout(
     let details = variant_details(db, &vids).await?;
     let mut domain_lines = Vec::new();
     for line in &checkout.lines {
+        // Gift lines are minted separately (zero-priced with discount audit
+        // — `order_promotions::carry_to_order`), never as priced lines.
+        if line.is_gift {
+            continue;
+        }
         let vid: i32 = line.variant_id.parse().map_err(|_| {
             DbError::SeaOrm(sea_orm::DbErr::Custom(format!("bad variant {}", line.variant_id)))
         })?;

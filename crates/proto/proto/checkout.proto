@@ -10,6 +10,8 @@ message CheckoutLine {
   int32 quantity = 2;
   rustygod.common.Money unit_price = 3;
   rustygod.common.Money total_price = 4;
+  // Free promotion gift (T3): priced zero on the wire, stocked for real.
+  bool is_gift = 5;
 }
 
 message Checkout {
@@ -52,12 +54,26 @@ message CompleteCheckoutResponse {
   repeated rustygod.common.Error errors = 2;
 }
 
+// Re-evaluates order promotions (T3): winner discount or gift applied,
+// stale cleared. Mutations trigger this automatically; the RPC exposes it
+// for previews and explicit refreshes.
+message RefreshOrderPromotionRequest { string checkout_id = 1; }
+message RefreshOrderPromotionResponse {
+  // none|discount|gift
+  string applied = 1;
+  string rule_id = 2;
+  string amount = 3;
+  string gift_variant_id = 4;
+  repeated rustygod.common.Error errors = 5;
+}
+
 service CheckoutService {
   rpc CreateCheckout(CreateCheckoutRequest) returns (CreateCheckoutResponse);
   rpc GetCheckout(GetCheckoutRequest) returns (GetCheckoutResponse);
   rpc AddLines(AddLinesRequest) returns (AddLinesResponse);
   rpc CompleteCheckout(CompleteCheckoutRequest) returns (CompleteCheckoutResponse);
   rpc ApplyVoucher(ApplyVoucherRequest) returns (ApplyVoucherResponse);
+  rpc RefreshOrderPromotion(RefreshOrderPromotionRequest) returns (RefreshOrderPromotionResponse);
 }
 
 // Applies a voucher code (entire_order / specific_product), mirroring

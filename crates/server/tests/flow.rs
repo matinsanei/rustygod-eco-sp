@@ -49,6 +49,7 @@ async fn complete_checkout_mints_matching_order() {
                 quantity: 2,
                 unit_price: None,
                 total_price: None,
+                is_gift: false,
             }],
         }))
         .await
@@ -106,6 +107,7 @@ async fn checkout_is_consumed_exactly_once() {
                 quantity: 1,
                 unit_price: None,
                 total_price: None,
+                is_gift: false,
             }],
         }))
         .await
@@ -154,6 +156,7 @@ async fn unknown_variant_is_rejected() {
                 quantity: 1,
                 unit_price: None,
                 total_price: None,
+                is_gift: false,
             }],
         }))
         .await
@@ -197,6 +200,7 @@ async fn orders_list_grows_with_completions() {
                     quantity: 1,
                     unit_price: None,
                     total_price: None,
+                is_gift: false,
                 }],
             }))
             .await

@@ -19,6 +19,7 @@ pub mod giftcards;
 pub mod granted_refunds;
 pub mod groups;
 pub mod invoices;
+pub mod order_promotions;
 pub mod order_store;
 pub mod payments;
 pub mod plugin_store;

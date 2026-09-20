@@ -195,3 +195,65 @@ pub struct RuleCandidate {
     pub rule_name: String,
     pub promotion_end: Option<String>,
 }
+
+/// Order-promotion money gate: does `order_predicate` JSON accept this
+/// subtotal? Ports the money subset of Saleor's `filter_qs_by_predicate`
+/// for `PredicateObjectType.ORDER/CHECKOUT`:
+///
+/// ```json
+/// {"discountedObjectPredicate": {"baseTotalPrice"|"baseSubtotalPrice":
+///   {"range": {"gte"|"lte"|"gt"|"lt": X}, "eq": X}}}
+/// ```
+///
+/// Both price keys evaluate against the same base subtotal here (net ==
+/// gross pre-tax in v1, so total == subtotal before shipping — document
+/// the boundary). Numbers may be JSON numbers or strings (GraphQL passes
+/// both through). Anything else (line/product predicates, unknown ops) →
+/// false with no error: the rule simply doesn't match. Full predicate
+/// coverage (products/categories/collections gates) is a documented gap,
+/// not a silent wrong match.
+pub fn order_predicate_matches(predicate: &serde_json::Value, subtotal: Decimal) -> bool {
+    let Some(obj) = predicate.get("discountedObjectPredicate").and_then(|v| v.as_object()) else {
+        return false;
+    };
+    for key in ["baseTotalPrice", "baseSubtotalPrice"] {
+        let Some(cond) = obj.get(key) else { continue };
+        if let Some(eq) = cond.get("eq") {
+            let Some(x) = json_decimal(eq) else { continue };
+            if subtotal == x {
+                return true;
+            }
+            continue;
+        }
+        let Some(range) = cond.get("range").and_then(|v| v.as_object()) else { continue };
+        let mut ok = false;
+        let mut any = false;
+        for (op, bound) in range {
+            let Some(x) = json_decimal(bound) else { continue };
+            any = true;
+            let pass = match op.as_str() {
+                "gte" => subtotal >= x,
+                "lte" => subtotal <= x,
+                "gt" => subtotal > x,
+                "lt" => subtotal < x,
+                _ => continue,
+            };
+            if !pass {
+                return false;
+            }
+            ok = true;
+        }
+        if any && ok {
+            return true;
+        }
+    }
+    false
+}
+
+fn json_decimal(v: &serde_json::Value) -> Option<Decimal> {
+    match v {
+        serde_json::Value::Number(n) => n.to_string().parse().ok(),
+        serde_json::Value::String(s) => s.parse().ok(),
+        _ => None,
+    }
+}

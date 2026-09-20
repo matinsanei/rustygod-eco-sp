@@ -20,6 +20,11 @@ pub struct CheckoutLine {
     pub variant_id: String,
     pub quantity: i32,
     pub unit_price: Money,
+    /// Free promotion gift: priced from the variant listing for display but
+    /// contributes ZERO to totals (Django's gift line totals 0 via its
+    /// covering line discount). Defaults false for back-compat payloads.
+    #[serde(default)]
+    pub is_gift: bool,
 }
 
 impl Checkout {
@@ -52,16 +57,19 @@ impl Checkout {
                 variant_id,
                 quantity,
                 unit_price,
+                is_gift: false,
             }),
         }
         Ok(())
     }
 
-    /// Mirrors saleor's checkout total calculation (pre-tax, pre-discount v1).
+    /// Payable total: gift lines contribute zero (their covering discount
+    /// zeroes them in Django; same net effect here).
     pub fn total(&self) -> Money {
         let amount = self
             .lines
             .iter()
+            .filter(|l| !l.is_gift)
             .map(|l| l.unit_price.amount * Decimal::from(l.quantity))
             .sum();
         Money::new(amount, self.currency.clone())
@@ -82,11 +90,16 @@ impl Checkout {
                     unit_price: Some(l.unit_price.clone().into()),
                     total_price: Some(
                         Money::new(
-                            l.unit_price.amount * Decimal::from(l.quantity),
+                            if l.is_gift {
+                                Decimal::ZERO
+                            } else {
+                                l.unit_price.amount * Decimal::from(l.quantity)
+                            },
                             l.unit_price.currency.clone(),
                         )
                         .into(),
                     ),
+                    is_gift: l.is_gift,
                 })
                 .collect(),
             total: Some(total.into()),

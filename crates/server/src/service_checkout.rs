@@ -3,6 +3,7 @@ use rustygod_db::{catalog, checkout_store};
 use rustygod_proto::checkout::{
     checkout_service_server::CheckoutService, AddLinesRequest, AddLinesResponse,
     ApplyVoucherRequest, ApplyVoucherResponse, CompleteCheckoutRequest, CompleteCheckoutResponse,
+    RefreshOrderPromotionRequest, RefreshOrderPromotionResponse,
     CreateCheckoutRequest, CreateCheckoutResponse, GetCheckoutRequest, GetCheckoutResponse,
 };
 use sea_orm::DatabaseConnection;
@@ -451,6 +452,55 @@ impl CheckoutService for CheckoutServiceImpl {
             order_id,
             errors: vec![],
         }))
+    }
+
+    async fn refresh_order_promotion(
+        &self,
+        request: Request<RefreshOrderPromotionRequest>,
+    ) -> Result<Response<RefreshOrderPromotionResponse>, Status> {
+        let fail = |code: &str, message: String| {
+            Response::new(RefreshOrderPromotionResponse {
+                applied: String::new(),
+                rule_id: String::new(),
+                amount: String::new(),
+                gift_variant_id: String::new(),
+                errors: vec![Self::err(code, message)],
+            })
+        };
+        let db = self.db()?;
+        let Some(token) = parse_token(&request.into_inner().checkout_id) else {
+            return Ok(fail("NOT_FOUND", "checkout not found".into()));
+        };
+        match rustygod_db::order_promotions::refresh_order_promotion(db, token).await {
+            Ok(rustygod_db::order_promotions::RefreshOutcome::Cleared) => {
+                Ok(Response::new(RefreshOrderPromotionResponse {
+                    applied: "none".into(),
+                    rule_id: String::new(),
+                    amount: String::new(),
+                    gift_variant_id: String::new(),
+                    errors: vec![],
+                }))
+            }
+            Ok(rustygod_db::order_promotions::RefreshOutcome::Discount { rule_id, amount }) => {
+                Ok(Response::new(RefreshOrderPromotionResponse {
+                    applied: "discount".into(),
+                    rule_id: rule_id.to_string(),
+                    amount: amount.to_string(),
+                    gift_variant_id: String::new(),
+                    errors: vec![],
+                }))
+            }
+            Ok(rustygod_db::order_promotions::RefreshOutcome::Gift { rule_id, variant_id, .. }) => {
+                Ok(Response::new(RefreshOrderPromotionResponse {
+                    applied: "gift".into(),
+                    rule_id: rule_id.to_string(),
+                    amount: String::new(),
+                    gift_variant_id: variant_id.to_string(),
+                    errors: vec![],
+                }))
+            }
+            Err(e) => Ok(fail("NOT_APPLICABLE", e.to_string())),
+        }
     }
 }
 

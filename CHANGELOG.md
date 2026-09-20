@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+### ⚠️ Breaking: checkout totals now include order promotions (T3)
+- Before: checkout total = lines − catalogue − voucher.
+- Now: + `orderPromotionTotal` (subtotal_discount or gift). Gifts are
+  `is_gift` lines: qty 1, totals 0, listing price as audit, allocated
+  stock. Orders carry a `discount_orderdiscount` (type ORDER_PROMOTION)
+  and gift order lines (zero-priced, discount audit). Checkout `total`
+  on the wire is the discounted value. Migration: no client change
+  (total already discounted); read `is_gift` to render freebies.
+- `CheckoutLine.is_gift` added (proto). Old clients ignore the unknown
+  field; display logic should hide gift `unit_price` as free.
+
+### Added
+- Order promotions (T3, Django `order_promotions`): predicate-gated
+  (`baseSubtotalPrice`/`baseTotalPrice` range/eq), best-winner by saving,
+  gift vs discount competition, voucher precedence (voucher clears them),
+  single gift slot. `RefreshOrderPromotion` RPC on CheckoutService.
+
 ### ⚠️ Breaking: `CancelOrder` now refunds paid orders (was REQUIRES_REFUND)
 - Before: any captured money → `REQUIRES_REFUND` error, staff refunded manually.
 - Now: paid cancel auto-refunds every unrefunded remainder (one granted

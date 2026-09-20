@@ -66,6 +66,7 @@ async fn db_complete_mints_order_then_deletes_checkout() {
                     quantity: 1,
                     unit_price: None,
                     total_price: None,
+                is_gift: false,
                 }],
             }))
             .await

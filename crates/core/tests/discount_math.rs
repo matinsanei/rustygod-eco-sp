@@ -92,3 +92,26 @@ fn currency_precision_table() {
     assert_eq!(currency_precision("BHD"), 3);
     assert_eq!(currency_precision("XXX"), 2);
 }
+
+#[test]
+fn order_predicate_money_gates() {
+    use rustygod_core::discount::order_predicate_matches;
+    let d = |s: &str| s.parse::<rust_decimal::Decimal>().unwrap();
+    // range gte/lte, number and string bounds.
+    let p = json!({"discountedObjectPredicate": {"baseSubtotalPrice": {"range": {"gte": 50}}}});
+    assert!(order_predicate_matches(&p, d("50")));
+    assert!(order_predicate_matches(&p, d("500")));
+    assert!(!order_predicate_matches(&p, d("49.99")));
+    let p = json!({"discountedObjectPredicate": {"baseTotalPrice": {"range": {"gte": "100", "lt": "200"}}}});
+    assert!(order_predicate_matches(&p, d("150")));
+    assert!(!order_predicate_matches(&p, d("200")));
+    assert!(!order_predicate_matches(&p, d("99")));
+    // eq shape.
+    let p = json!({"discountedObjectPredicate": {"baseSubtotalPrice": {"eq": 45}}});
+    assert!(order_predicate_matches(&p, d("45")));
+    assert!(!order_predicate_matches(&p, d("45.01")));
+    // Unknown shapes never match (documented boundary, not silent truth).
+    assert!(!order_predicate_matches(&json!({}), d("1000")));
+    assert!(!order_predicate_matches(&json!({"discountedObjectPredicate": {"lines": {"some": 1}}}), d("1000")));
+    assert!(!order_predicate_matches(&json!({"discountedObjectPredicate": {"baseTotalPrice": {"range": {"gte": "nan"}}}}), d("1000")));
+}

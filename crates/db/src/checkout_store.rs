@@ -158,11 +158,14 @@ pub async fn add_lines_tx(
     }
     let txn = db.begin().await?;
     for item in items {
-        // Merge target: same variant, no override (overridden lines stay separate,
-        // mirroring Django where differing `data`/override means a new line).
+        // Merge target: same non-gift variant, no override (overridden lines
+        // stay separate, mirroring Django where differing `data`/override
+        // means a new line; gift lines are promotion-managed and never
+        // absorb manual adds — Django keeps `is_gift` lines separate too).
         let existing = checkout_checkoutline::Entity::find()
             .filter(checkout_checkoutline::Column::CheckoutId.eq(checkout_token))
             .filter(checkout_checkoutline::Column::VariantId.eq(item.variant_id))
+            .filter(checkout_checkoutline::Column::IsGift.eq(false))
             .filter(checkout_checkoutline::Column::PriceOverride.is_null())
             .order_by_asc(checkout_checkoutline::Column::CreatedAt)
             .one(&txn)
@@ -243,13 +246,19 @@ async fn evaluate_line_promotion(
 }
 
 /// Recompute denormalized totals from lines (pre-tax: net == gross),
-/// subtracting promotion and voucher discounts — the totals Django
-/// recalculates after line mutations. Floored at zero like Django's
-/// `max(total - discounts, zero)`.
+/// subtracting catalogue promotion, order promotion (T3), and voucher
+/// discounts — the totals Django recalculates after line mutations.
+/// Floored at zero like Django's `max(total - discounts, zero)`.
+/// Gift lines total 0 by construction, so they need no term.
 pub async fn refresh_totals(
     db: &impl sea_orm::ConnectionTrait,
     checkout_token: Uuid,
 ) -> Result<()> {
+    // Order promotions re-evaluate on every totals refresh (single choke
+    // point: every line mutation lands here, like Django's checkout
+    // recalculation on refresh). Errors propagate — a broken promotion
+    // must fail the mutation loudly, never charge a stale total.
+    crate::order_promotions::refresh_order_promotion_in(db, checkout_token).await?;
     let lines = checkout_checkoutline::Entity::find()
         .filter(checkout_checkoutline::Column::CheckoutId.eq(checkout_token))
         .all(db)
@@ -259,9 +268,10 @@ pub async fn refresh_totals(
         .map(|l| l.total_price_gross_amount)
         .sum();
     let promo = crate::promotions::checkout_promotion_total(db, checkout_token).await?;
+    let order_promo = crate::order_promotions::order_promotion_total(db, checkout_token).await?;
     let line_vouchers = crate::promotions::lines_voucher_total(db, checkout_token).await?;
     let order_vouchers = crate::promotions::checkout_voucher_total(db, checkout_token).await?;
-    let total = (lines_sum - promo - line_vouchers - order_vouchers).max(Decimal::ZERO);
+    let total = (lines_sum - promo - order_promo - line_vouchers - order_vouchers).max(Decimal::ZERO);
     let mut co: checkout_checkout::ActiveModel = checkout_checkout::Entity::find_by_id(checkout_token)
         .one(db)
         .await?
@@ -363,6 +373,7 @@ pub fn to_domain(
             variant_id: l.variant_id.to_string(),
             quantity: l.quantity,
             unit_price: Money::new(unit, l.currency.clone()),
+            is_gift: l.is_gift,
         });
     }
     out
