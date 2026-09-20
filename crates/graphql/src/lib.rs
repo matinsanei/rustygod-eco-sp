@@ -18,6 +18,7 @@
 //! - Sections land incrementally (catalog → checkout → order → payment →
 //!   commerce). Each section is one file; shared scalars/types live here.
 
+pub mod account;
 pub mod catalog;
 pub mod checkout;
 pub mod commerce;

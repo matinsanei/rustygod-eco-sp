@@ -32,7 +32,7 @@ use uuid::Uuid;
 
 use crate::{
     catalog, checkout_store,
-    entities::{checkout_checkout, order_order, order_orderevent, warehouse_reservation},
+    entities::{account_user, checkout_checkout, order_order, order_orderevent, warehouse_reservation},
     giftcards, order_store, promotions, warehouses, webhooks,
     DbError, Result,
 };
@@ -152,6 +152,42 @@ pub async fn complete_checkout(
     // 2b. Order-promotion carry (T3): ORDER_PROMOTION discount row +
     // gift order line, same transaction as the mint.
     crate::order_promotions::carry_to_order(&txn, token, order_id).await?;
+
+    // 2c. Guest→user + addresses (E3/E11): the order inherits the checkout's
+    // identity. If the checkout was authenticated, order.user is that user;
+    // otherwise the email is matched for a conversion (guest buys with an
+    // existing email → order links). Billing/shipping addresses are carried
+    // as-is (reused ids — checkout deletion never cascades to addresses).
+    {
+        let mut order_user_id = co.user_id;
+        if order_user_id.is_none() {
+            if let Some(email) = co.email.clone().filter(|e| !e.is_empty()) {
+                if let Some(u) = account_user::Entity::find()
+                    .filter(account_user::Column::Email.eq(email))
+                    .one(&txn)
+                    .await?
+                {
+                    order_user_id = Some(u.id);
+                }
+            }
+        }
+        if order_user_id.is_some() || co.billing_address_id.is_some() || co.shipping_address_id.is_some() {
+            if let Some(order_row) = order_order::Entity::find_by_id(order_id).one(&txn).await? {
+                let mut am: order_order::ActiveModel = order_row.into();
+                if let Some(uid) = order_user_id {
+                    am.user_id = Set(Some(uid));
+                }
+                if let Some(bid) = co.billing_address_id {
+                    am.billing_address_id = Set(Some(bid));
+                }
+                if let Some(sid) = co.shipping_address_id {
+                    am.shipping_address_id = Set(Some(sid));
+                }
+                am.updated_at = Set(Utc::now().into());
+                am.update(&txn).await?;
+            }
+        }
+    }
 
     // 3. Voucher usage (locked increment, R4).
     if let Some(code) = co.voucher_code.clone() {

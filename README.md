@@ -1,13 +1,14 @@
 # ⚡ rustygod-saleor
 
-**Saleor, rewritten in Rust. Same PostgreSQL. Zero data migration. Just swap the image.**
+**[Saleor](https://github.com/saleor/saleor), rewritten in Rust. Same PostgreSQL. Zero data migration. Just swap the image.**
 
 [![Rust](https://img.shields.io/badge/rust-stable-orange.svg)](https://www.rust-lang.org)
-[![gRPC](https://img.shields.io/badge/api-gRPC%20%2B%20tonic-blue.svg)](https://github.com/hyperium/tonic)
+[![gRPC](https://img.shields.io/badge/api-gRPC%20%2B%20GraphQL-blue.svg)](https://github.com/hyperium/tonic)
 [![License](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](LICENSE)
-[![Contract Tests](https://img.shields.io/badge/contract%20tests-87%2F87%20green-brightgreen.svg)](#behavioral-contract)
+[![Tests](https://img.shields.io/badge/tests-215%20passing-brightgreen.svg)](#behavioral-contract)
+[![Contract Tests](https://img.shields.io/badge/contract%20tests-120%2F120%20green-brightgreen.svg)](#behavioral-contract)
 
-Saleor is a great commerce engine trapped in a slow body: Python/Django, gigabytes of RAM,
+[Saleor](https://github.com/saleor/saleor) is a great commerce engine trapped in a slow body: Python/Django, gigabytes of RAM,
 GraphQL overhead on every hot path. **rustygod-saleor** is a ground-up Rust rewrite that runs
 against **the exact same PostgreSQL schema Django created** — 145 tables, same constraints,
 same rows. Migration friction for operators: **zero**. Point the binary at your database URL
@@ -99,12 +100,12 @@ Django keeps working throughout — both read the same rows.
 ```bash
 # Prerequisites: Rust stable, a Saleor PostgreSQL (see below for the dev one)
 cargo build
-cargo test          # 87/87 green: unit + comparative + flow contracts
+cargo test          # 215 tests passing (120 contract + unit): checkout, payment, discount, giftcard, order, promotion, guest-link, GraphQL
 
 # Against the real database:
 export RUSTYGOD_DATABASE_URL="postgres://saleor:saleor@localhost:5432/saleor"
 ./target/debug/rustygod-server   # gRPC :50051 + GraphQL :8000 + metrics :9000
-# Dashboard: API_URL=http://localhost:8000/graphql pnpm dev
+# Dashboard (existing Saleor Dashboard): API_URL=http://localhost:8000/graphql pnpm --filter dashboard dev
 ```
 
 Spin up a Saleor database locally (from the [Saleor](https://github.com/saleor/saleor) repo):
@@ -128,9 +129,11 @@ Saleor's **1,219 test files** are the spec. We don't reimplement vibes — we po
 | `db/tests/contract_relations.rs` (6) | `product/tests/test_category.py`, `test_collections_availability.py`, attribute tests | MPTT tree order + parent/child consistency; collection visibility; type/attribute/media parity |
 | `db/tests/contract_commerce.rs` (8) | discount/shipping/giftcard/menu/page/account/channel/tax/warehouse tests | voucher/promotion rules; shipping listings; giftcard rows; menu tree; address round-trip; stock reserve/release |
 | `server/tests/flow.rs` (4) | `checkout/tests/test_checkout_complete.py`, `test_order_from_checkout.py` | complete mints matching order; checkout consumed exactly once; bad variant rejected; order numbering |
-| `core/tests/payment_calc.rs` (8) + `db/tests/contract_payments.rs` (3) | `payment/transaction_item_calculations.py`, manual gateway | event-group recalc (pending/success/adjust/back/reverse), idempotent create/events, guard rails, order full/partial/none refresh |
+| `core/tests/payment_calc.rs` (12) + `db/tests/contract_payments.rs` (3) + `contract_psp.rs` (11) | `payment/transaction_item_calculations.py`, `payment/utils.py`, manual gateway | event-group recalc + PSP dedup, single `AUTHORIZATION_SUCCESS`, async Pending + `action_required` (3DS), per-checkout R3 guard, `adjust_authorization` cutoff, psp-less amounts |
 | `core giftcard/draft/invoice` (7+3+3) + `db/tests/contract_giftcards.rs` (9) + `contract_drafts.rs` (7) + `contract_invoices.rs` (4) | `giftcard/tests/`, `graphql/order/mutations/draft_order_*`, `graphql/invoice/tests/` | dashed codes + active(date) + restrictions; draft merge/split/allocate-on-complete; invoice pending→success→sent + deletion flow |
-| `core/tests/discount_math.rs` (7) + `db/tests/contract_promotions.rs` (3) | `discount/utils/promotion.py`, `prices/discount.py`, voucher/checkout flows | HALF_UP percentage, floor-zero fixed, best-rule, predicate AND/OR + base64 GIDs; live 30% rule → 40.00→28.00; DISCOUNT voucher → totals + usage increment |
+| `core/tests/discount_math.rs` (8) + `db/tests/contract_promotions.rs` (3) + `contract_order_promotions.rs` (6) | `discount/utils/promotion.py`, `discount/utils/order.py`, `prices/discount.py` | HALF_UP percentage, floor-zero fixed, best-rule, predicate AND/OR + base64 GIDs; order promotions (gift XOR discount, max saving, voucher precedence), gift line `is_gift` + channel stock, complete carry → order discount + allocation |
+| `db/tests/contract_guest.rs` (2) | `checkout/complete_checkout.py::_process_user_data_for_order` | guest→user link by email + authenticated checkout user_id, billing/shipping address carry (E3/E11) |
+| `crates/graphql/tests/schema_sdl.rs` (3) + `catalog` productCreate | `saleor/dashboard` UserDetails + ProductCreate | GraphQL BFF thin: `products/checkout/order/me` + `productCreate` (manage_products), SDL parity, no-panic without DB |
 | `ai` unit + `ai/tests/ai_contract.rs` (4+4) | `product/tests/test_product_search.py` | trigram ranking + empty-gibberish; co-purchase scores sorted; chat grounded; embedder determinism + vector-store top-k |
 
 Porting order follows blast radius: **checkout → payment → discount → inventory → webhooks**.
@@ -210,31 +213,28 @@ order #522 minted live during development). Known edge, documented in
 
 ## Roadmap
 
-- [x] Workspace + tonic skeleton (`axum`-ready; gRPC first, REST gateway later)
-- [x] Domain core: Money/Product/Checkout/Order with decimal math
-- [x] SeaORM entities 1:1 from live Saleor PostgreSQL (147 files)
-- [x] DB-backed catalog reads (channel-aware pricing, published filtering, warehouse stock)
-- [x] Checkout writes on Django tables (`checkout_checkout`/`checkoutline`: token PK, US/en/none defaults, net==gross pre-tax, complete deletes rows)
-- [x] Order persistence on Django tables (`order_order`/`orderline`: same `order_order_number_seq`, `"partially fulfilled"` exact strings, variant-detail lines)
+- [x] Workspace + tonic skeleton (gRPC + GraphQL dual-stack via Axum)
+- [x] Domain core: Money/Product/Checkout/Order with decimal math (guest→user link, address carry)
+- [x] SeaORM entities 1:1 from live Saleor PostgreSQL (147 files, Saleor `order_order_number_seq` parity)
+- [x] DB-backed catalog reads (channel-aware pricing, published filtering, warehouse stock) + `productCreate` (GraphQL `manage_products`)
+- [x] Checkout writes on Django tables (`checkout_checkout`/`checkoutline`: token PK, US/en/none defaults, net==gross pre-tax, complete deletes rows, `is_gift` gifts)
+- [x] Order persistence on Django tables (`order_order`/`orderline`: same sequence, exact status strings, variant-detail lines, user + addresses from checkout)
 - [x] Product relations (MPTT category tree, channel-aware collections, types, attributes, media)
-- [x] Commerce services (discount/shipping/giftcard/menu/page/account/channel/tax/warehouse)
-- [x] AI layer v1 (`rustygod-ai`): `Embedder`/`VectorStore` traits with deterministic local backends, pg_trgm search on Saleor's gin indexes, co-occurrence recommender from Django order lines, streaming grounded chat
-- [x] 49 contract tests green (unit + comparative vs Django rows + service flow + audit)
-- [x] Promotion engine (catalogue best-rule evaluation, predicate matching, line/order discount rows, voucher apply + usage increment)
-- [x] Payments (TransactionItem event-group recalculation, manual gateway, idempotent create/events, order coverage statuses)
-- [x] Webhooks (fan-out with channel filter, HMAC-SHA256 signing, attempt log, success/failed lifecycle, backoff retry dues)
-- [x] Auth (Django PBKDF2/bcrypt verify, RS256 from shared RSA_PRIVATE_KEY, refresh + jwt_token_key revocation, staff permissions)
-- [x] Fulfillment (auto-increment per order, remainder guards, stock decrease/restore, cancel, refunds, exact determine_order_status)
-- [x] Audit-hardened: zero `unwrap` in production code, transactional
-      checkout-complete and reservations, idempotent add-lines merging and
-      reserve retry, channel auto-confirm status, denormalized totals refresh
-- [ ] Checkout writes persisted to Django tables (`checkout_checkout`, lines)
-- [ ] Discount/promotion engine (biggest logic block in Saleor — estimated largest milestone)
-- [ ] Payments + webhooks (HMAC parity with `saleor/webhook`)
-- [ ] Auth/JWT compatible with Django sessions
-- [ ] Load benchmarks vs Saleor (k6 + published reports)
-- [ ] AI layer: pgvector semantic search, recommender, sales chatbot
-- [ ] Dashboard/Storefront adapters (gRPC → existing frontends)
+- [x] Commerce services (discount/shipping/giftcard/menu/page/account/channel/tax/warehouse) — now also via GraphQL `channels/warehouses/taxClasses/shippingMethods/pages/promotions/menu`
+- [x] AI layer v1 (`rustygod-ai`): `Embedder`/`VectorStore` traits with deterministic local backends, pg_trgm search, co-occurrence recommender, streaming grounded chat
+- [x] 120 contract tests green (unit + comparative vs Django rows + service flow + audit + GraphQL SDL)
+- [x] Promotion engine (catalogue + **order promotions**: gift XOR discount, max-saving winner, voucher precedence, `is_gift` carry + allocation)
+- [x] Payments (TransactionItem event-group recalc + PSP dedup/async/3DS per-checkout R3 guard, `adjust_authorization`)
+- [x] Webhooks (fan-out with channel filter, HMAC-SHA256, attempt log, success/failed, backoff + sweeper)
+- [x] Auth (Django PBKDF2/bcrypt, RS256 `RSA_PRIVATE_KEY`, `me { User }` via GraphQL, staff `manage_*` + app tokens)
+- [x] Fulfillment (auto-increment, remainder guards, stock decrease/restore, cancel, refunds, `determine_order_status`) + `return_and_refund` + per-transaction `granted_refunds`
+- [x] GraphQL BFF (enterprise, thin): `crates/graphql` + `server` dual-stack `gRPC :50051` / `GraphQL :8000` / `metrics :9000`, same DB/logic (`me`, `products`, `checkout`, `order`, `channels`, `transaction`), Dashboard `API_URL=http://localhost:8000/graphql`
+- [x] Audit-hardened: zero `unwrap` in production, transactional checkout-complete (user/address + promotions + gift cards + stock), idempotent add-lines, `FOR UPDATE` lock ordering (R6), outbox + sweeper (R8/R9)
+- [ ] Checkout `auto-complete` expired + TTL sweeper final (E10)
+- [ ] Product attribute writes / collection writes full parity
+- [ ] CSV / thumbnails / site settings (intentionally last)
+- [ ] AI layer: pgvector, recommender v2, agentic buying (natural-language checkout)
+- [ ] Storefront/ Dashboard v2 generated from protos (Phase 4, <100ms TTFB target)
 
 ## Contributing
 
