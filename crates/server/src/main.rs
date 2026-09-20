@@ -49,21 +49,32 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .init();
 
     // Runtime modes mirroring Saleor's processes (uvicorn / celery worker /
-    // celery beat). Default `api` preserves the historical no-arg behavior.
+    // celery beat) plus Saleor's own Django management. Default `api`
+    // preserves the historical no-arg behavior.
     match rustygod_server::modes::Mode::parse() {
-        rustygod_server::modes::Mode::Worker => {
+        (rustygod_server::modes::Mode::Worker, _) => {
             let db = rustygod_server::modes::require_db().await?;
             return rustygod_server::modes::run_worker(db).await;
         }
-        rustygod_server::modes::Mode::Beat => {
+        (rustygod_server::modes::Mode::Beat, _) => {
             let db = rustygod_server::modes::require_db().await?;
             return rustygod_server::modes::run_beat(db).await;
         }
-        rustygod_server::modes::Mode::Check => {
+        (rustygod_server::modes::Mode::Check, _) => {
             let db = rustygod_server::modes::require_db().await?;
             return rustygod_server::modes::run_check(db).await;
         }
-        rustygod_server::modes::Mode::Api => {}
+        (rustygod_server::modes::Mode::Manage(cmd), extra) => {
+            use rustygod_server::modes::ManageCmd;
+            return match cmd {
+                ManageCmd::Migrate => rustygod_server::modes::run_migrate(&extra).await,
+                ManageCmd::Seed => rustygod_server::modes::run_seed(&extra).await,
+                ManageCmd::CreateSuperuser => {
+                    rustygod_server::modes::run_createsuperuser(&extra).await
+                }
+            };
+        }
+        (rustygod_server::modes::Mode::Api, _) => {}
     }
 
     let addr = std::env::var("RUSTYGOD_ADDR")

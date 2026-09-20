@@ -6,8 +6,12 @@
 //!   (`saleor/settings.py`). Implemented jobs run for real; the rest are
 //!   honest deferred stubs (debug log) until their domain logic lands.
 //! - `check`: one-shot readiness probe (DB connectivity + key tables), exit code.
+//! - `migrate` / `seed` / `createsuperuser`: thin wrappers over saleor-core's
+//!   own `manage.py`, so the DDL and the mock data come from Saleor itself —
+//!   never re-guessed in Rust. `SALEOR_CORE_DIR` overrides the checkout
+//!   location (default `../saleor/saleor-core` next to this repo).
 //!
-//! No CLI dependency: `rustygod-server [api|worker|beat|check] [--help]`.
+//! No CLI dependency: `rustygod-server [MODE] [extra args...]`.
 //! `RUSTYGOD_BEAT_SCALE` (float, default 1.0) multiplies every beat interval,
 //! so daily jobs can be exercised in dev (`RUSTYGOD_BEAT_SCALE=0.01`).
 
@@ -19,31 +23,51 @@ pub enum Mode {
     Worker,
     Beat,
     Check,
+    Manage(ManageCmd),
+}
+
+/// Subcommands delegated 1:1 to saleor-core `manage.py`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ManageCmd {
+    /// `manage.py migrate` — Saleor's own Django migration history is the DDL.
+    Migrate,
+    /// `manage.py populatedb` — Saleor's own mock catalogue/orders/channels.
+    Seed,
+    /// `manage.py createsuperuser` — Saleor's own superuser creation.
+    CreateSuperuser,
 }
 
 impl Mode {
-    pub fn parse() -> Self {
-        let arg = std::env::args().nth(1).unwrap_or_default();
-        match arg.as_str() {
+    /// Returns the mode plus any extra argv (passed through to `manage.py`
+    /// for the `Manage` modes).
+    pub fn parse() -> (Self, Vec<String>) {
+        let mut args = std::env::args().skip(1);
+        let first = args.next().unwrap_or_default();
+        let rest: Vec<String> = args.collect();
+        let mode = match first.as_str() {
             "" | "api" => Mode::Api,
             "worker" => Mode::Worker,
             "beat" | "scheduler" => Mode::Beat,
             "check" => Mode::Check,
+            "migrate" => Mode::Manage(ManageCmd::Migrate),
+            "seed" | "populatedb" => Mode::Manage(ManageCmd::Seed),
+            "createsuperuser" => Mode::Manage(ManageCmd::CreateSuperuser),
             "-h" | "--help" | "help" => {
                 print_help();
                 std::process::exit(0);
             }
             other => {
-                eprintln!("unknown mode {other:?}; expected api|worker|beat|check");
+                eprintln!("unknown mode {other:?}; see --help");
                 std::process::exit(2);
             }
-        }
+        };
+        (mode, rest)
     }
 }
 
 fn print_help() {
     println!(
-        "rustygod-server [MODE]\n\
+        "rustygod-server [MODE] [args...]\n\
          \n\
          Modes (mirror Saleor's processes):\n  \
          api     gRPC core + GraphQL BFF + metrics (default)\n  \
@@ -51,9 +75,17 @@ fn print_help() {
          beat    periodic scheduler (celery beat, CELERY_BEAT_SCHEDULE)\n  \
          check   readiness probe, exits 0/1\n\
          \n\
-         Env: RUSTYGOD_DATABASE_URL, RUSTYGOD_ADDR, RUSTYGOD_GRAPHQL_ADDR,\n  \
-         RUSTYGOD_METRICS_ADDR, RUSTYGOD_DOMAIN, RUSTYGOD_SWEEP_SECS,\n  \
-         RUSTYGOD_WORKER_SECS (default 10), RUSTYGOD_BEAT_SCALE (default 1.0)"
+         Saleor's own Django management (DDL + data come from saleor-core,\n \
+         extra args pass straight through to manage.py):\n  \
+         migrate [args]            manage.py migrate (e.g. --check dry-run)\n  \
+         seed [args]               manage.py populatedb (e.g. --createsuperuser\n                                   --superuser_password=admin --withoutimages)\n  \
+         createsuperuser [args]    manage.py createsuperuser\n\
+         \n\
+         Env: RUSTYGOD_DATABASE_URL (mapped to DATABASE_URL for manage.py),\n  \
+         SALEOR_CORE_DIR (default ../saleor/saleor-core), RUSTYGOD_ADDR,\n  \
+         RUSTYGOD_GRAPHQL_ADDR, RUSTYGOD_METRICS_ADDR, RUSTYGOD_DOMAIN,\n  \
+         RUSTYGOD_SWEEP_SECS, RUSTYGOD_WORKER_SECS (default 10),\n  \
+         RUSTYGOD_BEAT_SCALE (default 1.0)"
     );
 }
 
@@ -260,4 +292,87 @@ pub async fn run_check(db: DatabaseConnection) -> Result<(), Box<dyn std::error:
         }
     }
     Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// saleor-core delegation: migrate / seed / createsuperuser
+// ---------------------------------------------------------------------------
+
+/// Locate the saleor-core checkout: `SALEOR_CORE_DIR`, else
+/// `../saleor/saleor-core` next to the current directory.
+fn saleor_core_dir() -> Result<std::path::PathBuf, Box<dyn std::error::Error>> {
+    let dir = match std::env::var("SALEOR_CORE_DIR") {
+        Ok(d) => std::path::PathBuf::from(d),
+        Err(_) => std::env::current_dir()?.join("../saleor/saleor-core"),
+    };
+    let dir = dir.canonicalize().map_err(|_| {
+        format!(
+            "saleor-core not found at {} (set SALEOR_CORE_DIR)",
+            dir.display()
+        )
+    })?;
+    if !dir.join("manage.py").exists() {
+        return Err(format!("no manage.py in {} (set SALEOR_CORE_DIR)", dir.display()).into());
+    }
+    Ok(dir)
+}
+
+/// Prefer saleor-core's own `.venv` python, fall back to `python3`.
+fn saleor_python(dir: &std::path::Path) -> String {
+    let venv = dir.join(".venv/bin/python");
+    if venv.exists() {
+        venv.to_string_lossy().into_owned()
+    } else {
+        "python3".to_string()
+    }
+}
+
+/// Run `manage.py <argv>` with inherited stdio; propagate its exit code.
+async fn manage_py(extra: &[String], cmd: &[&str]) -> Result<(), Box<dyn std::error::Error>> {
+    let dir = saleor_core_dir()?;
+    let py = saleor_python(&dir);
+    let mut args: Vec<&str> = vec!["manage.py"];
+    args.extend_from_slice(cmd);
+    tracing::info!("manage: {} {}", py, args.join(" "));
+    // Point Django at the same database we use (explicit DATABASE_URL wins).
+    let status = tokio::process::Command::new(&py)
+        .arg("manage.py")
+        .args(cmd)
+        .args(extra)
+        .current_dir(&dir)
+        .env("DJANGO_SETTINGS_MODULE", "saleor.settings")
+        .env(
+            "DATABASE_URL",
+            std::env::var("DATABASE_URL")
+                .or_else(|_| std::env::var("RUSTYGOD_DATABASE_URL"))
+                .unwrap_or_default(),
+        )
+        .stdin(std::process::Stdio::inherit())
+        .stdout(std::process::Stdio::inherit())
+        .stderr(std::process::Stdio::inherit())
+        .status()
+        .await
+        .map_err(|e| format!("failed to launch {py}: {e}"))?;
+    if status.success() {
+        Ok(())
+    } else {
+        Err(format!("manage.py exited with {status}").into())
+    }
+}
+
+/// `migrate`: Saleor's own Django migration history is the DDL.
+/// Extra args pass through (e.g. `--check` for a no-change dry run).
+pub async fn run_migrate(extra: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+    manage_py(extra, &["migrate"]).await
+}
+
+/// `seed`: Saleor's own `populatedb` (mock catalogue/orders/channels).
+/// Typical: `seed --createsuperuser --superuser_password=admin --withoutimages`.
+pub async fn run_seed(extra: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+    manage_py(extra, &["populatedb"]).await
+}
+
+/// `createsuperuser`: Saleor's own superuser creation (args pass through).
+pub async fn run_createsuperuser(extra: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+    manage_py(extra, &["createsuperuser"]).await
 }

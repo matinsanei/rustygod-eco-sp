@@ -42,8 +42,13 @@ Saleor's Python, no backend slowdown.
   `beat` (celery-beat equivalent: all 20 `CELERY_BEAT_SCHEDULE` entries with
   Saleor task names/intervals; only `delete-expired-reservations` is real,
   rest are deferred stubs; `RUSTYGOD_BEAT_SCALE` multiplies intervals for
-  dev), `check` (readiness probe: `SELECT 1` + row counts, exit 0/1).
+  dev),   `check` (readiness probe: `SELECT 1` + row counts, exit 0/1).
   compose has matching `server`/`worker`/`beat` services.
+- DDL + seed data are **never re-guessed**: `migrate` / `seed` /
+  `createsuperuser` delegate to saleor-core's own `manage.py` (venv python,
+  `RUSTYGOD_DATABASE_URL` mapped to `DATABASE_URL`, stdio inherited, exit
+  code propagated; `SALEOR_CORE_DIR` override). Verified: `migrate --check`
+  exit 0 on the live DB.
 
 ## 3. What was done this session
 
