@@ -101,10 +101,20 @@ The stock Saleor Dashboard runs against `/graphql` with zero schema errors
   scheduler), `check` (readiness), `migrate`/`seed`/`createsuperuser`
   (delegated to Saleor's own `manage.py` — DDL and mock data are never
   re-guessed).
-- **Known gaps:** many of the 244 mutations are still validated stubs
-  (`None`/empty until their domain port lands); `extensions/installed` is
-  correctly empty on a fresh `populatedb` (0 apps); media URLs 404 (no file
-  server yet). Tracked in [BUGS.md](BUGS.md) / [STATUS.md](STATUS.md).
+- **Known gaps (honest list, Sep 2026 — see AUDIT.md §1 for the full matrix):**
+  - No real PSP calls (engine only: no Stripe/Adyen HTTP) — the #1 blocker
+    for live money.
+  - No server-side filtering/sorting (accepted, ignored); pagination works.
+  - Media/thumbnails 404, multipart upload deferred, no translations wiring,
+    CSV intentionally last, many of the 244 mutations still validated stubs.
+  - `extensions/installed` is correctly empty on a fresh `populatedb` (0 apps).
+  - Done and verified, despite what older docs may say: guest→user link +
+    address carry (E3/E11, `contract_guest.rs` green), checkout reservation
+    sweep (expired *checkout rows* still linger — E10, annoying, not a stock
+    leak), `shopSettingsUpdate` persists name/description/metadata.
+- **Priority order:** ① head-to-head benchmark vs Saleor (prove the speed
+  claim or kill it) → ② server-side filtering → ③ real PSP.
+  Tracked in [BUGS.md](BUGS.md) / [STATUS.md](STATUS.md) / [AUDIT.md](AUDIT.md).
 
 ## Zero-friction migration
 
