@@ -234,7 +234,7 @@ impl CatalogQuery {
                 .into_tuple().one(db).await.map_err(|e| Error::new(e.to_string()))?
         } else { None };
         Ok(row.map(|(cid, name, cslug, seo_t, seo_d, level)| gen::Category {
-            id: Some(ID(cid.to_string())),
+            id: Some(ID(crate::common::gid("Category", cid))),
             private_metadata: vec![],
             metadata: vec![],
             seo_title: seo_t,
@@ -272,7 +272,7 @@ impl CatalogQuery {
                 .into_tuple().one(db).await.map_err(|e| Error::new(e.to_string()))?
         } else { None };
         Ok(row.map(|(cid, name, cslug, seo_t, seo_d)| gen::Collection {
-            id: Some(ID(cid.to_string())),
+            id: Some(ID(crate::common::gid("Collection", cid))),
             private_metadata: vec![],
             metadata: vec![],
             seo_title: seo_t,
@@ -323,11 +323,11 @@ async fn assemble_list_products(
             for (id, name, slug) in rows { cats.insert(id, (name, slug)); }
         }
         let page: Vec<gen::Product> = all.into_iter().map(|p| gen::Product {
-            id: Some(ID(p.id)),
+            id: Some(ID(crate::common::gid("Product", &p.id))),
             name: Some(p.name),
             slug: Some(p.slug),
             default_variant: p.variants.into_iter().next().map(|v| gen::ProductVariant {
-                id: Some(ID(v.id)),
+                id: Some(ID(crate::common::gid("ProductVariant", &v.id))),
                 name: Some(v.name),
                 sku: Some(v.sku),
                 quantity_available: Some(v.quantity_available),
@@ -348,7 +348,7 @@ async fn assemble_list_products(
             seo_description: None,
             description: None,
             product_type: p.product_type_id.parse::<i32>().ok().and_then(|tid| types.get(&tid)).map(|(name, slug, hv)| gen::ProductType {
-                id: Some(ID(p.product_type_id.clone())),
+                id: Some(ID(crate::common::gid("ProductType", &p.product_type_id))),
                 private_metadata: vec![],
                 metadata: vec![],
                 name: Some(name.clone()),
@@ -362,7 +362,7 @@ async fn assemble_list_products(
                 product_attributes: vec![],
             }),
             category: p.category_id.as_ref().and_then(|c| c.parse::<i32>().ok()).and_then(|cid| cats.get(&cid)).map(|(name, slug)| gen::Category {
-                id: Some(ID(p.category_id.clone().unwrap_or_default())),
+                id: Some(ID(crate::common::gid("Category", p.category_id.clone().unwrap_or_default()))),
                 private_metadata: vec![],
                 metadata: vec![],
                 seo_title: None,
@@ -416,7 +416,7 @@ impl CatalogMutation {
         let slug = input.slug.clone().unwrap_or_else(|| name.to_lowercase().replace(' ', "-"));
         // Resolve product_type: use given or first existing.
         let pt_id: i32 = {
-            let parsed = input.product_type.0.parse::<i32>().unwrap_or(0);
+            let parsed = rustygod_db::catalog::parse_gid(&input.product_type.0).unwrap_or(0);
             if parsed != 0 { parsed } else {
                 use sea_orm::EntityTrait;
                 let pt = rustygod_db::entities::product_producttype::Entity::find().one(db).await.map_err(|e| Error::new(e.to_string()))?
@@ -424,11 +424,11 @@ impl CatalogMutation {
                 pt.id
             }
         };
-        let cat_id: Option<i32> = input.category.as_ref().and_then(|c| c.0.parse::<i32>().ok());
+        let cat_id: Option<i32> = input.category.as_ref().and_then(|c| rustygod_db::catalog::parse_gid(&c.0));
         let id = create_product_row(db, &name, &slug, pt_id, cat_id).await.map_err(|e| Error::new(e.to_string()))?;
         Ok(GqlProductCreate {
             product: Some(gen::Product {
-                id: Some(ID(id.to_string())),
+                id: Some(ID(crate::common::gid("Product", id))),
                 name: Some(name),
                 slug: Some(slug),
                 private_metadata: vec![],

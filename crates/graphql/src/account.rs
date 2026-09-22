@@ -37,7 +37,7 @@ fn to_gen_user(
     channels: Vec<rustygod_db::commerce::ChannelView>,
 ) -> gen::User {
     gen::User {
-        id: Some(ID(claims_user_id)),
+        id: Some(ID(crate::common::gid("User", &claims_user_id))),
         private_metadata: vec![],
         metadata: crate::common::json_to_metadata_items(
             &serde_json::to_value(&user.metadata).unwrap_or(serde_json::Value::Null),
@@ -54,7 +54,7 @@ fn to_gen_user(
         permission_groups: vec![],
         editable_groups: vec![],
         accessible_channels: channels.into_iter().map(|c| gen::Channel {
-            id: Some(ID(format!("Channel:{}", c.id))),
+            id: Some(ID(crate::common::gid("Channel", &c.id))),
             private_metadata: vec![],
             metadata: vec![],
             slug: Some(c.slug.clone()),
@@ -360,7 +360,7 @@ fn slim_list_user(
     date_joined: chrono::DateTime<chrono::Utc>,
 ) -> gen::User {
     gen::User {
-        id: Some(ID(uid.to_string())),
+        id: Some(ID(crate::common::gid("User", uid))),
         private_metadata: vec![],
         metadata: vec![],
         email: Some(email),

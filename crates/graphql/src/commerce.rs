@@ -242,7 +242,7 @@ impl CommerceQuery {
             .column(ChCol::DefaultCountry).column(ChCol::AllocationStrategy)
             .into_tuple().all(db).await.map_err(|e| Error::new(e.to_string()))?;
         Ok(rows.into_iter().map(|(id, slug, name, is_active, currency_code, default_country, allocation_strategy)| gen::Channel {
-            id: Some(ID(id.to_string())),
+            id: Some(ID(crate::common::gid("Channel", id))),
             private_metadata: vec![],
             metadata: vec![],
             slug: Some(slug),
@@ -272,7 +272,7 @@ impl CommerceQuery {
         let rows = rustygod_db::commerce::list_warehouses(db, "default-channel").await.map_err(|e| Error::new(e.to_string()))?;
         let total = rows.len() as i32;
         let edges = rows.into_iter().skip(off).take(lim).map(|w| gen::WarehouseCountableEdge { node: Some(gen::Warehouse {
-            id: Some(ID(w.id)),
+            id: Some(ID(crate::common::gid("Warehouse", &w.id))),
             private_metadata: vec![],
             metadata: vec![],
             name: Some(w.name),
@@ -298,7 +298,7 @@ impl CommerceQuery {
         let off = after.and_then(|c| crate::common::decode_cursor(&c)).unwrap_or(0);
         let lim = first.unwrap_or(100).clamp(1, 100) as usize;
         let edges = rows.into_iter().skip(off).take(lim).map(|m| gen::MenuCountableEdge { node: Some(gen::Menu {
-            id: Some(ID(m.id.to_string())),
+            id: Some(ID(crate::common::gid("Menu", m.id))),
             private_metadata: vec![],
             metadata: vec![],
             name: Some(m.name),
@@ -319,7 +319,7 @@ impl CommerceQuery {
         let lim = first.unwrap_or(100).clamp(1, 100) as usize;
         let rows = rustygod_db::commerce::list_tax_classes(db).await.map_err(|e| Error::new(e.to_string()))?;
         let edges = rows.into_iter().skip(off).take(lim).map(|(id, name)| gen::TaxClassCountableEdge { node: Some(gen::TaxClass {
-            id: Some(ID(id.to_string())),
+            id: Some(ID(crate::common::gid("TaxClass", id))),
             private_metadata: vec![],
             metadata: vec![],
             name: Some(name),
@@ -332,7 +332,7 @@ impl CommerceQuery {
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
         let ch = channel.unwrap_or_else(|| "default-channel".into());
         let rows = rustygod_db::commerce::list_shipping_methods(db, &ch).await.map_err(|e| Error::new(e.to_string()))?;
-        Ok(rows.into_iter().map(|m| GqlShippingMethod { id: ID(m.id.to_string()), name: m.name, price: m.price_amount.to_string() }).collect())
+        Ok(rows.into_iter().map(|m| GqlShippingMethod { id: ID(crate::common::gid("ShippingMethod", m.id)), name: m.name, price: m.price_amount.to_string() }).collect())
     }
 
     async fn pages(
@@ -347,7 +347,7 @@ impl CommerceQuery {
         let rows = rustygod_db::commerce::list_pages(db).await.map_err(|e| Error::new(e.to_string()))?;
         let total = rows.len() as i32;
         let edges = rows.into_iter().skip(off).take(lim).map(|p| gen::PageCountableEdge { node: Some(gen::Page {
-            id: Some(ID(p.id.to_string())),
+            id: Some(ID(crate::common::gid("Page", p.id))),
             private_metadata: vec![],
             metadata: vec![],
             seo_title: None,
@@ -375,7 +375,7 @@ impl CommerceQuery {
         let lim = first.unwrap_or(100).clamp(1, 100) as usize;
         let rows = rustygod_db::commerce::list_promotions(db, &ch).await.map_err(|e| Error::new(e.to_string()))?;
         let edges = rows.into_iter().skip(off).take(lim).map(|p| gen::PromotionCountableEdge { node: Some(gen::Promotion {
-            id: Some(ID(p.id)),
+            id: Some(ID(crate::common::gid("Promotion", &p.id))),
             private_metadata: vec![],
             metadata: vec![],
             name: Some(p.name),
@@ -401,7 +401,7 @@ impl CommerceQuery {
                 .one(db).await.map_err(|e| Error::new(e.to_string()))?.map(|m| m.slug)
         } else if let Some(i) = id {
             use sea_orm::EntityTrait;
-            let pk: i32 = i.0.parse().unwrap_or(-1);
+            let pk: i32 = rustygod_db::catalog::parse_gid(&i.0).unwrap_or(-1);
             rustygod_db::entities::menu_menu::Entity::find_by_id(pk).one(db).await.map_err(|e| Error::new(e.to_string()))?.map(|m| m.slug)
         } else { None };
         let m = match resolved_slug {
@@ -409,7 +409,7 @@ impl CommerceQuery {
             None => None,
         };
         Ok(m.map(|x| gen::Menu {
-            id: Some(ID(x.id.to_string())),
+            id: Some(ID(crate::common::gid("Menu", &x.id))),
             private_metadata: vec![],
             metadata: vec![],
             name: Some(x.name),

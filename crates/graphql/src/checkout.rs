@@ -34,7 +34,7 @@ fn to_gql_checkout(
     let d = rustygod_db::checkout_store::to_domain(co, lines, channel);
     let total = Money { amount: co.total_gross_amount.to_string(), currency: co.currency.clone(), fraction_digits: None };
     GqlCheckout {
-        id: ID(d.id),
+        id: ID(crate::common::gid("Checkout", &d.id)),
         channel: d.channel,
         email: d.email,
         currency: d.currency.clone(),
@@ -43,7 +43,7 @@ fn to_gql_checkout(
             let tot = if l.is_gift { rust_decimal::Decimal::ZERO } else { l.unit_price.amount * rust_decimal::Decimal::from(l.quantity) };
             let currency = l.unit_price.currency.clone();
             GqlCheckoutLine {
-                variant_id: ID(l.variant_id),
+                variant_id: ID(crate::common::gid("ProductVariant", &l.variant_id)),
                 quantity: l.quantity,
                 unit_price: l.unit_price.into(),
                 total_price: Money { amount: tot.to_string(), currency, fraction_digits: None },
@@ -67,7 +67,7 @@ impl CheckoutQuery {
     async fn checkout(&self, ctx: &Context<'_>, id: ID) -> Result<Option<GqlCheckout>> {
         let g = ctx.data::<GqlContext>()?;
         let db = g.db()?;
-        let token: Uuid = id.0.parse().map_err(|_| Error::new("id must be UUID"))?;
+        let token: Uuid = crate::common::parse_uuid_gid(&id.0).ok_or_else(|| Error::new("id must be UUID"))?;
         let Some((co, lines)) = rustygod_db::checkout_store::load_checkout(db, token).await.map_err(|e| Error::new(e.to_string()))? else { return Ok(None) };
         // Channel slug round-trip via channel_id (v1 ids 1/2 as in server).
         let ch = match co.channel_id { 2 => "channel-pln", _ => "default-channel" };
@@ -93,15 +93,15 @@ impl CheckoutMutation {
     async fn checkout_add_lines(&self, ctx: &Context<'_>, checkout_id: ID, lines: Vec<AddLineInput>) -> Result<GqlCheckout> {
         let g = ctx.data::<GqlContext>()?;
         let db = g.db()?;
-        let token: Uuid = checkout_id.0.parse().map_err(|_| Error::new("checkoutId must be UUID"))?;
+        let token: Uuid = crate::common::parse_uuid_gid(&checkout_id.0).ok_or_else(|| Error::new("checkoutId must be UUID"))?;
         let Some((co, _)) = rustygod_db::checkout_store::load_checkout(db, token).await.map_err(|e| Error::new(e.to_string()))? else { return Err(Error::new("checkout not found")) };
         let ch = match co.channel_id { 2 => "channel-pln", _ => "default-channel" };
         let (ch_id, currency) = rustygod_db::catalog::channel_info(db, &ch).await.map_err(|e| Error::new(e.to_string()))?;
         // Price from channel listings (same as gRPC AddLines).
-        let vids: Vec<i32> = lines.iter().filter_map(|l| l.variant_id.0.parse::<i32>().ok()).collect();
+        let vids: Vec<i32> = lines.iter().filter_map(|l| rustygod_db::catalog::parse_gid(&l.variant_id.0)).collect();
         let pricing = rustygod_db::catalog::checkout_pricing(db, &ch, &vids).await.map_err(|e| Error::new(e.to_string()))?;
         let items: Vec<rustygod_db::checkout_store::NewLine> = lines.into_iter().map(|l| {
-            let vid: i32 = l.variant_id.0.parse().unwrap_or(0);
+            let vid: i32 = rustygod_db::catalog::parse_gid(&l.variant_id.0).unwrap_or(0);
             let unit = pricing.get(&vid).map(|(m, _)| m.amount).unwrap_or(rust_decimal::Decimal::ZERO);
             rustygod_db::checkout_store::NewLine { variant_id: vid, quantity: l.quantity, unit_price: unit, price_override: None }
         }).collect();
@@ -113,15 +113,15 @@ impl CheckoutMutation {
     async fn checkout_complete(&self, ctx: &Context<'_>, checkout_id: ID) -> Result<ID> {
         let g = ctx.data::<GqlContext>()?;
         let db = g.db()?;
-        let token: Uuid = checkout_id.0.parse().map_err(|_| Error::new("checkoutId must be UUID"))?;
+        let token: Uuid = crate::common::parse_uuid_gid(&checkout_id.0).ok_or_else(|| Error::new("checkoutId must be UUID"))?;
         let out = rustygod_db::complete::complete_checkout(db, token).await.map_err(|e| Error::new(e.to_string()))?;
-        Ok(ID(out.order_id.to_string()))
+        Ok(ID(crate::common::gid("Order", out.order_id)))
     }
 
     async fn checkout_apply_voucher(&self, ctx: &Context<'_>, checkout_id: ID, code: String) -> Result<GqlCheckout> {
         let g = ctx.data::<GqlContext>()?;
         let db = g.db()?;
-        let token: Uuid = checkout_id.0.parse().map_err(|_| Error::new("checkoutId must be UUID"))?;
+        let token: Uuid = crate::common::parse_uuid_gid(&checkout_id.0).ok_or_else(|| Error::new("checkoutId must be UUID"))?;
         let ch = {
             let (co, _) = rustygod_db::checkout_store::load_checkout(db, token).await.map_err(|e| Error::new(e.to_string()))?.ok_or_else(|| Error::new("checkout not found"))?;
             match co.channel_id { 2 => "channel-pln".to_string(), _ => "default-channel".to_string() }
@@ -135,7 +135,7 @@ impl CheckoutMutation {
     async fn refresh_order_promotion(&self, ctx: &Context<'_>, checkout_id: ID) -> Result<String> {
         let g = ctx.data::<GqlContext>()?;
         let db = g.db()?;
-        let token: Uuid = checkout_id.0.parse().map_err(|_| Error::new("checkoutId must be UUID"))?;
+        let token: Uuid = crate::common::parse_uuid_gid(&checkout_id.0).ok_or_else(|| Error::new("checkoutId must be UUID"))?;
         let out = rustygod_db::order_promotions::refresh_order_promotion(db, token).await.map_err(|e| Error::new(e.to_string()))?;
         Ok(match out {
             rustygod_db::order_promotions::RefreshOutcome::Cleared => "none".into(),

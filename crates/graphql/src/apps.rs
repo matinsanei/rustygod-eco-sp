@@ -229,7 +229,7 @@ struct AppRow {
 
 fn to_gql(a: &AppRow) -> gen::App {
     gen::App {
-        id: Some(ID(format!("App:{id}", id = a.id))),
+        id: Some(ID(crate::common::gid("App", a.id))),
         private_metadata: vec![],
         metadata: vec![],
         identifier: Some(a.identifier.clone()),
@@ -336,7 +336,7 @@ async fn load_extensions(
         }
         if let Some(app) = app_map.get(&app_id).cloned() {
             out.push(GqlAppExtension {
-                id: ID(format!("AppExtension:{id}")),
+                id: ID(crate::common::gid("AppExtension", id)),
                 label,
                 identifier,
                 url,

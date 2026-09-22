@@ -663,3 +663,20 @@ pub async fn return_and_refund(
     txn.commit().await?;
     Ok(ReturnRefundView { fulfillment_id, granted_refund_id: grant_id, amount })
 }
+
+/// Resolve the dashboard-chosen warehouse to the variant's stock row in it
+/// (Saleor's `OrderFulfillStockInput.warehouse`). None when the variant has
+/// no stock there — callers fall back to auto-pick, never fail.
+pub async fn stock_for_variant_warehouse(
+    db: &impl sea_orm::ConnectionTrait,
+    variant_id: i32,
+    warehouse_id: Uuid,
+) -> Result<Option<i32>> {
+    use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
+    Ok(warehouse_stock::Entity::find()
+        .filter(warehouse_stock::Column::ProductVariantId.eq(variant_id))
+        .filter(warehouse_stock::Column::WarehouseId.eq(warehouse_id))
+        .one(db)
+        .await?
+        .map(|s| s.id))
+}

@@ -128,3 +128,33 @@ pub fn decode_cursor(s: &str) -> Option<usize> {
     let t = String::from_utf8(b).ok()?;
     t.strip_prefix("cursor:")?.parse().ok()
 }
+
+/// Saleor global ID: base64(`Type:pk`), e.g. `UHJvZHVjdDoyOA==`.
+/// We mint these on every object id so dashboard round-trips carry their
+/// type (required for `updateMetadata` and all ID-taking writes).
+pub fn gid(typename: &str, pk: impl std::fmt::Display) -> String {
+    use base64::Engine;
+    base64::engine::general_purpose::STANDARD.encode(format!("{typename}:{pk}"))
+}
+
+/// Split a global ID into `(Type, raw_pk)`; plain ints/UUIDs return None.
+pub fn split_gid(s: &str) -> Option<(String, String)> {
+    use base64::Engine;
+    let b = base64::engine::general_purpose::STANDARD.decode(s.trim()).ok()?;
+    let t = String::from_utf8(b).ok()?;
+    let (ty, pk) = t.split_once(':')?;
+    if ty.is_empty() || pk.is_empty() || ty.contains(|c: char| !c.is_alphanumeric()) {
+        return None;
+    }
+    Some((ty.to_string(), pk.to_string()))
+}
+
+/// Parse a UUID-typed ID: plain UUID or global (`T3JkZXI6...`).
+pub fn parse_uuid_gid(s: &str) -> Option<uuid::Uuid> {
+    let s = s.trim();
+    if let Ok(u) = s.parse::<uuid::Uuid>() {
+        return Some(u);
+    }
+    let (_, pk) = split_gid(s)?;
+    pk.parse::<uuid::Uuid>().ok()
+}

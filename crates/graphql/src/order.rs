@@ -140,7 +140,7 @@ async fn to_gen_order(
                     .into_tuple().one(db).await.unwrap_or(None);
                 if let Some((pid, pname, pslug, pseo_t, pseo_d)) = prow {
                     product_stub = Some(Box::new(gen::Product {
-                        id: Some(ID(pid.to_string())),
+                        id: Some(ID(crate::common::gid("Product", pid))),
                         private_metadata: vec![],
                         metadata: vec![],
                         seo_title: pseo_t,
@@ -167,7 +167,7 @@ async fn to_gen_order(
             }
         }
         lines.push(gen::OrderLine {
-            id: Some(ID(l.id.to_string())),
+            id: Some(ID(crate::common::gid("OrderLine", l.id))),
             private_metadata: vec![],
             metadata: vec![],
             product_name: product_stub.as_ref().and_then(|p| p.name.clone()),
@@ -188,7 +188,7 @@ async fn to_gen_order(
             is_price_overridden: None,
             price_override_reason: None,
             variant: l.variant_id.map(|vid| gen::ProductVariant {
-                id: Some(ID(vid.to_string())),
+                id: Some(ID(crate::common::gid("ProductVariant", vid))),
                 private_metadata: vec![],
                 metadata: vec![],
                 name: variant_name,
@@ -212,7 +212,7 @@ async fn to_gen_order(
         });
     }
     gen::Order {
-        id: Some(ID(h.id.to_string())),
+        id: Some(ID(crate::common::gid("Order", &h.id))),
         private_metadata: vec![],
         metadata: vec![],
         created: Some(h.created_at.into()),
@@ -486,14 +486,30 @@ impl OrderMutation {
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
         authorize(ctx, crate::context::MANAGE_ORDERS).await?;
         let oid = parse_id(&order.map(|o| o.0).unwrap_or_default());
+        use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QuerySelect};
         let mut items: Vec<rustygod_db::fulfillment::FulfillItem> = vec![];
         for l in input.lines {
             let lid = parse_id(&l.order_line_id.map(|i| i.0).unwrap_or_default());
+            // variant of this line (for warehouse -> stock resolution).
+            let line_variant: Option<i32> = rustygod_db::entities::order_orderline::Entity::find()
+                .select_only().column(rustygod_db::entities::order_orderline::Column::VariantId)
+                .filter(rustygod_db::entities::order_orderline::Column::Id.eq(lid))
+                .into_tuple::<Option<i32>>().one(db).await.map_err(|e| Error::new(e.to_string()))?.flatten();
             for s in l.stocks {
+                // Dashboard sends the WAREHOUSE id (uuid global); resolve to
+                // the variant's stock row in that warehouse (was silently
+                // dropped by an i32 parse — wrong-warehouse fulfillments).
+                let stock_id: Option<i32> = match crate::common::parse_uuid_gid(&s.warehouse.0) {
+                    Some(wid) => match line_variant {
+                        Some(vid) => rustygod_db::fulfillment::stock_for_variant_warehouse(db, vid, wid).await.map_err(|e| Error::new(e.to_string()))?,
+                        None => None,
+                    },
+                    None => None,
+                };
                 items.push(rustygod_db::fulfillment::FulfillItem {
                     order_line_id: lid,
                     quantity: s.quantity,
-                    stock_id: s.warehouse.0.parse::<i32>().ok(),
+                    stock_id,
                 });
             }
         }
@@ -512,7 +528,7 @@ impl OrderMutation {
         let oid = parse_id(&order_id.0);
         let items: Vec<rustygod_db::fulfillment::FulfillItem> = lines.into_iter().map(|l| {
             let lid = parse_id(&l.order_line_id.0);
-            let sid: Option<i32> = l.stock_id.and_then(|s| s.0.parse::<i32>().ok());
+            let sid: Option<i32> = l.stock_id.and_then(|s| rustygod_db::catalog::parse_gid(&s.0));
             rustygod_db::fulfillment::FulfillItem { order_line_id: lid, quantity: l.quantity, stock_id: sid }
         }).collect();
         let out = rustygod_db::fulfillment::return_and_refund(db, oid, &items, &reason, restock.unwrap_or(true), None).await.map_err(|e| Error::new(e.to_string()))?;
