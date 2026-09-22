@@ -333,3 +333,24 @@ harness — new gaps appear as harness failures by construction.
   `language { code language }` served from Saleor's frozen
   `core/languages.py` map (779 entries).
 - Verified live: DE upsert on product 137 → read-back + list + details.
+
+## 12. Product assembly + promotion details (2026-09-22)
+
+- Populatedb rows were never the problem — our assembly returned `vec![]`
+  for media/listings/stocks/collections/attributes. `assemble_list_products`
+  now batches everything: product extras (description/seo/rating/tax),
+  media, product+variant channel listings (with price-range pricing),
+  stocks+warehouses, variant media m2m, collections, product+variant
+  attributes. Shared `load_variant_batches` backs the variants grid
+  (`product.productVariants` REAL_METHODS, search+paginate),
+  `media_by_id`, and variant `attributes(variantSelection:)`.
+- `ProductMedia.url` resolves real `/media/` paths (REAL_METHODS).
+- Global-ID migration regressions fixed: `Product.thumbnail` (was
+  `parse::<i32>`, always None → no images anywhere) and
+  `OrderLine.thumbnail` (bare-Uuid parse) now use `parse_gid` /
+  `parse_uuid_gid`.
+- `promotion(id:)` hand root (dashboard routes promotion rows to
+  `/discounts/sales/:id` but fires `PromotionDetails`): full assembly
+  with rules (channels, gifts, predicates, rewards).
+- Browser-verified: promotion details renders with data (rules, 20% off),
+  product 137 shows real `/media/` images.
