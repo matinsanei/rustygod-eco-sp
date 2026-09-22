@@ -6,9 +6,9 @@ PostgreSQL (`populatedb` data, 52 orders).
 
 ## Setup
 
-- **Binary:** release profile, ~95MB stripped (Sep 2026; the old 20MB figure
-  predates the wasmtime/aws-lc/codegen deps). `[profile.release]` now sets
-  `strip + lto + codegen-units = 1` — rebuild in background, it takes a while.
+- **Binary:** release profile, **60.5MB** stripped with `strip + lto + codegen-units = 1`
+  (Sep 2026; the old 20MB figure predates wasmtime/aws-lc/codegen deps;
+  the 119MB figure predates LTO — rebuild takes a while).
 - **DB:** PostgreSQL on `127.0.0.1:5434`, Saleor `populatedb` dataset
 - **Machine:** dev laptop, 15GB RAM — server, k6 and Postgres share it
   (single-machine numbers; a split setup would read better)
@@ -33,8 +33,10 @@ load  (200 VU, 30s):  93,886 iters · 100% checks ·
                       grpc p50 ~48ms · p95 ~99ms · 3.1k iters/s
 spike (1000 VU, 40s): 115,808 checks · 100% pass · 0 failed ·
                       grpc p50 ~239ms · server RSS 109MB
-docker (10 VU smoke): p50 2.8ms · p95 8.7ms · 100% (23.6MB image)
 ```
+
+*(docker smoke was measured against an earlier binary before wasmtime/codegen deps —
+image size now tracks the binary; see §Docker below)*
 
 ### Re-run 2026-09-22 (LTO release, 60.5MB binary, same laptop + DB)
 
@@ -106,7 +108,9 @@ Debug-build reference (same machine, pre-fix): ~400 rps @ p50 ~150ms.
 
 ## Docker (Phase 2)
 
-- `docker build -t rustygod-saleor .` → **23.6MB** (busybox:glibc + stripped binary)
+- `docker build -t rustygod-saleor .` → **busybox:glibc + stripped binary**
+  (was 23.6MB before wasmtime/aws-lc/codegen deps; current image tracks the
+  60.5MB LTO binary — rebuild with `docker build` to get the current figure).
 - `docker compose up --build` → Postgres + server (:50051 gRPC, :9000 metrics)
 - The DB starts empty; restore Saleor data with `./scripts/db.sh restore <dump>`
   or run `migrate` + `populatedb` from saleor-core.
