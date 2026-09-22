@@ -28535,34 +28535,6 @@ impl GenMutation {
 
     }
 
-    #[graphql(name = "deleteMetadata")]
-    async fn delete_metadata(&self, #[graphql(name = "id")] _arg_id: ID, #[graphql(name = "keys")] _arg_keys: Vec<String>) -> Option<DeleteMetadata> {
-
-        Some(DeleteMetadata { errors: vec![], item: None })
-
-    }
-
-    #[graphql(name = "deletePrivateMetadata")]
-    async fn delete_private_metadata(&self, #[graphql(name = "id")] _arg_id: ID, #[graphql(name = "keys")] _arg_keys: Vec<String>) -> Option<DeletePrivateMetadata> {
-
-        Some(DeletePrivateMetadata { errors: vec![], item: None })
-
-    }
-
-    #[graphql(name = "updateMetadata")]
-    async fn update_metadata(&self, #[graphql(name = "id")] _arg_id: ID, #[graphql(name = "input")] _arg_input: Vec<crate::common::MetadataInput>) -> Option<UpdateMetadata> {
-
-        Some(UpdateMetadata { errors: vec![], item: None })
-
-    }
-
-    #[graphql(name = "updatePrivateMetadata")]
-    async fn update_private_metadata(&self, #[graphql(name = "id")] _arg_id: ID, #[graphql(name = "input")] _arg_input: Vec<crate::common::MetadataInput>) -> Option<UpdatePrivateMetadata> {
-
-        Some(UpdatePrivateMetadata { errors: vec![], item: None })
-
-    }
-
     #[graphql(name = "menuCreate")]
     async fn menu_create(&self, #[graphql(name = "input")] _arg_input: MenuCreateInput) -> Option<MenuCreate> {
 
