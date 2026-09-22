@@ -21713,9 +21713,54 @@ pub struct OrderLine {
 impl OrderLine {
 
     #[graphql(name = "thumbnail")]
-    async fn thumbnail(&self, #[graphql(name = "size")] _arg_size: Option<i32>, #[graphql(name = "format")] _arg_format: Option<ThumbnailFormatEnum>) -> Option<crate::account::GqlImage> {
+    async fn thumbnail(&self, ctx: &Context<'_>, #[graphql(name = "size")] _arg_size: Option<i32>, #[graphql(name = "format")] _arg_format: Option<ThumbnailFormatEnum>) -> Option<crate::account::GqlImage> {
 
-        None
+        {
+        use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QueryOrder, QuerySelect};
+        let db = match ctx.data_opt::<crate::context::GqlContext>().and_then(|g| g.db().ok()) {
+            Some(d) => d.clone(),
+            None => return None,
+        };
+        let line_id = self.id.as_ref().map(|i| i.0.clone()).unwrap_or_default();
+        let variant_id: Option<i32> = match line_id.parse::<uuid::Uuid>() {
+            Ok(u) => rustygod_db::entities::order_orderline::Entity::find()
+                .select_only()
+                .column(rustygod_db::entities::order_orderline::Column::VariantId)
+                .filter(rustygod_db::entities::order_orderline::Column::Id.eq(u))
+                .into_tuple::<Option<i32>>()
+                .one(&db)
+                .await
+                .unwrap_or(None)
+                .flatten(),
+            Err(_) => None,
+        };
+        let pid: i32 = match variant_id {
+            Some(vid) => rustygod_db::entities::product_productvariant::Entity::find_by_id(vid)
+                .one(&db)
+                .await
+                .unwrap_or(None)
+                .map(|v| v.product_id)
+                .unwrap_or(-1),
+            None => -1,
+        };
+        let img: Option<(String, String)> = rustygod_db::entities::product_productmedia::Entity::find()
+            .select_only()
+            .column(rustygod_db::entities::product_productmedia::Column::Image)
+            .column(rustygod_db::entities::product_productmedia::Column::Alt)
+            .filter(rustygod_db::entities::product_productmedia::Column::ProductId.eq(pid))
+            .order_by_asc(rustygod_db::entities::product_productmedia::Column::SortOrder)
+            .into_tuple()
+            .all(&db)
+            .await
+            .unwrap_or_default()
+            .into_iter()
+            .filter_map(|(p, alt): (Option<String>, String)| p.map(|path| (path, alt)))
+            .next();
+        img.map(|(path, alt)| crate::account::GqlImage {
+            url: format!("{}/{path}", std::env::var("SALEOR_MEDIA_URL").unwrap_or_else(|_| "/media".into())),
+            alt: Some(alt),
+        })
+    }
 
     }
 
@@ -22754,9 +22799,33 @@ pub struct Product {
 impl Product {
 
     #[graphql(name = "thumbnail")]
-    async fn thumbnail(&self, #[graphql(name = "size")] _arg_size: Option<i32>, #[graphql(name = "format")] _arg_format: Option<ThumbnailFormatEnum>) -> Option<crate::account::GqlImage> {
+    async fn thumbnail(&self, ctx: &Context<'_>, #[graphql(name = "size")] _arg_size: Option<i32>, #[graphql(name = "format")] _arg_format: Option<ThumbnailFormatEnum>) -> Option<crate::account::GqlImage> {
 
-        None
+        {
+        use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QueryOrder, QuerySelect};
+        let pid: i32 = self.id.as_ref().and_then(|i| i.0.parse::<i32>().ok()).unwrap_or(-1);
+        let db = match ctx.data_opt::<crate::context::GqlContext>().and_then(|g| g.db().ok()) {
+            Some(d) => d.clone(),
+            None => return None,
+        };
+        let img: Option<(String, String)> = rustygod_db::entities::product_productmedia::Entity::find()
+            .select_only()
+            .column(rustygod_db::entities::product_productmedia::Column::Image)
+            .column(rustygod_db::entities::product_productmedia::Column::Alt)
+            .filter(rustygod_db::entities::product_productmedia::Column::ProductId.eq(pid))
+            .order_by_asc(rustygod_db::entities::product_productmedia::Column::SortOrder)
+            .into_tuple()
+            .all(&db)
+            .await
+            .unwrap_or_default()
+            .into_iter()
+            .filter_map(|(p, alt): (Option<String>, String)| p.map(|path| (path, alt)))
+            .next();
+        img.map(|(path, alt)| crate::account::GqlImage {
+            url: format!("{}/{path}", std::env::var("SALEOR_MEDIA_URL").unwrap_or_else(|_| "/media".into())),
+            alt: Some(alt),
+        })
+    }
 
     }
 
@@ -27351,31 +27420,10 @@ impl GenQuery {
 
     }
 
-    #[graphql(name = "category")]
-    async fn category(&self, #[graphql(name = "id")] _arg_id: Option<ID>, #[graphql(name = "slug")] _arg_slug: Option<String>, #[graphql(name = "slugLanguageCode")] _arg_slug_language_code: Option<LanguageCodeEnum>) -> Option<Category> {
-
-        None
-
-    }
-
-    #[graphql(name = "collection")]
-    async fn collection(&self, #[graphql(name = "id")] _arg_id: Option<ID>, #[graphql(name = "slug")] _arg_slug: Option<String>, #[graphql(name = "slugLanguageCode")] _arg_slug_language_code: Option<LanguageCodeEnum>, #[graphql(name = "channel")] _arg_channel: Option<String>) -> Option<Collection> {
-
-        None
-
-    }
-
     #[graphql(name = "collections")]
     async fn collections(&self, #[graphql(name = "filter")] _arg_filter: Option<CollectionFilterInput>, #[graphql(name = "where")] _arg_where: Option<CollectionWhereInput>, #[graphql(name = "sortBy")] _arg_sort_by: Option<CollectionSortingInput>, #[graphql(name = "channel")] _arg_channel: Option<String>, #[graphql(name = "before")] _arg_before: Option<String>, #[graphql(name = "after")] _arg_after: Option<String>, #[graphql(name = "first")] _arg_first: Option<i32>, #[graphql(name = "last")] _arg_last: Option<i32>) -> Option<CollectionCountableConnection> {
 
         Some(CollectionCountableConnection { total_count: None, edges: vec![], page_info: Some(PageInfo { has_next_page: false, has_previous_page: false, start_cursor: None, end_cursor: None }) })
-
-    }
-
-    #[graphql(name = "product")]
-    async fn product(&self, #[graphql(name = "id")] _arg_id: Option<ID>, #[graphql(name = "slug")] _arg_slug: Option<String>, #[graphql(name = "slugLanguageCode")] _arg_slug_language_code: Option<LanguageCodeEnum>, #[graphql(name = "externalReference")] _arg_external_reference: Option<String>, #[graphql(name = "channel")] _arg_channel: Option<String>) -> Option<Product> {
-
-        None
 
     }
 
@@ -27607,13 +27655,6 @@ impl GenQuery {
     async fn staff_users(&self, #[graphql(name = "filter")] _arg_filter: Option<StaffUserInput>, #[graphql(name = "sortBy")] _arg_sort_by: Option<UserSortingInput>, #[graphql(name = "before")] _arg_before: Option<String>, #[graphql(name = "after")] _arg_after: Option<String>, #[graphql(name = "first")] _arg_first: Option<i32>, #[graphql(name = "last")] _arg_last: Option<i32>) -> Option<UserCountableConnection> {
 
         Some(UserCountableConnection { total_count: None, edges: vec![], page_info: Some(PageInfo { has_next_page: false, has_previous_page: false, start_cursor: None, end_cursor: None }) })
-
-    }
-
-    #[graphql(name = "user")]
-    async fn user(&self, #[graphql(name = "id")] _arg_id: Option<ID>, #[graphql(name = "email")] _arg_email: Option<String>, #[graphql(name = "externalReference")] _arg_external_reference: Option<String>) -> Option<User> {
-
-        None
 
     }
 

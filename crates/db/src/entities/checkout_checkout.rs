@@ -69,8 +69,6 @@ pub struct Model {
     pub last_automatic_completion_attempt: Option<DateTimeWithTimeZone>,
     pub delivery_methods_stale_at: Option<DateTimeWithTimeZone>,
     pub assigned_delivery_id: Option<Uuid>,
-    #[sea_orm(column_type = "custom(\"tsvector\")", nullable)]
-    pub search_vector: Option<String>,
     pub search_index_dirty: bool,
 }
 

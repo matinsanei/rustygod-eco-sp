@@ -269,6 +269,27 @@ Modified: `catalog.rs` (gen Product/Variant + `ProductCreate` payload),
   now lives in-repo (`scripts/`) with `dump_our_fields.py`; codegen
   PROBLEMS back to 0.
 
+## 9. Detail roots + media (2026-09-22)
+
+- Hand roots (gen stubs dropped via `ours`): `product(id,slug,channel)`,
+  `category(id,slug)`, `collection(id,slug)`, `user(id,email,
+  externalReference)` — detail pages open with real rows.
+- `Promotion.type` uppercased (DB stores lowercase; dashboard switches on
+  CATALOGUE/ORDER and throws otherwise — was the discounts crash).
+- Thumbnails real: `REAL_METHODS` codegen entries for `Product.thumbnail`
+  + `OrderLine.thumbnail` (first product image → `/media/<path>`);
+  `/media/` served by Axum from `SALEOR_MEDIA_DIR`
+  (default `../saleor/saleor-core/media`); `SALEOR_MEDIA_URL` prefix.
+- tsvector mistype killed at the root: removed `search_vector` from all 6
+  entity Models (account_user, order_order, page_page, giftcard_giftcard,
+  product_product, checkout_checkout) — full-model selects can no longer
+  crash on it; nothing read the column (WHERE-only raw SQL unaffected).
+- ID format decision: plain-int IDs stay (dashboard treats IDs opaque and
+  round-trips via `parse_gid`, which accepts Saleor global IDs too).
+  Migrating all output to base64 global IDs is mechanical but touches
+  ~25 resolvers + tests for zero functional gain today — deferred,
+  overrulable.
+
 ## 7. Regeneration contract (or gen.rs rots)
 
 `gen.rs` is **never hand-edited**. All shape fixes go into

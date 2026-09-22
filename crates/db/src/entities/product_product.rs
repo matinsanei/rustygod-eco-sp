@@ -32,8 +32,6 @@ pub struct Model {
     #[sea_orm(column_type = "Text")]
     pub search_document: String,
     pub created_at: DateTimeWithTimeZone,
-    #[sea_orm(column_type = "custom(\"tsvector\")", nullable)]
-    pub search_vector: Option<String>,
     pub search_index_dirty: bool,
     pub tax_class_id: Option<i32>,
     #[sea_orm(unique)]

@@ -61,8 +61,6 @@ pub struct Model {
     pub total_authorized_amount: Decimal,
     pub authorize_status: String,
     pub charge_status: String,
-    #[sea_orm(column_type = "custom(\"tsvector\")", nullable)]
-    pub search_vector: Option<String>,
     pub should_refresh_prices: bool,
     pub tax_exemption: bool,
     #[sea_orm(column_type = "Decimal(Some((20, 3)))")]

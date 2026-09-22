@@ -186,6 +186,111 @@ impl CatalogQuery {
         }
         let all = rustygod_db::catalog::list_products_filtered(db, &ch, &f, 200).await.map_err(|e| Error::new(e.to_string()))?;
         let total = all.len() as i32;
+        let assembled = assemble_list_products(db, all).await?;
+        let edges = assembled.into_iter().skip(off).take(lim).enumerate().map(|(i, node)| GqlProductEdge { node, cursor: encode_cursor(off + i) }).collect();
+        Ok(GqlProductConnection { total_count: Some(total), edges, page_info: crate::common::PageInfo { has_next_page: off + lim < total as usize, has_previous_page: off > 0, start_cursor: None, end_cursor: None } })
+    }
+
+    /// Saleor `product(id, slug)` — single product with the same assembly as
+    /// the list (dashboard details page).
+    async fn product(
+        &self, ctx: &Context<'_>,
+        id: Option<ID>, slug: Option<String>, channel: Option<String>,
+    ) -> Result<Option<gen::Product>> {
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let ch = channel.unwrap_or_else(|| "default-channel".into());
+        let mut f = rustygod_db::catalog::ProductListFilter::default();
+        if let Some(i) = id {
+            if let Some(n) = rustygod_db::catalog::parse_gid(&i.0) { f.ids.push(n); }
+        }
+        if let Some(s) = slug { f.slug_eq = Some(s); }
+        if f.ids.is_empty() && f.slug_eq.is_none() { return Ok(None); }
+        let items = rustygod_db::catalog::list_products_filtered(db, &ch, &f, 2).await.map_err(|e| Error::new(e.to_string()))?;
+        let out = assemble_list_products(db, items).await?;
+        Ok(out.into_iter().next())
+    }
+
+    /// Saleor `category(id, slug)`.
+    async fn category(
+        &self, ctx: &Context<'_>,
+        id: Option<ID>, slug: Option<String>,
+    ) -> Result<Option<gen::Category>> {
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QuerySelect};
+        use rustygod_db::entities::product_category::{Column as CatCol, Entity as Cat};
+        let row: Option<(i32, String, String, Option<String>, Option<String>, i32)> = if let Some(i) = id {
+            match rustygod_db::catalog::parse_gid(&i.0) {
+                Some(n) => Cat::find_by_id(n).select_only()
+                    .column(CatCol::Id).column(CatCol::Name).column(CatCol::Slug)
+                    .column(CatCol::SeoTitle).column(CatCol::SeoDescription).column(CatCol::Level)
+                    .into_tuple().one(db).await.map_err(|e| Error::new(e.to_string()))?,
+                None => None,
+            }
+        } else if let Some(s) = slug {
+            Cat::find().select_only()
+                .column(CatCol::Id).column(CatCol::Name).column(CatCol::Slug)
+                .column(CatCol::SeoTitle).column(CatCol::SeoDescription).column(CatCol::Level)
+                .filter(CatCol::Slug.eq(s))
+                .into_tuple().one(db).await.map_err(|e| Error::new(e.to_string()))?
+        } else { None };
+        Ok(row.map(|(cid, name, cslug, seo_t, seo_d, level)| gen::Category {
+            id: Some(ID(cid.to_string())),
+            private_metadata: vec![],
+            metadata: vec![],
+            seo_title: seo_t,
+            seo_description: seo_d,
+            name: Some(name),
+            description: None,
+            slug: Some(cslug),
+            parent: None,
+            level: Some(level),
+            updated_at: None,
+        }))
+    }
+
+    /// Saleor `collection(id, slug)`.
+    async fn collection(
+        &self, ctx: &Context<'_>,
+        id: Option<ID>, slug: Option<String>,
+    ) -> Result<Option<gen::Collection>> {
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QuerySelect};
+        use rustygod_db::entities::product_collection::{Column as ColCol, Entity as Col};
+        let row: Option<(i32, String, String, Option<String>, Option<String>)> = if let Some(i) = id {
+            match rustygod_db::catalog::parse_gid(&i.0) {
+                Some(n) => Col::find_by_id(n).select_only()
+                    .column(ColCol::Id).column(ColCol::Name).column(ColCol::Slug)
+                    .column(ColCol::SeoTitle).column(ColCol::SeoDescription)
+                    .into_tuple().one(db).await.map_err(|e| Error::new(e.to_string()))?,
+                None => None,
+            }
+        } else if let Some(s) = slug {
+            Col::find().select_only()
+                .column(ColCol::Id).column(ColCol::Name).column(ColCol::Slug)
+                .column(ColCol::SeoTitle).column(ColCol::SeoDescription)
+                .filter(ColCol::Slug.eq(s))
+                .into_tuple().one(db).await.map_err(|e| Error::new(e.to_string()))?
+        } else { None };
+        Ok(row.map(|(cid, name, cslug, seo_t, seo_d)| gen::Collection {
+            id: Some(ID(cid.to_string())),
+            private_metadata: vec![],
+            metadata: vec![],
+            seo_title: seo_t,
+            seo_description: seo_d,
+            name: Some(name),
+            description: None,
+            slug: Some(cslug),
+            channel_listings: vec![],
+        }))
+    }
+}
+
+/// Shared list assembly: type/category enrichment (2 batched queries) +
+/// row mapping. Used by `products` and `product`.
+async fn assemble_list_products(
+    db: &sea_orm::DatabaseConnection,
+    all: Vec<rustygod_core::product::Product>,
+) -> Result<Vec<gen::Product>> {
         // Batch productType + category (2 queries; dashboard list reads
         // `productType.name/hasVariants` and category in every row).
         use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QuerySelect};
@@ -217,7 +322,7 @@ impl CatalogQuery {
                 .all(db).await.map_err(|e| Error::new(e.to_string()))?;
             for (id, name, slug) in rows { cats.insert(id, (name, slug)); }
         }
-        let page: Vec<gen::Product> = all.into_iter().skip(off).take(lim).map(|p| gen::Product {
+        let page: Vec<gen::Product> = all.into_iter().map(|p| gen::Product {
             id: Some(ID(p.id)),
             name: Some(p.name),
             slug: Some(p.slug),
@@ -281,9 +386,7 @@ impl CatalogQuery {
             is_available_for_purchase: None,
             tax_class: None,
         }).collect();
-        let edges = page.into_iter().enumerate().map(|(i, node)| GqlProductEdge { node, cursor: encode_cursor(off + i) }).collect();
-        Ok(GqlProductConnection { total_count: Some(total), edges, page_info: crate::common::PageInfo { has_next_page: off + lim < total as usize, has_previous_page: off > 0, start_cursor: None, end_cursor: None } })
-    }
+        Ok(page)
 }
 
 /// Dashboard `ProductCreate` payload shape (`product { id }`, `errors`).
@@ -380,7 +483,6 @@ async fn create_product_row(
         description_plaintext: Set(String::new()),
         rating: Set(None),
         search_document: Set(String::new()),
-        search_vector: Set(None),
         search_index_dirty: Set(true),
         ..Default::default()
     };

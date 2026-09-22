@@ -194,6 +194,34 @@ impl AccountQuery {
             total_count: Some(total),
         })
     }
+
+    /// Saleor `user(id, email, externalReference)` (dashboard customer details).
+    async fn user(
+        &self, ctx: &Context<'_>,
+        id: Option<ID>, email: Option<String>, external_reference: Option<String>,
+    ) -> Result<Option<gen::User>> {
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        use rustygod_db::entities::account_user::{Column as UCol, Entity as UEnt};
+        use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QuerySelect};
+        let uid: Option<i32> = if let Some(i) = id {
+            rustygod_db::catalog::parse_gid(&i.0)
+        } else if let Some(e) = email {
+            UEnt::find().select_only().column(UCol::Id)
+                .filter(UCol::Email.eq(e))
+                .into_tuple::<i32>().one(db).await.map_err(|e| Error::new(e.to_string()))?
+        } else if let Some(x) = external_reference {
+            UEnt::find().select_only().column(UCol::Id)
+                .filter(UCol::ExternalReference.eq(x))
+                .into_tuple::<i32>().one(db).await.map_err(|e| Error::new(e.to_string()))?
+        } else { None };
+        match uid {
+            None => Ok(None),
+            Some(uid) => {
+                let claims_id = uid.to_string();
+                load_gql_user(db, uid, &claims_id).await.map(Some).map_err(|e| Error::new(e.to_string()))
+            }
+        }
+    }
 }
 
 #[derive(SimpleObject, Clone)]

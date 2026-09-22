@@ -39,8 +39,6 @@ pub struct Model {
     pub is_confirmed: bool,
     pub last_confirm_email_request: Option<DateTimeWithTimeZone>,
     pub number_of_orders: i32,
-    #[sea_orm(column_type = "custom(\"tsvector\")", nullable)]
-    pub search_vector: Option<String>,
     pub customer_type_id: Option<i32>,
 }
 

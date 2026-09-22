@@ -23,8 +23,6 @@ pub struct Model {
     pub private_metadata: Json,
     pub page_type_id: i32,
     pub search_index_dirty: bool,
-    #[sea_orm(column_type = "custom(\"tsvector\")", nullable)]
-    pub search_vector: Option<String>,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]

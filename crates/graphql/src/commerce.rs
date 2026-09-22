@@ -379,7 +379,9 @@ impl CommerceQuery {
             private_metadata: vec![],
             metadata: vec![],
             name: Some(p.name),
-            r#type: Some(p.promotion_type),
+            // Dashboard switches on PromotionTypeEnum (CATALOGUE/ORDER) and
+            // throws on anything else — DB stores lowercase.
+            r#type: Some(p.promotion_type.to_uppercase()),
             description: None,
             start_date: None,
             end_date: None,

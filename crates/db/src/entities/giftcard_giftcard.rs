@@ -30,8 +30,6 @@ pub struct Model {
     pub used_by_email: Option<String>,
     pub fulfillment_line_id: Option<i32>,
     pub search_index_dirty: bool,
-    #[sea_orm(column_type = "custom(\"tsvector\")", nullable)]
-    pub search_vector: Option<String>,
     pub assigned_to_id: Option<i32>,
     pub assigned_to_email: Option<String>,
 }

@@ -33,7 +33,7 @@ sea-orm = { version = "~1.1", features = [
     "macros",
 ] }
 tokio-stream = "0.1"
-tower-http = { version = "0.6", features = ["trace", "cors"] }
+tower-http = { version = "0.6", features = ["trace", "cors", "fs"] }
 metrics = "0.24"
 metrics-exporter-prometheus = "0.17"
 http = "1"

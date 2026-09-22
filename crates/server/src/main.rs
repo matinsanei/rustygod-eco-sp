@@ -166,6 +166,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         Router::new()
             .route("/graphql", get(graphiql).post(handler))
+            // Product/collection media files (populatedb writes them under
+            // saleor-core/media; Saleor serves /media/ itself in dev).
+            // SALEOR_MEDIA_DIR overrides; SALEOR_MEDIA_URL must match it.
+            .nest_service(
+                "/media",
+                tower_http::services::ServeDir::new(
+                    std::env::var("SALEOR_MEDIA_DIR")
+                        .unwrap_or_else(|_| "../saleor/saleor-core/media".into()),
+                ),
+            )
             .layer(
                 CorsLayer::new()
                     .allow_origin(AllowOrigin::mirror_request())
