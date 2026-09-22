@@ -168,12 +168,23 @@ fn beat_entries() -> Vec<BeatEntry> {
             }
         })
     }
+    fn sweep_expired_checkouts(
+        db: &DatabaseConnection,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send + '_>> {
+        Box::pin(async move {
+            match rustygod_db::checkout_store::sweep_expired_checkouts(db).await {
+                Ok(0) => {}
+                Ok(n) => tracing::info!("beat[delete-expired-checkouts]: dropped {n}"),
+                Err(e) => tracing::warn!("beat[delete-expired-checkouts] failed: {e}"),
+            }
+        })
+    }
     vec![
         BeatEntry { name: "delete-expired-reservations", saleor_task: "saleor.warehouse.tasks.delete_expired_reservations_task", interval_secs: 60, job: Real(sweep_expired_reservations) },
         // --- deferred: schedule present, logic lands with its domain port ---
         BeatEntry { name: "delete-empty-allocations", saleor_task: "saleor.warehouse.tasks.delete_empty_allocations_task", interval_secs: 24 * 3600, job: Deferred },
         BeatEntry { name: "deactivate-preorder-for-variants", saleor_task: "saleor.product.tasks.deactivate_preorder_for_variants_task", interval_secs: 3600, job: Deferred },
-        BeatEntry { name: "delete-expired-checkouts", saleor_task: "saleor.checkout.tasks.delete_expired_checkouts", interval_secs: 24 * 3600, job: Deferred },
+        BeatEntry { name: "delete-expired-checkouts", saleor_task: "saleor.checkout.tasks.delete_expired_checkouts", interval_secs: 24 * 3600, job: Real(sweep_expired_checkouts) },
         BeatEntry { name: "delete_expired_orders", saleor_task: "saleor.order.tasks.delete_expired_orders_task", interval_secs: 24 * 3600, job: Deferred },
         BeatEntry { name: "delete-outdated-event-data", saleor_task: "saleor.core.tasks.delete_event_payloads_task", interval_secs: 24 * 3600, job: Deferred },
         BeatEntry { name: "deactivate-expired-gift-cards", saleor_task: "saleor.giftcard.tasks.deactivate_expired_cards_task", interval_secs: 24 * 3600, job: Deferred },

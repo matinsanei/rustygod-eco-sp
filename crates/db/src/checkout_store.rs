@@ -22,8 +22,9 @@ use chrono::Utc;
 use rust_decimal::Decimal;
 use rustygod_core::{checkout::Checkout, money::Money};
 use sea_orm::{
-    ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, QueryOrder,
-    QuerySelect, Set,
+    ActiveModelTrait, ColumnTrait, ConnectionTrait, DatabaseConnection, EntityTrait, QueryFilter, QueryOrder,
+    QuerySelect, Set, TransactionTrait,
+    sea_query::LockType,
 };
 use serde_json::json;
 use uuid::Uuid;
@@ -318,6 +319,20 @@ pub async fn delete_checkout_row(
     token: Uuid,
 ) -> Result<()> {
     use crate::entities::{discount_checkoutdiscount, discount_checkoutlinediscount};
+    // Saleor `SET_NULL` on TransactionItem.checkout / Payment.checkout: the
+    // money trail survives its checkout, detached (Django collector NULLs
+    // instead of cascading).
+    use crate::entities::{payment_payment, payment_transactionitem};
+    payment_transactionitem::Entity::update_many()
+        .col_expr(payment_transactionitem::Column::CheckoutId, sea_orm::sea_query::Expr::value(None::<Uuid>))
+        .filter(payment_transactionitem::Column::CheckoutId.eq(token))
+        .exec(db)
+        .await?;
+    payment_payment::Entity::update_many()
+        .col_expr(payment_payment::Column::CheckoutId, sea_orm::sea_query::Expr::value(None::<Uuid>))
+        .filter(payment_payment::Column::CheckoutId.eq(token))
+        .exec(db)
+        .await?;
     let line_ids: Vec<Uuid> = checkout_checkoutline::Entity::find()
         .select_only()
         .column(checkout_checkoutline::Column::Id)
@@ -351,6 +366,70 @@ pub async fn delete_checkout_row(
     Ok(())
 }
 
+/// Delete expired checkouts — Saleor `delete_expired_checkouts` parity (E10).
+/// Inactivity is `last_change`-based with Saleor's three buckets:
+/// anonymous (no email AND no user) after 30d, user checkouts after 90d,
+/// empty (no lines) checkouts after 6h — all configurable via
+/// `RUSTYGOD_{ANONYMOUS,USER}_CHECKOUT_DAYS` / `RUSTYGOD_EMPTY_CHECKOUT_HOURS`
+/// (Saleor reads the same from Django settings env). Checkouts holding
+/// TransactionItem money (authorized/pending/charged/...) are never touched.
+/// Deletes reuse `delete_checkout_row` (discounts + reservations + lines +
+/// header, FK-safe order); each row is locked `FOR UPDATE` first like
+/// Django's `delete_checkouts`. Batched 2000 x up to 5 passes per run.
+pub async fn sweep_expired_checkouts(
+    db: &DatabaseConnection,
+) -> Result<u64> {
+    fn env_u64(name: &str, dflt: u64) -> u64 {
+        std::env::var(name).ok().and_then(|s| s.parse().ok()).unwrap_or(dflt)
+    }
+    let anon_cut = Utc::now() - chrono::Duration::days(env_u64("RUSTYGOD_ANONYMOUS_CHECKOUT_DAYS", 30) as i64);
+    let user_cut = Utc::now() - chrono::Duration::days(env_u64("RUSTYGOD_USER_CHECKOUT_DAYS", 90) as i64);
+    let empty_cut = Utc::now() - chrono::Duration::hours(env_u64("RUSTYGOD_EMPTY_CHECKOUT_HOURS", 6) as i64);
+    let mut total: u64 = 0;
+    for _ in 0..5 {
+        let sel = sea_orm::Statement::from_sql_and_values(
+            sea_orm::DatabaseBackend::Postgres,
+            "SELECT c.token FROM checkout_checkout c WHERE ( \
+               (c.last_change < $1 AND c.email IS NULL AND c.user_id IS NULL) \
+               OR (c.last_change < $2 AND (c.email IS NOT NULL OR c.user_id IS NOT NULL)) \
+               OR (c.last_change < $3 AND NOT EXISTS \
+                 (SELECT 1 FROM checkout_checkoutline l WHERE l.checkout_id = c.token)) \
+             ) AND NOT EXISTS ( \
+               SELECT 1 FROM payment_transactionitem t WHERE t.checkout_id = c.token \
+               AND (t.authorized_value > 0 OR t.authorize_pending_value > 0 \
+                 OR t.charged_value > 0 OR t.charge_pending_value > 0 \
+                 OR t.refund_pending_value > 0 OR t.cancel_pending_value > 0) \
+             ) ORDER BY c.last_change LIMIT 2000",
+            [anon_cut.into(), user_cut.into(), empty_cut.into()],
+        );
+        let rows = db.query_all(sel).await?;
+        if rows.is_empty() {
+            break;
+        }
+        let mut batch: u64 = 0;
+        for r in rows {
+            let token: Uuid = r.try_get("", "token")?;
+            let txn = db.begin().await?;
+            // FOR UPDATE lock parity with Django's delete_checkouts.
+            let locked = checkout_checkout::Entity::find_by_id(token)
+                .lock(LockType::Update)
+                .one(&txn)
+                .await?;
+            if locked.is_none() {
+                txn.rollback().await?;
+                continue;
+            }
+            delete_checkout_row(&txn, token).await?;
+            txn.commit().await?;
+            batch += 1;
+        }
+        total += batch;
+        if batch < 2000 {
+            break;
+        }
+    }
+    Ok(total)
+}
 /// Rebuild the pure domain `Checkout` from Django rows. The line unit price
 /// follows Saleor precedence: `price_override` wins over the stored
 /// (undiscounted) unit price — same rule as
