@@ -8,6 +8,13 @@
 #
 #   ./scripts/db.sh backup [name]       # custom-format dump -> backups/
 #   ./scripts/db.sh restore <dump-file> # drop + recreate + pg_restore
+#   ./scripts/db.sh psql [psql args]    # psql into the live DB
+#   ./scripts/db.sh ready               # pg_isready against the live DB
+#
+# NOTE: the saleor-db container runs with --network host and postgres on
+# **port 5434** (Cmd -p 5434), so bare `pg_isready`/`psql` *inside* the
+# container fail on the default 5432. Always go through this script (or pass
+# -p 5434 explicitly).
 set -euo pipefail
 
 PGHOST="${PGHOST:-127.0.0.1}"
@@ -49,6 +56,13 @@ case "${1:-}" in
       pg_restore -h "$PGHOST" -p "$PGPORT" -U "$DB_USER" -d "$DB_NAME" \
       --no-owner --no-acl "/w/$base"
     echo "restored $dump into $PGHOST:$PGPORT/$DB_NAME"
+    ;;
+  psql)
+    shift
+    run_pg psql -h "$PGHOST" -p "$PGPORT" -U "$DB_USER" -d "$DB_NAME" "$@"
+    ;;
+  ready)
+    run_pg pg_isready -h "$PGHOST" -p "$PGPORT" -U "$DB_USER"
     ;;
   *)
     usage
