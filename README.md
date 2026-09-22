@@ -112,8 +112,9 @@ The stock Saleor Dashboard runs against `/graphql` with zero schema errors
     address carry (E3/E11, `contract_guest.rs` green), checkout reservation
     sweep (expired *checkout rows* still linger — E10, annoying, not a stock
     leak), `shopSettingsUpdate` persists name/description/metadata.
-- **Priority order:** ① head-to-head benchmark vs Saleor (prove the speed
-  claim or kill it) → ② server-side filtering → ③ real PSP.
+- **Priority order:** ① head-to-head benchmark vs Saleor — DONE 2026-09-22
+  (≈20× throughput, ≈19× latency on catalog reads, BENCHMARK.md) →
+  ② server-side filtering → ③ real PSP.
   Tracked in [BUGS.md](BUGS.md) / [STATUS.md](STATUS.md) / [AUDIT.md](AUDIT.md).
 
 ## Zero-friction migration
