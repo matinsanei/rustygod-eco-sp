@@ -811,28 +811,30 @@ def emit_all(reg, g, M):
     # ---- String-backed Saleor scalars (wire-compatible: Saleor serializes
     # Decimal/PositiveDecimal/JSONString as JSON strings). WeightScalar is
     # lenient (accepts numbers too) since variants send raw weights.
+    # Values are CARRIED (tuple struct) so write-mutations can read prices,
+    # descriptions, etc. — the old unit structs silently dropped them.
     W("\nmacro_rules! gen_string_scalar {\n"
       "    ($rust:ident, $gql:literal) => {\n"
       "        #[derive(Clone, Debug)]\n"
-      "        pub struct $rust;\n"
+      "        pub struct $rust(pub String);\n"
       "        #[Scalar(name = $gql)]\n"
       "        impl ScalarType for $rust {\n"
       "            fn parse(value: Value) -> InputValueResult<Self> {\n"
-      "                match &value { Value::String(_) | Value::Null => Ok($rust), _ => Err(InputValueError::expected_type(value)), }\n"
+      "                match &value { Value::String(s) => Ok($rust(s.clone())), Value::Number(n) => Ok($rust(n.to_string())), Value::Null => Ok($rust(String::new())), _ => Err(InputValueError::expected_type(value)), }\n"
       "            }\n"
-      "            fn to_value(&self) -> Value { Value::Null }\n"
+      "            fn to_value(&self) -> Value { Value::String(self.0.clone()) }\n"
       "        }\n"
       "    };\n"
       "}\n")
     W("gen_string_scalar!(GenDecimal, \"Decimal\");\n")
     W("gen_string_scalar!(GenPositiveDecimal, \"PositiveDecimal\");\n")
     W("gen_string_scalar!(GenJSONString, \"JSONString\");\n")
-    W("#[derive(Clone, Debug)]\npub struct GenWeightScalar;\n")
+    W("#[derive(Clone, Debug)]\npub struct GenWeightScalar(pub String);\n")
     W("#[Scalar(name = \"WeightScalar\")]\nimpl ScalarType for GenWeightScalar {\n"
       "    fn parse(value: Value) -> InputValueResult<Self> {\n"
-      "        match &value { Value::String(_) | Value::Number(_) | Value::Null => Ok(GenWeightScalar), _ => Err(InputValueError::expected_type(value)), }\n"
+      "        match &value { Value::String(s) => Ok(GenWeightScalar(s.clone())), Value::Number(n) => Ok(GenWeightScalar(n.to_string())), Value::Null => Ok(GenWeightScalar(String::new())), _ => Err(InputValueError::expected_type(value)), }\n"
       "    }\n"
-      "    fn to_value(&self) -> Value { Value::Null }\n}\n")
+      "    fn to_value(&self) -> Value { Value::String(self.0.clone()) }\n}\n")
     SCALAR_MAP["Decimal"] = "GenDecimal"
     SCALAR_MAP["PositiveDecimal"] = "GenPositiveDecimal"
     SCALAR_MAP["JSONString"] = "GenJSONString"

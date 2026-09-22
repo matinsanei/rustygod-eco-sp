@@ -222,7 +222,7 @@ fn lit_product(id: String, metadata: Vec<crate::common::MetadataItem>, private_m
     }
 }
 
-fn lit_product_variant(id: String, metadata: Vec<crate::common::MetadataItem>, private_metadata: Vec<crate::common::MetadataItem>) -> gen::ProductVariant {
+pub(crate) fn lit_product_variant(id: String, metadata: Vec<crate::common::MetadataItem>, private_metadata: Vec<crate::common::MetadataItem>) -> gen::ProductVariant {
     gen::ProductVariant {
         id: Some(ID(id)),
         private_metadata,
@@ -241,7 +241,7 @@ fn lit_product_variant(id: String, metadata: Vec<crate::common::MetadataItem>, p
     }
 }
 
-fn lit_category(id: String, metadata: Vec<crate::common::MetadataItem>, private_metadata: Vec<crate::common::MetadataItem>) -> gen::Category {
+pub(crate) fn lit_category(id: String, metadata: Vec<crate::common::MetadataItem>, private_metadata: Vec<crate::common::MetadataItem>) -> gen::Category {
     gen::Category {
         id: Some(ID(id)),
         private_metadata,
@@ -257,7 +257,7 @@ fn lit_category(id: String, metadata: Vec<crate::common::MetadataItem>, private_
     }
 }
 
-fn lit_collection(id: String, metadata: Vec<crate::common::MetadataItem>, private_metadata: Vec<crate::common::MetadataItem>) -> gen::Collection {
+pub(crate) fn lit_collection(id: String, metadata: Vec<crate::common::MetadataItem>, private_metadata: Vec<crate::common::MetadataItem>) -> gen::Collection {
     gen::Collection {
         id: Some(ID(id)),
         private_metadata,

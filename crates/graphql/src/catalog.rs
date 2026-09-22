@@ -206,6 +206,11 @@ impl CatalogQuery {
         if let Some(s) = slug { f.slug_eq = Some(s); }
         if f.ids.is_empty() && f.slug_eq.is_none() { return Ok(None); }
         let items = rustygod_db::catalog::list_products_filtered(db, &ch, &f, 2).await.map_err(|e| Error::new(e.to_string()))?;
+        // Unlisted fallback: Saleor returns the row even with no published
+        // listing (post-create details page depends on it).
+        let items = if items.is_empty() && f.slug_eq.is_none() && f.ids.len() == 1 {
+            rustygod_db::catalog::get_product_unlisted(db, &ch, f.ids[0]).await.map_err(|e| Error::new(e.to_string()))?.into_iter().collect()
+        } else { items };
         let out = assemble_list_products(db, items).await?;
         Ok(out.into_iter().next())
     }
@@ -488,4 +493,376 @@ async fn create_product_row(
     };
     let inserted = row.insert(db).await?;
     Ok(inserted.id)
+}
+
+/// Dashboard write mutations (product/variant/category/collection CRUD).
+/// Reads stay above; deletes mirror Django's collector via `catalog_writes`.
+#[derive(Default)]
+pub struct CatalogWriteMutation;
+
+fn perr(field: Option<String>, message: String) -> gen::ProductError {
+    gen::ProductError { field, message: Some(message), code: None, attributes: vec![] }
+}
+
+fn cerr(field: Option<String>, message: String) -> gen::CollectionError {
+    gen::CollectionError { field, message: Some(message), code: None }
+}
+
+fn lerr(field: Option<String>, message: String) -> gen::ProductChannelListingError {
+    gen::ProductChannelListingError { field, message: Some(message), code: None, channels: vec![] }
+}
+
+fn serr(field: Option<String>, message: String) -> gen::BulkStockError {
+    gen::BulkStockError { field, message: Some(message), code: None, index: None }
+}
+
+fn require_staff(ctx: &Context<'_>) -> Result<()> {
+    let bearer = ctx.data_opt::<crate::context::Bearer>().map(|b| b.0.as_str().to_string())
+        .or_else(|| ctx.data_opt::<GqlContext>().and_then(|g| g.bearer.clone()));
+    if bearer.is_none() { return Err(Error::new("authentication required")); }
+    Ok(())
+}
+
+async fn resolve_product(db: &sea_orm::DatabaseConnection, id: Option<ID>, ext: Option<String>) -> Result<Option<i32>> {
+    use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QuerySelect};
+    if let Some(i) = id {
+        return Ok(rustygod_db::catalog::parse_gid(&i.0));
+    }
+    if let Some(x) = ext {
+        return Ok(rustygod_db::entities::product_product::Entity::find()
+            .select_only().column(rustygod_db::entities::product_product::Column::Id)
+            .filter(rustygod_db::entities::product_product::Column::ExternalReference.eq(x))
+            .into_tuple::<i32>().one(db).await.map_err(|e| Error::new(e.to_string()))?);
+    }
+    Ok(None)
+}
+
+async fn resolve_variant(db: &sea_orm::DatabaseConnection, id: Option<ID>, ext: Option<String>, sku: Option<String>) -> Result<Option<i32>> {
+    use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QuerySelect};
+    type V = rustygod_db::entities::product_productvariant::Entity;
+    use rustygod_db::entities::product_productvariant::Column as VCol;
+    if let Some(i) = id {
+        return Ok(rustygod_db::catalog::parse_gid(&i.0));
+    }
+    if let Some(x) = ext {
+        return Ok(V::find().select_only().column(VCol::Id)
+            .filter(VCol::ExternalReference.eq(x))
+            .into_tuple::<i32>().one(db).await.map_err(|e| Error::new(e.to_string()))?);
+    }
+    if let Some(s) = sku {
+        return Ok(V::find().select_only().column(VCol::Id)
+            .filter(VCol::Sku.eq(s))
+            .into_tuple::<i32>().one(db).await.map_err(|e| Error::new(e.to_string()))?);
+    }
+    Ok(None)
+}
+
+/// Read current metadata JSON for merge semantics (dashboard sends full
+/// lists, but merge matches Saleor's `update_metadata` behavior on conflicts).
+async fn read_meta(db: &sea_orm::DatabaseConnection, table: &str, id: i32) -> (serde_json::Value, serde_json::Value) {
+    use sea_orm::ConnectionTrait;
+    let st = sea_orm::Statement::from_sql_and_values(
+        sea_orm::DatabaseBackend::Postgres,
+        format!("SELECT metadata, private_metadata FROM {table} WHERE id = $1"),
+        [id.into()],
+    );
+    let row: Option<sea_orm::QueryResult> = db.query_one(st).await.ok().flatten();
+    let get = |c: &str| row.as_ref().and_then(|r| r.try_get::<serde_json::Value>("", c).ok()).unwrap_or(serde_json::Value::Null);
+    (get("metadata"), get("private_metadata"))
+}
+
+fn merged(cur: serde_json::Value, input: Option<Vec<crate::common::MetadataInput>>) -> Option<serde_json::Value> {
+    input.map(|v| crate::common::merge_metadata(&cur, &v))
+}
+
+#[Object]
+impl CatalogWriteMutation {
+    /// Dashboard `UpdateProduct`: identity fields + category + collections +
+    /// SEO + metadata. Attributes accepted-ignored (own milestone).
+    async fn product_update(&self, ctx: &Context<'_>, id: Option<ID>, #[graphql(name = "externalReference")] external_reference: Option<String>, input: gen::ProductInput) -> Result<gen::ProductUpdate> {
+        require_staff(ctx)?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let Some(pid) = resolve_product(db, id, external_reference).await? else {
+            return Ok(gen::ProductUpdate { errors: vec![perr(Some("id".into()), "product not found".into())] });
+        };
+        let (cur_md, cur_pmd) = read_meta(db, "product_product", pid).await;
+        let patch = rustygod_db::catalog_writes::ProductPatch {
+            name: input.name.clone(),
+            slug: input.slug.clone(),
+            description: input.description.clone().map(|d| d.0.clone()),
+            category_id: input.category.as_ref().map(|c| rustygod_db::catalog::parse_gid(&c.0)),
+            seo_title: input.seo.clone().and_then(|s| s.title),
+            seo_description: input.seo.clone().and_then(|s| s.description),
+            rating: input.rating,
+            tax_class_id: input.tax_class.as_ref().map(|t| rustygod_db::catalog::parse_gid(&t.0)),
+            charge_taxes: input.charge_taxes,
+            collections: input.collections.as_ref().map(|c| c.iter().filter_map(|i| rustygod_db::catalog::parse_gid(&i.0)).collect()),
+            metadata: merged(cur_md, input.metadata.clone()),
+            private_metadata: merged(cur_pmd, input.private_metadata.clone()),
+        };
+        match rustygod_db::catalog_writes::update_product(db, pid, &patch).await {
+            Ok(()) => Ok(gen::ProductUpdate { errors: vec![] }),
+            Err(e) => Ok(gen::ProductUpdate { errors: vec![perr(None, e.to_string())] }),
+        }
+    }
+
+    async fn product_delete(&self, ctx: &Context<'_>, id: Option<ID>, #[graphql(name = "externalReference")] external_reference: Option<String>) -> Result<gen::ProductDelete> {
+        require_staff(ctx)?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let Some(pid) = resolve_product(db, id, external_reference).await? else {
+            return Ok(gen::ProductDelete { errors: vec![perr(Some("id".into()), "product not found".into())] });
+        };
+        match rustygod_db::catalog_writes::delete_product(db, pid).await {
+            Ok(()) => Ok(gen::ProductDelete { errors: vec![] }),
+            Err(e) => Ok(gen::ProductDelete { errors: vec![perr(None, e.to_string())] }),
+        }
+    }
+
+    async fn product_variant_create(&self, ctx: &Context<'_>, input: gen::ProductVariantCreateInput) -> Result<gen::ProductVariantCreate> {
+        require_staff(ctx)?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let Some(pid) = rustygod_db::catalog::parse_gid(&input.product.0) else {
+            return Ok(gen::ProductVariantCreate { product_variant: None, errors: vec![perr(Some("product".into()), "bad product id".into())] });
+        };
+        let vid = match rustygod_db::catalog_writes::create_variant(
+            db, pid,
+            input.sku.clone(),
+            input.name.clone(),
+            input.track_inventory.unwrap_or(true),
+            input.quantity_limit_per_customer,
+            input.external_reference.clone(),
+        ).await {
+            Ok(v) => v,
+            Err(e) => return Ok(gen::ProductVariantCreate { product_variant: None, errors: vec![perr(None, e.to_string())] }),
+        };
+        for s in input.stocks.clone().unwrap_or_default() {
+            match crate::common::parse_uuid_gid(&s.warehouse.0) {
+                Some(wid) => if let Err(e) = rustygod_db::catalog_writes::set_variant_stock(db, vid, wid, s.quantity).await {
+                    return Ok(gen::ProductVariantCreate { product_variant: None, errors: vec![perr(Some("stocks".into()), e.to_string())] });
+                },
+                None => return Ok(gen::ProductVariantCreate { product_variant: None, errors: vec![perr(Some("stocks".into()), "bad warehouse id".into())] }),
+            }
+        }
+        Ok(gen::ProductVariantCreate {
+            product_variant: Some(crate::metadata::lit_product_variant(crate::common::gid("ProductVariant", vid), vec![], vec![])),
+            errors: vec![],
+        })
+    }
+
+    async fn product_variant_update(&self, ctx: &Context<'_>, id: Option<ID>, #[graphql(name = "externalReference")] external_reference: Option<String>, input: gen::ProductVariantInput, sku: Option<String>) -> Result<gen::ProductVariantUpdate> {
+        require_staff(ctx)?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let Some(vid) = resolve_variant(db, id, external_reference, sku).await? else {
+            return Ok(gen::ProductVariantUpdate { product_variant: None, errors: vec![perr(Some("id".into()), "variant not found".into())] });
+        };
+        let (cur_md, cur_pmd) = read_meta(db, "product_productvariant", vid).await;
+        let patch = rustygod_db::catalog_writes::VariantPatch {
+            sku: input.sku.clone().map(Some),
+            name: input.name.clone(),
+            track_inventory: input.track_inventory,
+            quantity_limit_per_customer: input.quantity_limit_per_customer.map(Some),
+            external_reference: input.external_reference.clone().map(Some),
+            metadata: merged(cur_md, input.metadata.clone()),
+            private_metadata: merged(cur_pmd, input.private_metadata.clone()),
+        };
+        match rustygod_db::catalog_writes::update_variant(db, vid, &patch).await {
+            Ok(()) => Ok(gen::ProductVariantUpdate {
+                product_variant: Some(crate::metadata::lit_product_variant(crate::common::gid("ProductVariant", vid), vec![], vec![])),
+                errors: vec![],
+            }),
+            Err(e) => Ok(gen::ProductVariantUpdate { product_variant: None, errors: vec![perr(None, e.to_string())] }),
+        }
+    }
+
+    async fn product_variant_delete(&self, ctx: &Context<'_>, id: Option<ID>, #[graphql(name = "externalReference")] external_reference: Option<String>, sku: Option<String>) -> Result<gen::ProductVariantDelete> {
+        require_staff(ctx)?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let Some(vid) = resolve_variant(db, id, external_reference, sku).await? else {
+            return Ok(gen::ProductVariantDelete { errors: vec![perr(Some("id".into()), "variant not found".into())] });
+        };
+        match rustygod_db::catalog_writes::delete_variant(db, vid).await {
+            Ok(()) => Ok(gen::ProductVariantDelete { errors: vec![] }),
+            Err(e) => Ok(gen::ProductVariantDelete { errors: vec![perr(None, e.to_string())] }),
+        }
+    }
+
+    /// Dashboard ` productVariantChannelListingUpdate`: per-channel price /
+    /// cost / prior upserts (id or sku locates the variant).
+    async fn product_variant_channel_listing_update(&self, ctx: &Context<'_>, id: Option<ID>, input: Vec<gen::ProductVariantChannelListingAddInput>, sku: Option<String>) -> Result<gen::ProductVariantChannelListingUpdate> {
+        require_staff(ctx)?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let Some(vid) = resolve_variant(db, id, None, sku).await? else {
+            return Ok(gen::ProductVariantChannelListingUpdate { variant: None, errors: vec![lerr(Some("id".into()), "variant not found".into())] });
+        };
+        for l in &input {
+            let Some(ch) = rustygod_db::catalog::parse_gid(&l.channel_id.0) else {
+                return Ok(gen::ProductVariantChannelListingUpdate { variant: None, errors: vec![lerr(Some("channelId".into()), "bad channel id".into())] });
+            };
+            let price: rust_decimal::Decimal = match l.price.0.parse() {
+                Ok(p) => p,
+                Err(_) => return Ok(gen::ProductVariantChannelListingUpdate { variant: None, errors: vec![lerr(Some("price".into()), "bad price".into())] }),
+            };
+            let cost: Option<rust_decimal::Decimal> = l.cost_price.as_ref().and_then(|c| c.0.parse().ok());
+            let prior: Option<rust_decimal::Decimal> = l.prior_price.as_ref().and_then(|c| c.0.parse().ok());
+            if let Err(e) = rustygod_db::catalog_writes::upsert_variant_listing(db, vid, ch, price, cost, prior).await {
+                return Ok(gen::ProductVariantChannelListingUpdate { variant: None, errors: vec![lerr(None, e.to_string())] });
+            }
+        }
+        Ok(gen::ProductVariantChannelListingUpdate { variant: None, errors: vec![] })
+    }
+
+    async fn product_variant_stocks_create(&self, ctx: &Context<'_>, stocks: Vec<gen::StockInput>, #[graphql(name = "variantId")] variant_id: ID) -> Result<gen::ProductVariantStocksCreate> {
+        require_staff(ctx)?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let Some(vid) = rustygod_db::catalog::parse_gid(&variant_id.0) else {
+            return Ok(gen::ProductVariantStocksCreate { product_variant: None, errors: vec![serr(Some("variantId".into()), "bad variant id".into())] });
+        };
+        for s in &stocks {
+            let Some(wid) = crate::common::parse_uuid_gid(&s.warehouse.0) else {
+                return Ok(gen::ProductVariantStocksCreate { product_variant: None, errors: vec![serr(Some("warehouse".into()), "bad warehouse id".into())] });
+            };
+            if let Err(e) = rustygod_db::catalog_writes::set_variant_stock(db, vid, wid, s.quantity).await {
+                return Ok(gen::ProductVariantStocksCreate { product_variant: None, errors: vec![serr(None, e.to_string())] });
+            }
+        }
+        Ok(gen::ProductVariantStocksCreate { product_variant: None, errors: vec![] })
+    }
+
+    async fn product_variant_stocks_update(&self, ctx: &Context<'_>, sku: Option<String>, stocks: Vec<gen::StockInput>, #[graphql(name = "variantId")] variant_id: Option<ID>) -> Result<gen::ProductVariantStocksUpdate> {
+        require_staff(ctx)?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let vid = match resolve_variant(db, variant_id, None, sku).await? {
+            Some(v) => v,
+            None => return Ok(gen::ProductVariantStocksUpdate { product_variant: None, errors: vec![serr(Some("variantId".into()), "variant not found".into())] }),
+        };
+        for s in &stocks {
+            let Some(wid) = crate::common::parse_uuid_gid(&s.warehouse.0) else {
+                return Ok(gen::ProductVariantStocksUpdate { product_variant: None, errors: vec![serr(Some("warehouse".into()), "bad warehouse id".into())] });
+            };
+            if let Err(e) = rustygod_db::catalog_writes::set_variant_stock(db, vid, wid, s.quantity).await {
+                return Ok(gen::ProductVariantStocksUpdate { product_variant: None, errors: vec![serr(None, e.to_string())] });
+            }
+        }
+        Ok(gen::ProductVariantStocksUpdate { product_variant: None, errors: vec![] })
+    }
+
+    async fn category_create(&self, ctx: &Context<'_>, input: gen::CategoryInput, parent: Option<ID>) -> Result<gen::CategoryCreate> {
+        require_staff(ctx)?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let name = input.name.clone().unwrap_or_default();
+        if name.trim().is_empty() {
+            return Ok(gen::CategoryCreate { errors: vec![perr(Some("name".into()), "name is required".into())], category: None });
+        }
+        let slug = input.slug.clone().unwrap_or_else(|| name.to_lowercase().replace(' ', "-"));
+        let pid = parent.map(|p| rustygod_db::catalog::parse_gid(&p.0)).unwrap_or(None);
+        match rustygod_db::catalog_writes::create_category(db, &name, &slug, input.description.as_ref().map(|d| d.0.as_str()), pid).await {
+            Ok(id) => Ok(gen::CategoryCreate { errors: vec![], category: Some(crate::metadata::lit_category(crate::common::gid("Category", id), vec![], vec![])) }),
+            Err(e) => Ok(gen::CategoryCreate { errors: vec![perr(None, e.to_string())], category: None }),
+        }
+    }
+
+    async fn category_update(&self, ctx: &Context<'_>, id: ID, input: gen::CategoryInput) -> Result<gen::CategoryUpdate> {
+        require_staff(ctx)?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let Some(cid) = rustygod_db::catalog::parse_gid(&id.0) else {
+            return Ok(gen::CategoryUpdate { errors: vec![perr(Some("id".into()), "bad category id".into())], category: None });
+        };
+        let patch = rustygod_db::catalog_writes::CategoryPatch {
+            name: input.name.clone(),
+            slug: input.slug.clone(),
+            description: input.description.clone().map(|d| d.0.clone()),
+            seo_title: input.seo.clone().and_then(|s| s.title),
+            seo_description: input.seo.clone().and_then(|s| s.description),
+        };
+        match rustygod_db::catalog_writes::update_category(db, cid, &patch).await {
+            Ok(()) => Ok(gen::CategoryUpdate { errors: vec![], category: None }),
+            Err(e) => Ok(gen::CategoryUpdate { errors: vec![perr(None, e.to_string())], category: None }),
+        }
+    }
+
+    async fn category_delete(&self, ctx: &Context<'_>, id: ID) -> Result<gen::CategoryDelete> {
+        require_staff(ctx)?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let Some(cid) = rustygod_db::catalog::parse_gid(&id.0) else {
+            return Ok(gen::CategoryDelete { errors: vec![perr(Some("id".into()), "bad category id".into())] });
+        };
+        match rustygod_db::catalog_writes::delete_category(db, cid).await {
+            Ok(()) => Ok(gen::CategoryDelete { errors: vec![] }),
+            Err(e) => Ok(gen::CategoryDelete { errors: vec![perr(None, e.to_string())] }),
+        }
+    }
+
+    async fn collection_create(&self, ctx: &Context<'_>, input: gen::CollectionCreateInput) -> Result<gen::CollectionCreate> {
+        require_staff(ctx)?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let name = input.name.clone().unwrap_or_default();
+        if name.trim().is_empty() {
+            return Ok(gen::CollectionCreate { errors: vec![cerr(Some("name".into()), "name is required".into())], collection: None });
+        }
+        let slug = input.slug.clone().unwrap_or_else(|| name.to_lowercase().replace(' ', "-"));
+        let prods: Vec<i32> = input.products.as_ref().map(|p| p.iter().filter_map(|i| rustygod_db::catalog::parse_gid(&i.0)).collect()).unwrap_or_default();
+        match rustygod_db::catalog_writes::create_collection(db, &name, &slug, input.description.as_ref().map(|d| d.0.as_str()), input.is_published.unwrap_or(false), &prods).await {
+            Ok(id) => Ok(gen::CollectionCreate { errors: vec![], collection: Some(crate::metadata::lit_collection(crate::common::gid("Collection", id), vec![], vec![])) }),
+            Err(e) => Ok(gen::CollectionCreate { errors: vec![cerr(None, e.to_string())], collection: None }),
+        }
+    }
+
+    async fn collection_update(&self, ctx: &Context<'_>, id: ID, input: gen::CollectionInput) -> Result<gen::CollectionUpdate> {
+        require_staff(ctx)?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let Some(cid) = rustygod_db::catalog::parse_gid(&id.0) else {
+            return Ok(gen::CollectionUpdate { errors: vec![cerr(Some("id".into()), "bad collection id".into())], collection: None });
+        };
+        let patch = rustygod_db::catalog_writes::CollectionPatch {
+            name: input.name.clone(),
+            slug: input.slug.clone(),
+            description: input.description.clone().map(|d| d.0.clone()),
+            is_published: input.is_published,
+            seo_title: input.seo.clone().and_then(|s| s.title),
+            seo_description: input.seo.clone().and_then(|s| s.description),
+            // CollectionInput carries no products (dashboard manages
+            // membership via collectionAdd/RemoveProducts).
+            products: None,
+        };
+        match rustygod_db::catalog_writes::update_collection(db, cid, &patch).await {
+            Ok(()) => Ok(gen::CollectionUpdate { errors: vec![], collection: None }),
+            Err(e) => Ok(gen::CollectionUpdate { errors: vec![cerr(None, e.to_string())], collection: None }),
+        }
+    }
+
+    async fn collection_delete(&self, ctx: &Context<'_>, id: ID) -> Result<gen::CollectionDelete> {
+        require_staff(ctx)?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let Some(cid) = rustygod_db::catalog::parse_gid(&id.0) else {
+            return Ok(gen::CollectionDelete { errors: vec![cerr(Some("id".into()), "bad collection id".into())] });
+        };
+        match rustygod_db::catalog_writes::delete_collection(db, cid).await {
+            Ok(()) => Ok(gen::CollectionDelete { errors: vec![] }),
+            Err(e) => Ok(gen::CollectionDelete { errors: vec![cerr(None, e.to_string())] }),
+        }
+    }
+
+    async fn collection_add_products(&self, ctx: &Context<'_>, #[graphql(name = "collectionId")] collection_id: ID, products: Vec<ID>) -> Result<gen::CollectionAddProducts> {
+        require_staff(ctx)?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let (Some(cid), prods) = (rustygod_db::catalog::parse_gid(&collection_id.0), products.iter().filter_map(|i| rustygod_db::catalog::parse_gid(&i.0)).collect::<Vec<_>>()) else {
+            return Ok(gen::CollectionAddProducts { errors: vec![cerr(Some("collectionId".into()), "bad collection id".into())] });
+        };
+        match rustygod_db::catalog_writes::collection_add_products(db, cid, &prods).await {
+            Ok(()) => Ok(gen::CollectionAddProducts { errors: vec![] }),
+            Err(e) => Ok(gen::CollectionAddProducts { errors: vec![cerr(None, e.to_string())] }),
+        }
+    }
+
+    async fn collection_remove_products(&self, ctx: &Context<'_>, #[graphql(name = "collectionId")] collection_id: ID, products: Vec<ID>) -> Result<gen::CollectionRemoveProducts> {
+        require_staff(ctx)?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let (Some(cid), prods) = (rustygod_db::catalog::parse_gid(&collection_id.0), products.iter().filter_map(|i| rustygod_db::catalog::parse_gid(&i.0)).collect::<Vec<_>>()) else {
+            return Ok(gen::CollectionRemoveProducts { collection: None, errors: vec![cerr(Some("collectionId".into()), "bad collection id".into())] });
+        };
+        match rustygod_db::catalog_writes::collection_remove_products(db, cid, &prods).await {
+            Ok(()) => Ok(gen::CollectionRemoveProducts { collection: None, errors: vec![] }),
+            Err(e) => Ok(gen::CollectionRemoveProducts { collection: None, errors: vec![cerr(None, e.to_string())] }),
+        }
+    }
 }

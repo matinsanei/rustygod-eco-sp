@@ -204,8 +204,7 @@ pub async fn get_product(
     db: &impl sea_orm::ConnectionTrait,
     channel_slug: &str,
     product_id: i32,
-) -> Result<Option<Product>> {
-    let (ch_id, currency) = channel_id(db, channel_slug).await?;
+) -> Result<Option<Product>> {    let (ch_id, currency) = channel_id(db, channel_slug).await?;
     let row: Option<ProductRow> = product_select()
         .filter(product_product::Column::Id.eq(product_id))
         .into_tuple()
@@ -223,6 +222,26 @@ pub async fn get_product(
     if !published {
         return Ok(None);
     }
+    let mut out = load_products_batch(db, vec![row], ch_id, &currency).await?;
+    Ok(out.pop())
+}
+
+/// Product by id IGNORING channel publication (Saleor `product(id)` without
+/// a published listing still returns the row — critical for just-created
+/// products the dashboard navigates to before any listing exists).
+/// Variants carry zero prices until listings are added.
+pub async fn get_product_unlisted(
+    db: &impl sea_orm::ConnectionTrait,
+    channel_slug: &str,
+    product_id: i32,
+) -> Result<Option<Product>> {
+    let (ch_id, currency) = channel_id(db, channel_slug).await?;
+    let row: Option<ProductRow> = product_select()
+        .filter(product_product::Column::Id.eq(product_id))
+        .into_tuple()
+        .one(db)
+        .await?;
+    let Some(row) = row else { return Ok(None) };
     let mut out = load_products_batch(db, vec![row], ch_id, &currency).await?;
     Ok(out.pop())
 }

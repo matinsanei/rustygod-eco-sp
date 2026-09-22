@@ -24,13 +24,13 @@ impl ScalarType for GenUpload {
 macro_rules! gen_string_scalar {
     ($rust:ident, $gql:literal) => {
         #[derive(Clone, Debug)]
-        pub struct $rust;
+        pub struct $rust(pub String);
         #[Scalar(name = $gql)]
         impl ScalarType for $rust {
             fn parse(value: Value) -> InputValueResult<Self> {
-                match &value { Value::String(_) | Value::Null => Ok($rust), _ => Err(InputValueError::expected_type(value)), }
+                match &value { Value::String(s) => Ok($rust(s.clone())), Value::Number(n) => Ok($rust(n.to_string())), Value::Null => Ok($rust(String::new())), _ => Err(InputValueError::expected_type(value)), }
             }
-            fn to_value(&self) -> Value { Value::Null }
+            fn to_value(&self) -> Value { Value::String(self.0.clone()) }
         }
     };
 }
@@ -42,14 +42,14 @@ gen_string_scalar!(GenPositiveDecimal, "PositiveDecimal");
 gen_string_scalar!(GenJSONString, "JSONString");
 
 #[derive(Clone, Debug)]
-pub struct GenWeightScalar;
+pub struct GenWeightScalar(pub String);
 
 #[Scalar(name = "WeightScalar")]
 impl ScalarType for GenWeightScalar {
     fn parse(value: Value) -> InputValueResult<Self> {
-        match &value { Value::String(_) | Value::Number(_) | Value::Null => Ok(GenWeightScalar), _ => Err(InputValueError::expected_type(value)), }
+        match &value { Value::String(s) => Ok(GenWeightScalar(s.clone())), Value::Number(n) => Ok(GenWeightScalar(n.to_string())), Value::Null => Ok(GenWeightScalar(String::new())), _ => Err(InputValueError::expected_type(value)), }
     }
-    fn to_value(&self) -> Value { Value::Null }
+    fn to_value(&self) -> Value { Value::String(self.0.clone()) }
 }
 
 
@@ -27912,20 +27912,6 @@ impl GenMutation {
 
     }
 
-    #[graphql(name = "categoryCreate")]
-    async fn category_create(&self, #[graphql(name = "input")] _arg_input: CategoryInput, #[graphql(name = "parent")] _arg_parent: Option<ID>) -> Option<CategoryCreate> {
-
-        Some(CategoryCreate { errors: vec![], category: None })
-
-    }
-
-    #[graphql(name = "categoryDelete")]
-    async fn category_delete(&self, #[graphql(name = "id")] _arg_id: ID) -> Option<CategoryDelete> {
-
-        Some(CategoryDelete { errors: vec![] })
-
-    }
-
     #[graphql(name = "categoryBulkDelete")]
     async fn category_bulk_delete(&self, #[graphql(name = "ids")] _arg_ids: Vec<ID>) -> Option<CategoryBulkDelete> {
 
@@ -27933,38 +27919,10 @@ impl GenMutation {
 
     }
 
-    #[graphql(name = "categoryUpdate")]
-    async fn category_update(&self, #[graphql(name = "id")] _arg_id: ID, #[graphql(name = "input")] _arg_input: CategoryInput) -> Option<CategoryUpdate> {
-
-        Some(CategoryUpdate { errors: vec![], category: None })
-
-    }
-
     #[graphql(name = "categoryTranslate")]
     async fn category_translate(&self, #[graphql(name = "id")] _arg_id: ID, #[graphql(name = "input")] _arg_input: TranslationInput, #[graphql(name = "languageCode")] _arg_language_code: LanguageCodeEnum) -> Option<CategoryTranslate> {
 
         Some(CategoryTranslate { errors: vec![], category: None })
-
-    }
-
-    #[graphql(name = "collectionAddProducts")]
-    async fn collection_add_products(&self, #[graphql(name = "collectionId")] _arg_collection_id: ID, #[graphql(name = "products")] _arg_products: Vec<ID>) -> Option<CollectionAddProducts> {
-
-        Some(CollectionAddProducts { errors: vec![] })
-
-    }
-
-    #[graphql(name = "collectionCreate")]
-    async fn collection_create(&self, #[graphql(name = "input")] _arg_input: CollectionCreateInput) -> Option<CollectionCreate> {
-
-        Some(CollectionCreate { errors: vec![], collection: None })
-
-    }
-
-    #[graphql(name = "collectionDelete")]
-    async fn collection_delete(&self, #[graphql(name = "id")] _arg_id: ID) -> Option<CollectionDelete> {
-
-        Some(CollectionDelete { errors: vec![] })
 
     }
 
@@ -27982,20 +27940,6 @@ impl GenMutation {
 
     }
 
-    #[graphql(name = "collectionRemoveProducts")]
-    async fn collection_remove_products(&self, #[graphql(name = "collectionId")] _arg_collection_id: ID, #[graphql(name = "products")] _arg_products: Vec<ID>) -> Option<CollectionRemoveProducts> {
-
-        Some(CollectionRemoveProducts { collection: None, errors: vec![] })
-
-    }
-
-    #[graphql(name = "collectionUpdate")]
-    async fn collection_update(&self, #[graphql(name = "id")] _arg_id: ID, #[graphql(name = "input")] _arg_input: CollectionInput) -> Option<CollectionUpdate> {
-
-        Some(CollectionUpdate { errors: vec![], collection: None })
-
-    }
-
     #[graphql(name = "collectionTranslate")]
     async fn collection_translate(&self, #[graphql(name = "id")] _arg_id: ID, #[graphql(name = "input")] _arg_input: TranslationInput, #[graphql(name = "languageCode")] _arg_language_code: LanguageCodeEnum) -> Option<CollectionTranslate> {
 
@@ -28010,24 +27954,10 @@ impl GenMutation {
 
     }
 
-    #[graphql(name = "productDelete")]
-    async fn product_delete(&self, #[graphql(name = "externalReference")] _arg_external_reference: Option<String>, #[graphql(name = "id")] _arg_id: Option<ID>) -> Option<ProductDelete> {
-
-        Some(ProductDelete { errors: vec![] })
-
-    }
-
     #[graphql(name = "productBulkDelete")]
     async fn product_bulk_delete(&self, #[graphql(name = "ids")] _arg_ids: Vec<ID>) -> Option<ProductBulkDelete> {
 
         Some(ProductBulkDelete { errors: vec![] })
-
-    }
-
-    #[graphql(name = "productUpdate")]
-    async fn product_update(&self, #[graphql(name = "externalReference")] _arg_external_reference: Option<String>, #[graphql(name = "id")] _arg_id: Option<ID>, #[graphql(name = "input")] _arg_input: ProductInput) -> Option<ProductUpdate> {
-
-        Some(ProductUpdate { errors: vec![] })
 
     }
 
@@ -28122,20 +28052,6 @@ impl GenMutation {
 
     }
 
-    #[graphql(name = "productVariantCreate")]
-    async fn product_variant_create(&self, #[graphql(name = "input")] _arg_input: ProductVariantCreateInput) -> Option<ProductVariantCreate> {
-
-        Some(ProductVariantCreate { errors: vec![], product_variant: None })
-
-    }
-
-    #[graphql(name = "productVariantDelete")]
-    async fn product_variant_delete(&self, #[graphql(name = "externalReference")] _arg_external_reference: Option<String>, #[graphql(name = "id")] _arg_id: Option<ID>, #[graphql(name = "sku")] _arg_sku: Option<String>) -> Option<ProductVariantDelete> {
-
-        Some(ProductVariantDelete { errors: vec![] })
-
-    }
-
     #[graphql(name = "productVariantBulkCreate")]
     async fn product_variant_bulk_create(&self, #[graphql(name = "errorPolicy")] _arg_error_policy: Option<ErrorPolicyEnum>, #[graphql(name = "product")] _arg_product: ID, #[graphql(name = "variants")] _arg_variants: Vec<ProductVariantBulkCreateInput>) -> Option<ProductVariantBulkCreate> {
 
@@ -28157,31 +28073,10 @@ impl GenMutation {
 
     }
 
-    #[graphql(name = "productVariantStocksCreate")]
-    async fn product_variant_stocks_create(&self, #[graphql(name = "stocks")] _arg_stocks: Vec<StockInput>, #[graphql(name = "variantId")] _arg_variant_id: ID) -> Option<ProductVariantStocksCreate> {
-
-        Some(ProductVariantStocksCreate { product_variant: None, errors: vec![] })
-
-    }
-
     #[graphql(name = "productVariantStocksDelete")]
     async fn product_variant_stocks_delete(&self, #[graphql(name = "sku")] _arg_sku: Option<String>, #[graphql(name = "variantId")] _arg_variant_id: Option<ID>, #[graphql(name = "warehouseIds")] _arg_warehouse_ids: Option<Vec<ID>>) -> Option<ProductVariantStocksDelete> {
 
         Some(ProductVariantStocksDelete { product_variant: None, errors: vec![] })
-
-    }
-
-    #[graphql(name = "productVariantStocksUpdate")]
-    async fn product_variant_stocks_update(&self, #[graphql(name = "sku")] _arg_sku: Option<String>, #[graphql(name = "stocks")] _arg_stocks: Vec<StockInput>, #[graphql(name = "variantId")] _arg_variant_id: Option<ID>) -> Option<ProductVariantStocksUpdate> {
-
-        Some(ProductVariantStocksUpdate { product_variant: None, errors: vec![] })
-
-    }
-
-    #[graphql(name = "productVariantUpdate")]
-    async fn product_variant_update(&self, #[graphql(name = "externalReference")] _arg_external_reference: Option<String>, #[graphql(name = "id")] _arg_id: Option<ID>, #[graphql(name = "input")] _arg_input: ProductVariantInput, #[graphql(name = "sku")] _arg_sku: Option<String>) -> Option<ProductVariantUpdate> {
-
-        Some(ProductVariantUpdate { errors: vec![], product_variant: None })
 
     }
 
@@ -28196,13 +28091,6 @@ impl GenMutation {
     async fn product_variant_translate(&self, #[graphql(name = "id")] _arg_id: ID, #[graphql(name = "input")] _arg_input: NameTranslationInput, #[graphql(name = "languageCode")] _arg_language_code: LanguageCodeEnum) -> Option<ProductVariantTranslate> {
 
         Some(ProductVariantTranslate { errors: vec![], product_variant: None })
-
-    }
-
-    #[graphql(name = "productVariantChannelListingUpdate")]
-    async fn product_variant_channel_listing_update(&self, #[graphql(name = "id")] _arg_id: Option<ID>, #[graphql(name = "input")] _arg_input: Vec<ProductVariantChannelListingAddInput>, #[graphql(name = "sku")] _arg_sku: Option<String>) -> Option<ProductVariantChannelListingUpdate> {
-
-        Some(ProductVariantChannelListingUpdate { variant: None, errors: vec![] })
 
     }
 

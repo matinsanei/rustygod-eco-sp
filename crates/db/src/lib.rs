@@ -8,6 +8,7 @@ pub mod apps;
 pub mod auth;
 pub mod cancel;
 pub mod catalog;
+pub mod catalog_writes;
 pub mod channels;
 pub mod checkout_store;
 pub mod commerce;
@@ -62,6 +63,8 @@ pub enum DbError {
     Complete(String),
     #[error("cancel error: {0}")]
     Cancel(String),
+    #[error("catalog error: {0}")]
+    Catalog(String),
     #[error("granted refund error: {0}")]
     GrantedRefund(String),
     #[error("lock poisoned: {0}")]
