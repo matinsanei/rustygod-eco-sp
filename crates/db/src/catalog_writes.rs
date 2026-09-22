@@ -759,3 +759,109 @@ pub async fn collection_remove_products(db: &DatabaseConnection, collection_id: 
     exec(db, &format!("DELETE FROM product_collectionproduct WHERE collection_id = $1 AND product_id IN ({list})"), params).await?;
     Ok(())
 }
+
+/// Upsert a product-level channel listing (dashboard publish switches).
+/// `None` fields leave the column untouched on update; inserts default to
+/// unpublished unless told otherwise (Saleor creates listings unpublished).
+pub async fn upsert_product_listing(
+    db: &DatabaseConnection,
+    product_id: i32,
+    channel_id: i32,
+    is_published: Option<bool>,
+    published_at: Option<chrono::DateTime<chrono::Utc>>,
+    visible_in_listings: Option<bool>,
+    available_for_purchase_at: Option<chrono::DateTime<chrono::Utc>>,
+) -> Result<()> {
+    let txn = db.begin().await.map_err(DbError::SeaOrm)?;
+    let sel = sea_orm::Statement::from_sql_and_values(
+        sea_orm::DatabaseBackend::Postgres,
+        "SELECT id FROM product_productchannellisting WHERE product_id = $1 AND channel_id = $2",
+        [product_id.into(), channel_id.into()],
+    );
+    let existing: Option<i32> = txn
+        .query_one(sel)
+        .await
+        .map_err(DbError::SeaOrm)?
+        .and_then(|r| r.try_get::<i32>("", "id").ok());
+    // Listing currency always mirrors its channel (Saleor invariant).
+    let cur: Option<String> = {
+        let st = sea_orm::Statement::from_sql_and_values(
+            sea_orm::DatabaseBackend::Postgres,
+            "SELECT currency_code FROM channel_channel WHERE id = $1",
+            [channel_id.into()],
+        );
+        txn.query_one(st)
+            .await
+            .map_err(DbError::SeaOrm)?
+            .and_then(|r| r.try_get::<String>("", "currency_code").ok())
+    };
+    let currency = cur.unwrap_or_else(|| "USD".into());
+    match existing {
+        Some(lid) => {
+            let mut params: Vec<sea_orm::Value> = vec![lid.into()];
+            let mut sets = vec![];
+            let mut push = |col: &str, v: sea_orm::Value| {
+                params.push(v);
+                sets.push(format!("{col} = ${}", params.len()));
+            };
+            if let Some(v) = is_published {
+                push("is_published", v.into());
+            }
+            if let Some(v) = published_at {
+                push("published_at", v.into());
+            }
+            if let Some(v) = visible_in_listings {
+                push("visible_in_listings", v.into());
+            }
+            if let Some(v) = available_for_purchase_at {
+                push("available_for_purchase_at", v.into());
+            }
+            if !sets.is_empty() {
+                exec(&txn, &format!("UPDATE product_productchannellisting SET {} WHERE id = $1", sets.join(", ")), params).await?;
+            }
+        }
+        None => {
+            exec(
+                &txn,
+                "INSERT INTO product_productchannellisting \
+                 (product_id, channel_id, currency, is_published, published_at, \
+                  visible_in_listings, available_for_purchase_at) \
+                 VALUES ($1, $2, $3, $4, $5, TRUE, $6)",
+                vec![
+                    product_id.into(),
+                    channel_id.into(),
+                    currency.into(),
+                    is_published.unwrap_or(false).into(),
+                    published_at.into(),
+                    available_for_purchase_at.into(),
+                ],
+            )
+            .await?;
+        }
+    }
+    txn.commit().await.map_err(DbError::SeaOrm)?;
+    Ok(())
+}
+
+pub async fn delete_product_listing(db: &DatabaseConnection, product_id: i32, channel_id: i32) -> Result<()> {
+    exec(db, "DELETE FROM product_productchannellisting WHERE product_id = $1 AND channel_id = $2",
+        vec![product_id.into(), channel_id.into()]).await?;
+    Ok(())
+}
+
+/// Set an absolute stock quantity by stock row id (dashboard stock editor).
+pub async fn update_stock_qty(db: &DatabaseConnection, stock_id: i32, quantity: i32) -> Result<()> {
+    let n = exec(db, "UPDATE warehouse_stock SET quantity = $2 WHERE id = $1",
+        vec![stock_id.into(), quantity.into()]).await?;
+    if n == 0 {
+        return Err(DbError::Catalog("stock not found".into()));
+    }
+    Ok(())
+}
+
+/// Remove a variant's stock in one warehouse (dashboard stocks remove).
+pub async fn delete_variant_stock(db: &DatabaseConnection, variant_id: i32, warehouse_id: Uuid) -> Result<()> {
+    exec(db, "DELETE FROM warehouse_stock WHERE product_variant_id = $1 AND warehouse_id = $2::uuid",
+        vec![variant_id.into(), warehouse_id.to_string().into()]).await?;
+    Ok(())
+}

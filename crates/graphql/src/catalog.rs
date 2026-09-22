@@ -1460,6 +1460,157 @@ impl CatalogWriteMutation {
             Err(e) => Ok(gen::CollectionRemoveProducts { collection: None, errors: vec![cerr(None, e.to_string())] }),
         }
     }
+
+    /// Dashboard product save: bulk variant updates with nested stocks +
+    /// channel listings. Per-variant results (Saleor parity); attributes
+    /// accepted-ignored like the singular path.
+    async fn product_variant_bulk_update(
+        &self, ctx: &Context<'_>,
+        #[graphql(name = "errorPolicy")] error_policy: Option<gen::ErrorPolicyEnum>,
+        product: ID, variants: Vec<gen::ProductVariantBulkUpdateInput>,
+    ) -> Result<gen::ProductVariantBulkUpdate> {
+        let _ = (error_policy, product);
+        require_staff(ctx)?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let berr = |m: String| gen::ProductVariantBulkError { field: None, message: Some(m), code: None, attributes: vec![], values: vec![], warehouses: vec![], channels: vec![] };
+        let mut results = vec![];
+        for v in &variants {
+            let vid = match resolve_variant(db, Some(v.id.clone()), None, None).await? {
+                Some(id) => id,
+                None => {
+                    results.push(gen::ProductVariantBulkResult { product_variant: None, errors: vec![berr("variant not found".into())] });
+                    continue;
+                }
+            };
+            let (cur_md, cur_pmd) = read_meta(db, "product_productvariant", vid).await;
+            let patch = rustygod_db::catalog_writes::VariantPatch {
+                sku: v.sku.clone().map(Some),
+                name: v.name.clone(),
+                track_inventory: v.track_inventory,
+                quantity_limit_per_customer: v.quantity_limit_per_customer.map(Some),
+                external_reference: v.external_reference.clone().map(Some),
+                metadata: merged(cur_md, v.metadata.clone()),
+                private_metadata: merged(cur_pmd, v.private_metadata.clone()),
+            };
+            let mut errs: Vec<gen::ProductVariantBulkError> = vec![];
+            if let Err(e) = rustygod_db::catalog_writes::update_variant(db, vid, &patch).await {
+                errs.push(berr(e.to_string()));
+            }
+            for e in apply_variant_sub(db, vid, v.stocks.clone(), v.channel_listings.clone()).await {
+                errs.push(berr(e));
+            }
+            let pv = if errs.is_empty() {
+                let b = load_variant_batches(db, &[vid]).await?;
+                let (sku, name, _, _) = b.vbase.get(&vid).cloned().unwrap_or((None, String::new(), true, None));
+                Some(build_variant(&b, vid, name, sku.unwrap_or_default(), 0))
+            } else { None };
+            results.push(gen::ProductVariantBulkResult { product_variant: pv, errors: errs });
+        }
+        Ok(gen::ProductVariantBulkUpdate { results, errors: vec![] })
+    }
+
+    async fn product_variant_bulk_create(
+        &self, ctx: &Context<'_>,
+        #[graphql(name = "errorPolicy")] error_policy: Option<gen::ErrorPolicyEnum>,
+        product: ID, variants: Vec<gen::ProductVariantBulkCreateInput>,
+    ) -> Result<gen::ProductVariantBulkCreate> {
+        let _ = error_policy;
+        require_staff(ctx)?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let Some(pid) = rustygod_db::catalog::parse_gid(&product.0) else {
+            return Ok(gen::ProductVariantBulkCreate { product_variants: vec![], results: vec![], errors: vec![gen::BulkProductError { field: Some("product".into()), message: Some("bad product id".into()), code: None, index: None, channels: vec![] }] });
+        };
+        let mut pvs = vec![];
+        let mut results = vec![];
+        for (idx, v) in variants.iter().enumerate() {
+            let berr = |m: String| gen::ProductVariantBulkError { field: None, message: Some(m), code: None, attributes: vec![], values: vec![], warehouses: vec![], channels: vec![] };
+            let vid = match rustygod_db::catalog_writes::create_variant(
+                db, pid, v.sku.clone(), v.name.clone(),
+                v.track_inventory.unwrap_or(true), v.quantity_limit_per_customer, v.external_reference.clone(),
+            ).await {
+                Ok(id) => id,
+                Err(e) => {
+                    results.push(gen::ProductVariantBulkResult { product_variant: None, errors: vec![berr(e.to_string())] });
+                    continue;
+                }
+            };
+            let mut errs: Vec<gen::ProductVariantBulkError> = vec![];
+            for e in apply_variant_sub(db, vid, v.stocks.clone().map(|s| gen::ProductVariantStocksUpdateInput { create: Some(s), update: None, remove: None }), v.channel_listings.clone().map(|c| gen::ProductVariantChannelListingUpdateInput { create: Some(c), update: None, remove: None })).await {
+                errs.push(berr(e));
+            }
+            let _ = idx;
+            let pv = if errs.is_empty() {
+                let b = load_variant_batches(db, &[vid]).await?;
+                let (sku, name, _, _) = b.vbase.get(&vid).cloned().unwrap_or((None, String::new(), true, None));
+                Some(build_variant(&b, vid, name, sku.unwrap_or_default(), 0))
+            } else { None };
+            if let Some(ref p) = pv { pvs.push(p.clone()); }
+            results.push(gen::ProductVariantBulkResult { product_variant: pv, errors: errs });
+        }
+        Ok(gen::ProductVariantBulkCreate { product_variants: pvs, results, errors: vec![] })
+    }
+
+    async fn product_variant_bulk_delete(
+        &self, ctx: &Context<'_>,
+        ids: Option<Vec<ID>>, skus: Option<Vec<String>>,
+    ) -> Result<gen::ProductVariantBulkDelete> {
+        require_staff(ctx)?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let mut errs = vec![];
+        for i in ids.unwrap_or_default() {
+            match rustygod_db::catalog::parse_gid(&i.0) {
+                Some(vid) => if let Err(e) = rustygod_db::catalog_writes::delete_variant(db, vid).await {
+                    errs.push(perr(None, e.to_string()));
+                },
+                None => errs.push(perr(Some("ids".into()), "bad variant id".into())),
+            }
+        }
+        // skus resolve via the variant table
+        for s in skus.unwrap_or_default() {
+            match resolve_variant(db, None, None, Some(s)).await? {
+                Some(vid) => if let Err(e) = rustygod_db::catalog_writes::delete_variant(db, vid).await {
+                    errs.push(perr(None, e.to_string()));
+                },
+                None => errs.push(perr(Some("skus".into()), "variant not found".into())),
+            }
+        }
+        Ok(gen::ProductVariantBulkDelete { errors: errs })
+    }
+
+    /// Dashboard publish switches (product availability per channel).
+    async fn product_channel_listing_update(
+        &self, ctx: &Context<'_>, id: ID, input: gen::ProductChannelListingUpdateInput,
+    ) -> Result<gen::ProductChannelListingUpdate> {
+        require_staff(ctx)?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let lerr = |m: String| gen::ProductChannelListingError { field: None, message: Some(m), code: None, channels: vec![] };
+        let Some(pid) = rustygod_db::catalog::parse_gid(&id.0) else {
+            return Ok(gen::ProductChannelListingUpdate { product: None, errors: vec![lerr("bad product id".into())] });
+        };
+        for c in input.update_channels.clone().unwrap_or_default() {
+            match rustygod_db::catalog::parse_gid(&c.channel_id.0) {
+                Some(ch) => {
+                    if let Err(e) = rustygod_db::catalog_writes::upsert_product_listing(
+                        db, pid, ch, c.is_published,
+                        c.published_at.or(c.publication_date), c.visible_in_listings,
+                        c.available_for_purchase_at.or(c.available_for_purchase_date),
+                    ).await {
+                        return Ok(gen::ProductChannelListingUpdate { product: None, errors: vec![lerr(e.to_string())] });
+                    }
+                }
+                None => return Ok(gen::ProductChannelListingUpdate { product: None, errors: vec![lerr("bad channel id".into())] }),
+            }
+        }
+        for r in input.remove_channels.clone().unwrap_or_default() {
+            match rustygod_db::catalog::parse_gid(&r.0) {
+                Some(ch) => if let Err(e) = rustygod_db::catalog_writes::delete_product_listing(db, pid, ch).await {
+                    return Ok(gen::ProductChannelListingUpdate { product: None, errors: vec![lerr(e.to_string())] });
+                },
+                None => return Ok(gen::ProductChannelListingUpdate { product: None, errors: vec![lerr("bad channel id".into())] }),
+            }
+        }
+        Ok(gen::ProductChannelListingUpdate { product: None, errors: vec![] })
+    }
 }
 
 /// Category node resolvers (list counts + details page relations).
@@ -1619,4 +1770,114 @@ pub(crate) async fn collection_bg_image(
         url: crate::common::media_url(&path),
         alt: r.try_get::<String>("", "background_image_alt").ok(),
     })
+}
+
+/// Shared per-variant stocks+listings applier for the bulk mutations.
+/// Returns per-item error strings (empty = ok).
+async fn apply_variant_sub(
+    db: &sea_orm::DatabaseConnection,
+    vid: i32,
+    stocks: Option<gen::ProductVariantStocksUpdateInput>,
+    listings: Option<gen::ProductVariantChannelListingUpdateInput>,
+) -> Vec<String> {
+    let mut errs = vec![];
+    if let Some(s) = stocks {
+        for c in s.create.clone().unwrap_or_default() {
+            match crate::common::parse_uuid_gid(&c.warehouse.0) {
+                Some(wid) => {
+                    if let Err(e) = rustygod_db::catalog_writes::set_variant_stock(db, vid, wid, c.quantity).await {
+                        errs.push(e.to_string());
+                    }
+                }
+                None => errs.push("bad warehouse id".into()),
+            }
+        }
+        for u in s.update.clone().unwrap_or_default() {
+            match rustygod_db::catalog::parse_gid(&u.stock.0) {
+                Some(sid) => {
+                    if let Err(e) = rustygod_db::catalog_writes::update_stock_qty(db, sid, u.quantity).await {
+                        errs.push(e.to_string());
+                    }
+                }
+                None => errs.push("bad stock id".into()),
+            }
+        }
+        for w in s.remove.clone().unwrap_or_default() {
+            // Saleor sends warehouse ids here.
+            match crate::common::parse_uuid_gid(&w.0) {
+                Some(wid) => {
+                    if let Err(e) = rustygod_db::catalog_writes::delete_variant_stock(db, vid, wid).await {
+                        errs.push(e.to_string());
+                    }
+                }
+                None => errs.push("bad warehouse id".into()),
+            }
+        }
+    }
+    if let Some(l) = listings {
+        // create-path entries (channelId + price)
+        for c in l.create.clone().unwrap_or_default() {
+            match rustygod_db::catalog::parse_gid(&c.channel_id.0) {
+                Some(ch) => {
+                    let price = match c.price.0.parse::<rust_decimal::Decimal>() {
+                        Ok(p) => p,
+                        Err(_) => { errs.push("bad price".into()); continue; }
+                    };
+                    let cost = c.cost_price.as_ref().and_then(|x| x.0.parse().ok());
+                    let prior = c.prior_price.as_ref().and_then(|x| x.0.parse().ok());
+                    if let Err(e) = rustygod_db::catalog_writes::upsert_variant_listing(db, vid, ch, price, cost, prior).await {
+                        errs.push(e.to_string());
+                    }
+                }
+                None => errs.push("bad channel id".into()),
+            }
+        }
+        // update-path entries (listing id + optional price)
+        for u in l.update.clone().unwrap_or_default() {
+            match rustygod_db::catalog::parse_gid(&u.channel_listing.0) {
+                Some(lid) => {
+                    // resolve listing -> (variant, channel) for the upsert
+                    let row: Option<(i32, i32)> = {
+                        use sea_orm::{ConnectionTrait, Statement};
+                        db.query_one(Statement::from_sql_and_values(
+                            sea_orm::DatabaseBackend::Postgres,
+                            "SELECT variant_id, channel_id FROM product_productvariantchannellisting WHERE id = $1",
+                            [lid.into()],
+                        )).await.ok().flatten().and_then(|r| {
+                            Some((r.try_get::<i32>("", "variant_id").ok()?, r.try_get::<i32>("", "channel_id").ok()?))
+                        })
+                    };
+                    if let Some((_, ch)) = row {
+                        // price required for the upsert path; absent price =
+                        // cost/prior-only touch is a no-op we still accept.
+                        if let Some(pstr) = u.price.as_ref() {
+                            match pstr.0.parse::<rust_decimal::Decimal>() {
+                                Ok(price) => {
+                                    let cost = u.cost_price.as_ref().and_then(|x| x.0.parse().ok());
+                                    let prior = u.prior_price.as_ref().and_then(|x| x.0.parse().ok());
+                                    if let Err(e) = rustygod_db::catalog_writes::upsert_variant_listing(db, vid, ch, price, cost, prior).await {
+                                        errs.push(e.to_string());
+                                    }
+                                }
+                                Err(_) => errs.push("bad price".into()),
+                            }
+                        }
+                    } else {
+                        errs.push("channel listing not found".into());
+                    }
+                }
+                None => errs.push("bad channel listing id".into()),
+            }
+        }
+        for r in l.remove.clone().unwrap_or_default() {
+            if let Some(lid) = rustygod_db::catalog::parse_gid(&r.0) {
+                if let Err(e) = rustygod_db::catalog_writes::delete_variant_listing(db, lid).await {
+                    errs.push(e.to_string());
+                }
+            } else {
+                errs.push("bad channel listing id".into());
+            }
+        }
+    }
+    errs
 }

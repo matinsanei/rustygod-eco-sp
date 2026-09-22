@@ -29829,13 +29829,6 @@ impl GenMutation {
 
     }
 
-    #[graphql(name = "productChannelListingUpdate")]
-    async fn product_channel_listing_update(&self, #[graphql(name = "id")] _arg_id: ID, #[graphql(name = "input")] _arg_input: ProductChannelListingUpdateInput) -> Option<ProductChannelListingUpdate> {
-
-        Some(ProductChannelListingUpdate { product: None, errors: vec![] })
-
-    }
-
     #[graphql(name = "productMediaCreate")]
     async fn product_media_create(&self, #[graphql(name = "input")] _arg_input: ProductMediaCreateInput) -> Option<ProductMediaCreate> {
 
@@ -29910,27 +29903,6 @@ impl GenMutation {
     async fn product_type_reorder_attributes(&self, #[graphql(name = "moves")] _arg_moves: Vec<ReorderInput>, #[graphql(name = "productTypeId")] _arg_product_type_id: ID, #[graphql(name = "type")] _arg_type: ProductAttributeType) -> Option<ProductTypeReorderAttributes> {
 
         Some(ProductTypeReorderAttributes { product_type: None, errors: vec![] })
-
-    }
-
-    #[graphql(name = "productVariantBulkCreate")]
-    async fn product_variant_bulk_create(&self, #[graphql(name = "errorPolicy")] _arg_error_policy: Option<ErrorPolicyEnum>, #[graphql(name = "product")] _arg_product: ID, #[graphql(name = "variants")] _arg_variants: Vec<ProductVariantBulkCreateInput>) -> Option<ProductVariantBulkCreate> {
-
-        Some(ProductVariantBulkCreate { product_variants: vec![], results: vec![], errors: vec![] })
-
-    }
-
-    #[graphql(name = "productVariantBulkUpdate")]
-    async fn product_variant_bulk_update(&self, #[graphql(name = "errorPolicy")] _arg_error_policy: Option<ErrorPolicyEnum>, #[graphql(name = "product")] _arg_product: ID, #[graphql(name = "variants")] _arg_variants: Vec<ProductVariantBulkUpdateInput>) -> Option<ProductVariantBulkUpdate> {
-
-        Some(ProductVariantBulkUpdate { results: vec![], errors: vec![] })
-
-    }
-
-    #[graphql(name = "productVariantBulkDelete")]
-    async fn product_variant_bulk_delete(&self, #[graphql(name = "ids")] _arg_ids: Option<Vec<ID>>, #[graphql(name = "skus")] _arg_skus: Option<Vec<String>>) -> Option<ProductVariantBulkDelete> {
-
-        Some(ProductVariantBulkDelete { errors: vec![] })
 
     }
 
