@@ -227,37 +227,85 @@ impl CommerceQuery {
         to_gen_shop(ctx).await
     }
 
+    /// Shipping zones with channels + warehouses (channel setup banner
+    /// coverage + zone pages). `channel` slug narrows to that channel.
+    async fn shipping_zones(
+        &self, ctx: &Context<'_>,
+        filter: Option<gen::ShippingZoneFilterInput>, channel: Option<String>,
+        before: Option<String>, after: Option<String>, first: Option<i32>, last: Option<i32>,
+    ) -> Result<Option<gen::ShippingZoneCountableConnection>> {
+        let _ = (filter, before, last);
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        use sea_orm::{ConnectionTrait, Statement};
+        let (sql, params): (String, Vec<sea_orm::Value>) = match channel {
+            Some(slug) => (
+                "SELECT z.id FROM shipping_shippingzone z JOIN shipping_shippingzone_channels zc ON zc.shippingzone_id = z.id \
+                 JOIN channel_channel c ON c.id = zc.channel_id WHERE c.slug = $1 ORDER BY z.id".into(),
+                vec![slug.into()]),
+            None => ("SELECT id FROM shipping_shippingzone ORDER BY id".into(), vec![]),
+        };
+        let rows = db.query_all(Statement::from_sql_and_values(sea_orm::DatabaseBackend::Postgres, sql, params))
+            .await.map_err(|e| Error::new(e.to_string()))?;
+        let ids: Vec<i32> = rows.into_iter().filter_map(|r| r.try_get::<i32>("", "id").ok()).collect();
+        let total = ids.len() as i32;
+        let off = after.and_then(|c| crate::common::decode_cursor(&c)).unwrap_or(0);
+        let lim = first.unwrap_or(100).clamp(1, 100) as usize;
+        let mut edges = vec![];
+        for zid in ids.into_iter().skip(off).take(lim) {
+            if let Some(z) = assemble_zone(db, zid).await.map_err(Error::new)? {
+                edges.push(gen::ShippingZoneCountableEdge { node: Some(z) });
+            }
+        }
+        Ok(Some(gen::ShippingZoneCountableConnection {
+            page_info: Some(crate::common::PageInfo { has_next_page: false, has_previous_page: off > 0, start_cursor: None, end_cursor: None }),
+            edges,
+            total_count: Some(total),
+        }))
+    }
+
+    /// Saleor `shippingZone(id)`.
+    async fn shipping_zone(&self, ctx: &Context<'_>, id: ID) -> Result<Option<gen::ShippingZone>> {
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let Some(zid) = rustygod_db::catalog::parse_gid(&id.0) else { return Ok(None) };
+        Ok(assemble_zone(db, zid).await.map_err(Error::new)?)
+    }
+
+    /// Dashboard channels list fetches FULL `...ChannelDetails` per channel
+    /// (warehouses drive the setup banner), so the list is fully assembled.
     async fn channels(&self, ctx: &Context<'_>) -> Result<Vec<gen::Channel>> {
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
-        // Slim select: channel_channel has INTERVAL columns
-        // (delete_expired_orders_after, checkout_ttl_before_releasing_funds)
-        // that SeaORM cannot decode into the entity's String fields.
         use sea_orm::{EntityTrait, QuerySelect};
         type Ch = rustygod_db::entities::channel_channel::Entity;
         use rustygod_db::entities::channel_channel::Column as ChCol;
-        let rows: Vec<(i32, String, String, bool, String, String, String)> = Ch::find()
-            .select_only()
-            .column(ChCol::Id).column(ChCol::Slug).column(ChCol::Name)
-            .column(ChCol::IsActive).column(ChCol::CurrencyCode)
-            .column(ChCol::DefaultCountry).column(ChCol::AllocationStrategy)
-            .into_tuple().all(db).await.map_err(|e| Error::new(e.to_string()))?;
-        Ok(rows.into_iter().map(|(id, slug, name, is_active, currency_code, default_country, allocation_strategy)| gen::Channel {
-            id: Some(ID(crate::common::gid("Channel", id))),
-            private_metadata: vec![],
-            metadata: vec![],
-            slug: Some(slug),
-            name: Some(name),
-            is_active: Some(is_active),
-            currency_code: Some(currency_code),
-            has_orders: None,
-            default_country: Some(GqlCountryDisplay { code: default_country.clone(), country: default_country }),
-            warehouses: vec![],
-            stock_settings: Some(GqlStockSettings { allocation_strategy }),
-            order_settings: None,
-            checkout_settings: None,
-            payment_settings: None,
-            tax_configuration: None,
-        }).collect())
+        let ids: Vec<i32> = Ch::find()
+            .select_only().column(ChCol::Id)
+            .into_tuple::<i32>().all(db).await.map_err(|e| Error::new(e.to_string()))?;
+        let mut out = vec![];
+        for id in ids {
+            if let Some(c) = assemble_channel(db, id).await.map_err(|e| Error::new(e.to_string()))? {
+                out.push(c);
+            }
+        }
+        Ok(out)
+    }
+
+    /// Saleor `channel(id, slug)` — details page (was a None stub → the
+    /// dashboard rendered its NotFound page, including `?action=setup`).
+    async fn channel(&self, ctx: &Context<'_>, id: Option<ID>, slug: Option<String>) -> Result<Option<gen::Channel>> {
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let cid: Option<i32> = if let Some(i) = id {
+            rustygod_db::catalog::parse_gid(&i.0)
+        } else if let Some(s) = slug {
+            use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QuerySelect};
+            rustygod_db::entities::channel_channel::Entity::find()
+                .select_only().column(rustygod_db::entities::channel_channel::Column::Id)
+                .filter(rustygod_db::entities::channel_channel::Column::Slug.eq(s))
+                .into_tuple::<i32>().one(db).await.map_err(|e| Error::new(e.to_string()))?
+        } else { None };
+        match cid {
+            Some(id) => Ok(assemble_channel(db, id).await.map_err(|e| Error::new(e.to_string()))?),
+            None => Ok(None),
+        }
     }
 
     async fn warehouses(
@@ -489,8 +537,84 @@ pub struct GqlShopSettingsUpdate {
 #[derive(Default)]
 pub struct CommerceMutation;
 
+/// Raw-SQL execute helper for zone membership edits (table-driven, no entities).
+async fn zexec(
+    db: &impl sea_orm::ConnectionTrait,
+    sql: String,
+    params: Vec<sea_orm::Value>,
+) -> Result<sea_orm::ExecResult, sea_orm::DbErr> {
+    db.execute(sea_orm::Statement::from_sql_and_values(sea_orm::DatabaseBackend::Postgres, sql, params)).await
+}
+
 #[Object]
 impl CommerceMutation {
+    /// Dashboard shipping-zone editor (channel setup completion path):
+    /// rename/describe/retarget countries + add/remove channels + warehouses.
+    /// Methods/rates have their own mutations; only membership edits land here.
+    async fn shipping_zone_update(
+        &self, ctx: &Context<'_>, id: ID, input: gen::ShippingZoneUpdateInput,
+    ) -> Result<gen::ShippingZoneUpdate> {
+        let bearer = ctx.data_opt::<crate::context::Bearer>().map(|b| b.0.as_str().to_string())
+            .or_else(|| ctx.data_opt::<GqlContext>().and_then(|g| g.bearer.clone()));
+        if bearer.is_none() { return Err(Error::new("authentication required")); }
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let serr = |m: String| gen::ShippingError { field: None, message: Some(m), code: None, channels: vec![] };
+        let Some(zid) = rustygod_db::catalog::parse_gid(&id.0) else {
+            return Ok(gen::ShippingZoneUpdate { errors: vec![serr("bad zone id".into())], shipping_zone: None });
+        };
+        use sea_orm::TransactionTrait;
+        let txn = db.begin().await.map_err(|e| Error::new(e.to_string()))?;
+        // scalar edits
+        let mut params: Vec<sea_orm::Value> = vec![zid.into()];
+        let mut sets: Vec<String> = vec![];
+        let mut push = |col: &str, v: sea_orm::Value| {
+            params.push(v);
+            sets.push(format!("{col} = ${}", params.len()));
+        };
+        if let Some(v) = input.name.as_deref() { push("name", v.to_string().into()); }
+        if let Some(v) = input.description.as_deref() { push("description", v.to_string().into()); }
+        if let Some(v) = input.countries.as_ref() { push("countries", v.join(",").into()); }
+        if let Some(v) = input.default { push("\"default\"", v.into()); }
+        if !sets.is_empty() {
+            if let Err(e) = zexec(&txn, format!("UPDATE shipping_shippingzone SET {} WHERE id = $1", sets.join(", ")), params).await {
+                return Ok(gen::ShippingZoneUpdate { errors: vec![serr(e.to_string())], shipping_zone: None });
+            }
+        }
+        // membership edits (dashboard sends globals; channels are int pks)
+        let ch_ids = |ids: &Option<Vec<ID>>| ids.as_ref().map(|v| v.iter().filter_map(|i| rustygod_db::catalog::parse_gid(&i.0)).collect::<Vec<_>>()).unwrap_or_default();
+        for cid in ch_ids(&input.add_channels) {
+            if let Err(e) = zexec(&txn, "INSERT INTO shipping_shippingzone_channels (shippingzone_id, channel_id) VALUES ($1, $2) ON CONFLICT DO NOTHING".into(),
+                vec![zid.into(), cid.into()]).await {
+                return Ok(gen::ShippingZoneUpdate { errors: vec![serr(e.to_string())], shipping_zone: None });
+            }
+        }
+        for cid in ch_ids(&input.remove_channels) {
+            if let Err(e) = zexec(&txn, "DELETE FROM shipping_shippingzone_channels WHERE shippingzone_id = $1 AND channel_id = $2".into(),
+                vec![zid.into(), cid.into()]).await {
+                return Ok(gen::ShippingZoneUpdate { errors: vec![serr(e.to_string())], shipping_zone: None });
+            }
+        }
+        // warehouses are uuid pks
+        let wh_ids = |ids: &Option<Vec<ID>>| ids.as_ref().map(|v| v.iter().filter_map(|i| crate::common::parse_uuid_gid(&i.0).map(|u| u.to_string())).collect::<Vec<_>>()).unwrap_or_default();
+        for wid in wh_ids(&input.add_warehouses) {
+            if let Err(e) = zexec(&txn, "INSERT INTO warehouse_warehouse_shipping_zones (shippingzone_id, warehouse_id) VALUES ($1, $2::uuid) ON CONFLICT DO NOTHING".into(),
+                vec![zid.into(), wid.into()]).await {
+                return Ok(gen::ShippingZoneUpdate { errors: vec![serr(e.to_string())], shipping_zone: None });
+            }
+        }
+        for wid in wh_ids(&input.remove_warehouses) {
+            if let Err(e) = zexec(&txn, "DELETE FROM warehouse_warehouse_shipping_zones WHERE shippingzone_id = $1 AND warehouse_id = $2::uuid".into(),
+                vec![zid.into(), wid.into()]).await {
+                return Ok(gen::ShippingZoneUpdate { errors: vec![serr(e.to_string())], shipping_zone: None });
+            }
+        }
+        txn.commit().await.map_err(|e| Error::new(e.to_string()))?;
+        match assemble_zone(db, zid).await {
+            Ok(z) => Ok(gen::ShippingZoneUpdate { errors: vec![], shipping_zone: z }),
+            Err(e) => Ok(gen::ShippingZoneUpdate { errors: vec![serr(e)], shipping_zone: None }),
+        }
+    }
+
     /// Dashboard shop settings + navigation pins (`ShopSettingsUpdate`,
     /// `UpdateShopNavigationPins`, `OrderSettingsUpdate`,
     /// `UpdateDefaultWeightUnit`): Saleor's `ShopSettingsInput` in,
@@ -623,5 +747,229 @@ async fn assemble_promotion(
         start_date: prow.try_get::<Option<chrono::DateTime<chrono::Utc>>>("", "start_date").ok().flatten(),
         end_date: prow.try_get::<Option<chrono::DateTime<chrono::Utc>>>("", "end_date").ok().flatten(),
         rules,
+    }))
+}
+
+/// Full channel assembly (list + details). INTERVAL columns are read via
+/// raw SQL with Saleor's own unit conversions (Minute scalar as-is,
+/// Day = `.days`, Hour = `.seconds // 3600` — see channel/types.py).
+async fn assemble_channel(
+    db: &sea_orm::DatabaseConnection,
+    cid: i32,
+) -> Result<Option<gen::Channel>, String> {
+    use sea_orm::{ConnectionTrait, Statement};
+    let rows = db.query_all(Statement::from_sql_and_values(
+        sea_orm::DatabaseBackend::Postgres,
+        "SELECT id, slug, name, is_active, currency_code, default_country, \
+                allocation_strategy, metadata, private_metadata, \
+                automatically_confirm_all_new_orders, automatically_fulfill_non_shippable_gift_card, \
+                expire_orders_after, order_mark_as_paid_strategy, \
+                (EXTRACT(EPOCH FROM delete_expired_orders_after)/86400)::int AS del_exp_days, \
+                allow_unpaid_orders, default_transaction_flow_strategy, release_funds_for_expired_checkouts, \
+                (EXTRACT(EPOCH FROM checkout_ttl_before_releasing_funds)/3600)::int AS ttl_hours, \
+                automatically_complete_fully_paid_checkouts, automatic_completion_delay, \
+                automatic_completion_cut_off_date, allow_legacy_gift_card_use, \
+                EXISTS(SELECT 1 FROM order_order o WHERE o.channel_id = channel_channel.id) AS has_orders \
+         FROM channel_channel WHERE id = $1",
+        [cid.into()],
+    )).await.map_err(|e| e.to_string())?;
+    let Some(r) = rows.into_iter().next() else { return Ok(None) };
+    let get = |c: &str| r.try_get::<String>("", c).ok();
+    let getb = |c: &str| r.try_get::<bool>("", c).ok();
+    let geti = |c: &str| r.try_get::<Option<i32>>("", c).ok().flatten();
+    let getdt = |c: &str| r.try_get::<Option<chrono::DateTime<chrono::Utc>>>("", c).ok().flatten();
+    let meta = |c: &str| {
+        r.try_get::<serde_json::Value>("", c).ok()
+            .map(|v| crate::common::json_to_metadata_items(&v)).unwrap_or_default()
+    };
+    let dc = get("default_country").unwrap_or_else(|| "US".into());
+    // warehouses via the ChannelWarehouse through-table (uuid ids)
+    let mut warehouses = vec![];
+    let wrows = db.query_all(Statement::from_sql_and_values(
+        sea_orm::DatabaseBackend::Postgres,
+        "SELECT w.id::text AS id, w.name FROM warehouse_channelwarehouse cw \
+         JOIN warehouse_warehouse w ON w.id::text = cw.warehouse_id::text \
+         WHERE cw.channel_id = $1 ORDER BY cw.sort_order, w.name",
+        [cid.into()],
+    )).await.map_err(|e| e.to_string())?;
+    for w in wrows {
+        if let (Ok(wid), Ok(wname)) = (w.try_get::<String>("", "id"), w.try_get::<String>("", "name")) {
+            let mut wh = crate::metadata::lit_warehouse(crate::common::gid("Warehouse", &wid), vec![], vec![]);
+            wh.name = Some(wname);
+            warehouses.push(wh);
+        }
+    }
+    // tax configuration row for this channel (one-to-one in practice)
+    let trows = db.query_all(Statement::from_sql_and_values(
+        sea_orm::DatabaseBackend::Postgres,
+        "SELECT id, charge_taxes, tax_calculation_strategy, display_gross_prices, prices_entered_with_tax, metadata, private_metadata \
+         FROM tax_taxconfiguration WHERE channel_id = $1 LIMIT 1",
+        [cid.into()],
+    )).await.map_err(|e| e.to_string())?;
+    let tax_configuration = trows.into_iter().next().map(|t| {
+        let tid: i32 = t.try_get::<i32>("", "id").unwrap_or(0);
+        gen::TaxConfiguration {
+            id: Some(ID(crate::common::gid("TaxConfiguration", tid))),
+            private_metadata: t.try_get::<serde_json::Value>("", "private_metadata").ok()
+                .map(|v| crate::common::json_to_metadata_items(&v)).unwrap_or_default(),
+            metadata: t.try_get::<serde_json::Value>("", "metadata").ok()
+                .map(|v| crate::common::json_to_metadata_items(&v)).unwrap_or_default(),
+            channel: None,
+            charge_taxes: t.try_get::<bool>("", "charge_taxes").ok(),
+            tax_calculation_strategy: t.try_get::<Option<String>>("", "tax_calculation_strategy").ok().flatten(),
+            display_gross_prices: t.try_get::<bool>("", "display_gross_prices").ok(),
+            prices_entered_with_tax: t.try_get::<bool>("", "prices_entered_with_tax").ok(),
+            countries: vec![],
+            tax_app_id: None,
+        }
+    });
+    Ok(Some(gen::Channel {
+        id: Some(ID(crate::common::gid("Channel", cid))),
+        private_metadata: meta("private_metadata"),
+        metadata: meta("metadata"),
+        slug: get("slug"),
+        name: get("name"),
+        is_active: getb("is_active"),
+        currency_code: get("currency_code"),
+        has_orders: r.try_get::<bool>("", "has_orders").ok(),
+        default_country: Some(GqlCountryDisplay { code: dc.clone(), country: dc }),
+        warehouses,
+        stock_settings: Some(GqlStockSettings { allocation_strategy: get("allocation_strategy").unwrap_or_else(|| "PRIORITIZE_SORTING_ORDER".into()) }),
+        order_settings: Some(gen::OrderSettings {
+            automatically_confirm_all_new_orders: getb("automatically_confirm_all_new_orders"),
+            automatically_fulfill_non_shippable_gift_card: getb("automatically_fulfill_non_shippable_gift_card"),
+            expire_orders_after: geti("expire_orders_after"),
+            mark_as_paid_strategy: get("order_mark_as_paid_strategy"),
+            delete_expired_orders_after: geti("del_exp_days"),
+            allow_unpaid_orders: getb("allow_unpaid_orders"),
+        }),
+        checkout_settings: Some(gen::CheckoutSettings {
+            automatically_complete_fully_paid_checkouts: getb("automatically_complete_fully_paid_checkouts"),
+            automatic_completion_delay: geti("automatic_completion_delay"),
+            automatic_completion_cut_off_date: getdt("automatic_completion_cut_off_date"),
+            allow_legacy_gift_card_use: getb("allow_legacy_gift_card_use"),
+        }),
+        payment_settings: Some(gen::PaymentSettings {
+            default_transaction_flow_strategy: get("default_transaction_flow_strategy"),
+            release_funds_for_expired_checkouts: getb("release_funds_for_expired_checkouts"),
+            checkout_ttl_before_releasing_funds: geti("ttl_hours"),
+        }),
+        tax_configuration,
+    }))
+}
+
+/// Full shipping-zone assembly (setup banner + zone pages). Countries are a
+/// comma-separated column upstream (`US`, `AD,AL,...`) — split, not JSON.
+async fn assemble_zone(
+    db: &sea_orm::DatabaseConnection,
+    zid: i32,
+) -> Result<Option<gen::ShippingZone>, String> {
+    use sea_orm::{ConnectionTrait, Statement};
+    use std::collections::HashMap;
+    let q = |sql: String, params: Vec<sea_orm::Value>| async move {
+        db.query_all(Statement::from_sql_and_values(sea_orm::DatabaseBackend::Postgres, sql, params)).await
+    };
+    let zrows = q("SELECT id, name, description, countries, \"default\", metadata, private_metadata FROM shipping_shippingzone WHERE id = $1".into(),
+        vec![zid.into()]).await.map_err(|e| e.to_string())?;
+    let Some(z) = zrows.into_iter().next() else { return Ok(None) };
+    let meta = |c: &str| {
+        z.try_get::<serde_json::Value>("", c).ok()
+            .map(|v| crate::common::json_to_metadata_items(&v)).unwrap_or_default()
+    };
+    let countries: Vec<crate::common::GqlCountryDisplay> = z
+        .try_get::<String>("", "countries").unwrap_or_default()
+        .split(',').map(|s| s.trim()).filter(|s| !s.is_empty())
+        .map(|code| crate::common::GqlCountryDisplay { code: code.to_string(), country: code.to_string() })
+        .collect();
+    // channels of this zone
+    let mut channels: Vec<Box<gen::Channel>> = vec![];
+    for r in q("SELECT c.id, c.slug, c.name, c.currency_code FROM shipping_shippingzone_channels zc JOIN channel_channel c ON c.id = zc.channel_id WHERE zc.shippingzone_id = $1".into(),
+        vec![zid.into()]).await.map_err(|e| e.to_string())? {
+        if let Ok(cid) = r.try_get::<i32>("", "id") {
+            let mut c = crate::metadata::lit_channel(crate::common::gid("Channel", cid), vec![], vec![]);
+            c.slug = r.try_get::<String>("", "slug").ok();
+            c.name = r.try_get::<String>("", "name").ok();
+            c.currency_code = r.try_get::<String>("", "currency_code").ok();
+            channels.push(Box::new(c));
+        }
+    }
+    // warehouses of this zone
+    let mut warehouses: Vec<Box<gen::Warehouse>> = vec![];
+    for r in q("SELECT w.id::text AS id, w.name FROM warehouse_warehouse_shipping_zones wz JOIN warehouse_warehouse w ON w.id = wz.warehouse_id WHERE wz.shippingzone_id = $1".into(),
+        vec![zid.into()]).await.map_err(|e| e.to_string())? {
+        if let (Ok(wid), Ok(wname)) = (r.try_get::<String>("", "id"), r.try_get::<String>("", "name")) {
+            let mut w = crate::metadata::lit_warehouse(crate::common::gid("Warehouse", &wid), vec![], vec![]);
+            w.name = Some(wname);
+            warehouses.push(Box::new(w));
+        }
+    }
+    // methods with channel listings (prices)
+    let mrows = q("SELECT m.id, m.name, m.description::text AS description, m.type, m.tax_class_id, t.name AS tax_name FROM shipping_shippingmethod m LEFT JOIN tax_taxclass t ON t.id = m.tax_class_id WHERE m.shipping_zone_id = $1 ORDER BY m.id".into(),
+        vec![zid.into()]).await.map_err(|e| e.to_string())?;
+    let mids: Vec<i32> = mrows.iter().filter_map(|r| r.try_get::<i32>("", "id").ok()).collect();
+    let mut listings: HashMap<i32, Vec<gen::ShippingMethodChannelListing>> = HashMap::new();
+    if !mids.is_empty() {
+        let list = (1..=mids.len()).map(|i| format!("${i}")).collect::<Vec<_>>().join(", ");
+        for r in q(format!("SELECT l.id, l.shipping_method_id, l.channel_id, l.price_amount, l.minimum_order_price_amount, l.maximum_order_price_amount, l.currency, c.slug, c.name AS cname FROM shipping_shippingmethodchannellisting l JOIN channel_channel c ON c.id = l.channel_id WHERE l.shipping_method_id IN ({list})"),
+            mids.iter().map(|i| (*i).into()).collect()).await.map_err(|e| e.to_string())? {
+            if let (Ok(_), Ok(mid), Ok(ch)) = (r.try_get::<i32>("", "id"), r.try_get::<i32>("", "shipping_method_id"), r.try_get::<i32>("", "channel_id")) {
+                let cur = r.try_get::<String>("", "currency").unwrap_or_else(|_| "USD".into());
+                let m = |a: Option<rust_decimal::Decimal>| a.map(|v| crate::common::Money { amount: v.to_string(), currency: cur.clone(), fraction_digits: None });
+                let mut c = crate::metadata::lit_channel(crate::common::gid("Channel", ch), vec![], vec![]);
+                c.slug = r.try_get::<String>("", "slug").ok();
+                c.name = r.try_get::<String>("", "cname").ok();
+                c.currency_code = Some(cur.clone());
+                listings.entry(mid).or_default().push(gen::ShippingMethodChannelListing {
+                    id: r.try_get::<i32>("", "id").ok().map(|lid| ID(crate::common::gid("ShippingMethodChannelListing", lid))),
+                    channel: Some(Box::new(c)),
+                    maximum_order_price: m(r.try_get::<Option<rust_decimal::Decimal>>("", "maximum_order_price_amount").ok().flatten()),
+                    minimum_order_price: m(r.try_get::<Option<rust_decimal::Decimal>>("", "minimum_order_price_amount").ok().flatten()),
+                    price: m(r.try_get::<Option<rust_decimal::Decimal>>("", "price_amount").ok().flatten()),
+                });
+            }
+        }
+    }
+    let mut methods = vec![];
+    let mut mutplo: Vec<(rust_decimal::Decimal, String)> = vec![];
+    for m in mrows {
+        let Ok(mid) = m.try_get::<i32>("", "id") else { continue };
+        let mut sm = crate::metadata::lit_shipping_method_type(crate::common::gid("ShippingMethod", mid), vec![], vec![]);
+        sm.name = m.try_get::<String>("", "name").ok();
+        sm.description = m.try_get::<Option<String>>("", "description").ok().flatten().map(gen::GenJSONString);
+        sm.r#type = m.try_get::<String>("", "type").ok();
+        if let Some(tn) = m.try_get::<Option<String>>("", "tax_name").ok().flatten() {
+            let mut tc = crate::metadata::lit_tax_class(crate::common::gid("TaxClass", 0), vec![], vec![]);
+            tc.name = Some(tn);
+            sm.tax_class = Some(tc);
+        }
+        sm.channel_listings = listings.get(&mid).cloned().unwrap_or_default();
+        for l in &sm.channel_listings {
+            if let Some(p) = l.price.as_ref().and_then(|x| x.amount.parse::<rust_decimal::Decimal>().ok()) {
+                mutplo.push((p, l.price.as_ref().map(|x| x.currency.clone()).unwrap_or_else(|| "USD".into())));
+            }
+        }
+        methods.push(sm);
+    }
+    let price_range = if mutplo.is_empty() { None } else {
+        mutplo.sort_by(|a, b| a.0.cmp(&b.0));
+        let (lo, lc) = mutplo.first().cloned().unwrap();
+        let (hi, _) = mutplo.last().cloned().unwrap();
+        Some(gen::MoneyRange {
+            start: Some(crate::common::Money { amount: lo.to_string(), currency: lc.clone(), fraction_digits: None }),
+            stop: Some(crate::common::Money { amount: hi.to_string(), currency: lc, fraction_digits: None }),
+        })
+    };
+    Ok(Some(gen::ShippingZone {
+        id: Some(ID(crate::common::gid("ShippingZone", zid))),
+        private_metadata: meta("private_metadata"),
+        metadata: meta("metadata"),
+        name: z.try_get::<String>("", "name").ok(),
+        default: z.try_get::<bool>("", "default").ok(),
+        price_range,
+        countries,
+        shipping_methods: methods,
+        warehouses,
+        channels,
+        description: z.try_get::<String>("", "description").ok(),
     }))
 }

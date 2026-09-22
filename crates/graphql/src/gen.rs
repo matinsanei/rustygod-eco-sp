@@ -29309,20 +29309,6 @@ impl GenQuery {
 
     }
 
-    #[graphql(name = "shippingZone")]
-    async fn shipping_zone(&self, #[graphql(name = "id")] _arg_id: ID, #[graphql(name = "channel")] _arg_channel: Option<String>) -> Option<ShippingZone> {
-
-        None
-
-    }
-
-    #[graphql(name = "shippingZones")]
-    async fn shipping_zones(&self, #[graphql(name = "filter")] _arg_filter: Option<ShippingZoneFilterInput>, #[graphql(name = "channel")] _arg_channel: Option<String>, #[graphql(name = "before")] _arg_before: Option<String>, #[graphql(name = "after")] _arg_after: Option<String>, #[graphql(name = "first")] _arg_first: Option<i32>, #[graphql(name = "last")] _arg_last: Option<i32>) -> Option<ShippingZoneCountableConnection> {
-
-        Some(ShippingZoneCountableConnection { total_count: None, edges: vec![], page_info: Some(PageInfo { has_next_page: false, has_previous_page: false, start_cursor: None, end_cursor: None }) })
-
-    }
-
     #[graphql(name = "categories")]
     async fn categories(&self, #[graphql(name = "filter")] _arg_filter: Option<CategoryFilterInput>, #[graphql(name = "where")] _arg_where: Option<CategoryWhereInput>, #[graphql(name = "sortBy")] _arg_sort_by: Option<CategorySortingInput>, #[graphql(name = "level")] _arg_level: Option<i32>, #[graphql(name = "before")] _arg_before: Option<String>, #[graphql(name = "after")] _arg_after: Option<String>, #[graphql(name = "first")] _arg_first: Option<i32>, #[graphql(name = "last")] _arg_last: Option<i32>) -> Option<CategoryCountableConnection> {
 
@@ -29481,13 +29467,6 @@ impl GenQuery {
     async fn checkouts(&self, #[graphql(name = "sortBy")] _arg_sort_by: Option<CheckoutSortingInput>, #[graphql(name = "filter")] _arg_filter: Option<CheckoutFilterInput>, #[graphql(name = "channel")] _arg_channel: Option<String>, #[graphql(name = "before")] _arg_before: Option<String>, #[graphql(name = "after")] _arg_after: Option<String>, #[graphql(name = "first")] _arg_first: Option<i32>, #[graphql(name = "last")] _arg_last: Option<i32>) -> Option<CheckoutCountableConnection> {
 
         Some(CheckoutCountableConnection { edges: vec![], page_info: Some(PageInfo { has_next_page: false, has_previous_page: false, start_cursor: None, end_cursor: None }) })
-
-    }
-
-    #[graphql(name = "channel")]
-    async fn channel(&self, #[graphql(name = "id")] _arg_id: Option<ID>, #[graphql(name = "slug")] _arg_slug: Option<String>) -> Option<Channel> {
-
-        None
 
     }
 
@@ -29777,13 +29756,6 @@ impl GenMutation {
     async fn shipping_zone_bulk_delete(&self, #[graphql(name = "ids")] _arg_ids: Vec<ID>) -> Option<ShippingZoneBulkDelete> {
 
         Some(ShippingZoneBulkDelete { errors: vec![] })
-
-    }
-
-    #[graphql(name = "shippingZoneUpdate")]
-    async fn shipping_zone_update(&self, #[graphql(name = "id")] _arg_id: ID, #[graphql(name = "input")] _arg_input: ShippingZoneUpdateInput) -> Option<ShippingZoneUpdate> {
-
-        Some(ShippingZoneUpdate { errors: vec![], shipping_zone: None })
 
     }
 
