@@ -64,8 +64,12 @@ cancel restores stock).
 ⚠️ E4 (unlisted variant errors, code is generic), E6 (multi-stock allocate,
 no split-shipment flow), E9 (3DS challenge/rehearsal loop over
 RPC+callback; no real PSP yet).
-❌ E2 (zone validation), E3 (guest→user link), E10 (auto-complete
-task), E11 (guest conversion).
+❌ E2 (zone validation), E10 (auto-complete
+task).
+✅ E3/E11 (guest→user link + address carry) — landed after this audit was
+written; proven by `db/tests/contract_guest.rs` (2 tests, green on live rows:
+guest email → order.user_id link, authenticated checkout carries user +
+billing/shipping addresses into the order).
 
 ## §4 Reconciliation — `ReconcileOrder` RPC, 9 checks, all green on fresh orders
 
@@ -79,8 +83,8 @@ decided ≤ moved, success grants linked).
 
 1. **No checkout auto-complete** (E10) — sweeper clears reservations +
    deliveries, but expired checkouts linger (neither completed nor deleted).
-2. **Guest→user + address linking** (E3/E11) — completion doesn't attach identity/addresses.
-3. **Real PSP** — engine (dedup/async/3DS) shipped; no Stripe/Adyen HTTP, so no live 3DS settlement.
+2. **Real PSP** — engine (dedup/async/3DS) shipped; no Stripe/Adyen HTTP, so no live 3DS settlement.
+   (E3/E11 guest→user linking was listed here by mistake — implemented + tested, see above.)
 
 ## How to re-run this audit
 
