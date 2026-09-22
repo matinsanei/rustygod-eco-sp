@@ -102,13 +102,12 @@ The stock Saleor Dashboard runs against `/graphql` with zero schema errors
   (delegated to Saleor's own `manage.py` — DDL and mock data are never
   re-guessed).
  - **Known gaps (honest list, Sep 2026 — see AUDIT.md §1 for the full matrix):**
-   - No real PSP calls (engine only: no Stripe/Adyen HTTP) — the #1 blocker
-     for live money.
+   - Stripe is wired (`stripe` gateway, `STRIPE_SECRET_KEY`) but untested
+     against live Stripe (mock-server tests only) — Adyen still missing.
    - Still ignored sub-filters: price/attribute/stock/date/metadata, order
      AND/OR nesting, payment-state pseudo-filters; pagination works.
-   - Multipart upload deferred, no translations wiring, CSV intentionally
-     last, many of the 244 mutations still validated stubs (metadata,
-     product/variant writes, and order actions are being wired first).
+   - Multipart upload deferred, CSV intentionally last, attribute writes
+     accepted-ignored, many non-catalog mutations still validated stubs.
    - `extensions/installed` is correctly empty on a fresh `populatedb` (0 apps).
    - Done and verified, despite what older docs may say: guest→user link +
      address carry (E3/E11, `contract_guest.rs` green), checkout reservation
@@ -119,7 +118,9 @@ The stock Saleor Dashboard runs against `/graphql` with zero schema errors
      `/media/` serving, detail roots (product/category/collection/user).
  - **Priority order:** ① head-to-head benchmark vs Saleor — DONE 2026-09-22
    (≈20× throughput, ≈19× latency on catalog reads, BENCHMARK.md) →
-   ② server-side filtering — DONE 2026-09-22 → ③ real PSP (current).
+   ② server-side filtering — DONE 2026-09-22 → ③ real PSP — DONE 2026-09-22
+   (Stripe PaymentIntents + 3DS redirect, `stripe` gateway) → ④ catalog
+   writes + metadata + translations — DONE 2026-09-22.
   Tracked in [BUGS.md](BUGS.md) / [STATUS.md](STATUS.md) / [AUDIT.md](AUDIT.md).
 
 ## Zero-friction migration

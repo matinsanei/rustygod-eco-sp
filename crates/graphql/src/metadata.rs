@@ -195,7 +195,7 @@ impl MetadataMutation {
     }
 }
 
-fn lit_product(id: String, metadata: Vec<crate::common::MetadataItem>, private_metadata: Vec<crate::common::MetadataItem>) -> gen::Product {
+pub(crate) fn lit_product(id: String, metadata: Vec<crate::common::MetadataItem>, private_metadata: Vec<crate::common::MetadataItem>) -> gen::Product {
     gen::Product {
         id: Some(ID(id)),
         private_metadata,
@@ -271,7 +271,7 @@ pub(crate) fn lit_collection(id: String, metadata: Vec<crate::common::MetadataIt
     }
 }
 
-fn lit_product_type(id: String, metadata: Vec<crate::common::MetadataItem>, private_metadata: Vec<crate::common::MetadataItem>) -> gen::ProductType {
+pub(crate) fn lit_product_type(id: String, metadata: Vec<crate::common::MetadataItem>, private_metadata: Vec<crate::common::MetadataItem>) -> gen::ProductType {
     gen::ProductType {
         id: Some(ID(id)),
         private_metadata,
@@ -288,7 +288,7 @@ fn lit_product_type(id: String, metadata: Vec<crate::common::MetadataItem>, priv
     }
 }
 
-fn lit_product_media(id: String, metadata: Vec<crate::common::MetadataItem>, private_metadata: Vec<crate::common::MetadataItem>) -> gen::ProductMedia {
+pub(crate) fn lit_product_media(id: String, metadata: Vec<crate::common::MetadataItem>, private_metadata: Vec<crate::common::MetadataItem>) -> gen::ProductMedia {
     gen::ProductMedia {
         id: Some(ID(id)),
         r#type: None,
@@ -300,7 +300,7 @@ fn lit_product_media(id: String, metadata: Vec<crate::common::MetadataItem>, pri
     }
 }
 
-fn lit_attribute(id: String, metadata: Vec<crate::common::MetadataItem>, private_metadata: Vec<crate::common::MetadataItem>) -> gen::Attribute {
+pub(crate) fn lit_attribute(id: String, metadata: Vec<crate::common::MetadataItem>, private_metadata: Vec<crate::common::MetadataItem>) -> gen::Attribute {
     gen::Attribute {
         id: Some(ID(id)),
         r#type: None,
@@ -321,7 +321,7 @@ fn lit_attribute(id: String, metadata: Vec<crate::common::MetadataItem>, private
     }
 }
 
-fn lit_user(id: String, metadata: Vec<crate::common::MetadataItem>, private_metadata: Vec<crate::common::MetadataItem>) -> gen::User {
+pub(crate) fn lit_user(id: String, metadata: Vec<crate::common::MetadataItem>, private_metadata: Vec<crate::common::MetadataItem>) -> gen::User {
     gen::User {
         id: Some(ID(id)),
         private_metadata,
@@ -348,7 +348,7 @@ fn lit_user(id: String, metadata: Vec<crate::common::MetadataItem>, private_meta
     }
 }
 
-fn lit_page(id: String, metadata: Vec<crate::common::MetadataItem>, private_metadata: Vec<crate::common::MetadataItem>) -> gen::Page {
+pub(crate) fn lit_page(id: String, metadata: Vec<crate::common::MetadataItem>, private_metadata: Vec<crate::common::MetadataItem>) -> gen::Page {
     gen::Page {
         id: Some(ID(id)),
         private_metadata,
@@ -365,7 +365,7 @@ fn lit_page(id: String, metadata: Vec<crate::common::MetadataItem>, private_meta
     }
 }
 
-fn lit_page_type(id: String, metadata: Vec<crate::common::MetadataItem>, private_metadata: Vec<crate::common::MetadataItem>) -> gen::PageType {
+pub(crate) fn lit_page_type(id: String, metadata: Vec<crate::common::MetadataItem>, private_metadata: Vec<crate::common::MetadataItem>) -> gen::PageType {
     gen::PageType {
         id: Some(ID(id)),
         private_metadata,
@@ -377,7 +377,7 @@ fn lit_page_type(id: String, metadata: Vec<crate::common::MetadataItem>, private
     }
 }
 
-fn lit_menu(id: String, metadata: Vec<crate::common::MetadataItem>, private_metadata: Vec<crate::common::MetadataItem>) -> gen::Menu {
+pub(crate) fn lit_menu(id: String, metadata: Vec<crate::common::MetadataItem>, private_metadata: Vec<crate::common::MetadataItem>) -> gen::Menu {
     gen::Menu {
         id: Some(ID(id)),
         private_metadata,
@@ -387,7 +387,7 @@ fn lit_menu(id: String, metadata: Vec<crate::common::MetadataItem>, private_meta
     }
 }
 
-fn lit_menu_item(id: String, metadata: Vec<crate::common::MetadataItem>, private_metadata: Vec<crate::common::MetadataItem>) -> gen::MenuItem {
+pub(crate) fn lit_menu_item(id: String, metadata: Vec<crate::common::MetadataItem>, private_metadata: Vec<crate::common::MetadataItem>) -> gen::MenuItem {
     gen::MenuItem {
         id: Some(ID(id)),
         private_metadata,
@@ -403,7 +403,7 @@ fn lit_menu_item(id: String, metadata: Vec<crate::common::MetadataItem>, private
     }
 }
 
-fn lit_voucher(id: String, metadata: Vec<crate::common::MetadataItem>, private_metadata: Vec<crate::common::MetadataItem>) -> gen::Voucher {
+pub(crate) fn lit_voucher(id: String, metadata: Vec<crate::common::MetadataItem>, private_metadata: Vec<crate::common::MetadataItem>) -> gen::Voucher {
     gen::Voucher {
         id: Some(ID(id)),
         r#type: None,
@@ -426,7 +426,7 @@ fn lit_voucher(id: String, metadata: Vec<crate::common::MetadataItem>, private_m
     }
 }
 
-fn lit_warehouse(id: String, metadata: Vec<crate::common::MetadataItem>, private_metadata: Vec<crate::common::MetadataItem>) -> gen::Warehouse {
+pub(crate) fn lit_warehouse(id: String, metadata: Vec<crate::common::MetadataItem>, private_metadata: Vec<crate::common::MetadataItem>) -> gen::Warehouse {
     gen::Warehouse {
         id: Some(ID(id)),
         private_metadata,
@@ -440,7 +440,7 @@ fn lit_warehouse(id: String, metadata: Vec<crate::common::MetadataItem>, private
     }
 }
 
-fn lit_shipping_method(id: String, metadata: Vec<crate::common::MetadataItem>, private_metadata: Vec<crate::common::MetadataItem>) -> gen::ShippingMethod {
+pub(crate) fn lit_shipping_method(id: String, metadata: Vec<crate::common::MetadataItem>, private_metadata: Vec<crate::common::MetadataItem>) -> gen::ShippingMethod {
     gen::ShippingMethod {
         id: Some(ID(id)),
         private_metadata,
@@ -452,7 +452,7 @@ fn lit_shipping_method(id: String, metadata: Vec<crate::common::MetadataItem>, p
     }
 }
 
-fn lit_shipping_zone(id: String, metadata: Vec<crate::common::MetadataItem>, private_metadata: Vec<crate::common::MetadataItem>) -> gen::ShippingZone {
+pub(crate) fn lit_shipping_zone(id: String, metadata: Vec<crate::common::MetadataItem>, private_metadata: Vec<crate::common::MetadataItem>) -> gen::ShippingZone {
     gen::ShippingZone {
         id: Some(ID(id)),
         private_metadata,
@@ -468,7 +468,7 @@ fn lit_shipping_zone(id: String, metadata: Vec<crate::common::MetadataItem>, pri
     }
 }
 
-fn lit_tax_class(id: String, metadata: Vec<crate::common::MetadataItem>, private_metadata: Vec<crate::common::MetadataItem>) -> gen::TaxClass {
+pub(crate) fn lit_tax_class(id: String, metadata: Vec<crate::common::MetadataItem>, private_metadata: Vec<crate::common::MetadataItem>) -> gen::TaxClass {
     gen::TaxClass {
         id: Some(ID(id)),
         private_metadata,
@@ -478,7 +478,7 @@ fn lit_tax_class(id: String, metadata: Vec<crate::common::MetadataItem>, private
     }
 }
 
-fn lit_gift_card(id: String, metadata: Vec<crate::common::MetadataItem>, private_metadata: Vec<crate::common::MetadataItem>) -> gen::GiftCard {
+pub(crate) fn lit_gift_card(id: String, metadata: Vec<crate::common::MetadataItem>, private_metadata: Vec<crate::common::MetadataItem>) -> gen::GiftCard {
     gen::GiftCard {
         id: Some(ID(id)),
         private_metadata,
@@ -504,7 +504,7 @@ fn lit_gift_card(id: String, metadata: Vec<crate::common::MetadataItem>, private
     }
 }
 
-fn lit_channel(id: String, metadata: Vec<crate::common::MetadataItem>, private_metadata: Vec<crate::common::MetadataItem>) -> gen::Channel {
+pub(crate) fn lit_channel(id: String, metadata: Vec<crate::common::MetadataItem>, private_metadata: Vec<crate::common::MetadataItem>) -> gen::Channel {
     gen::Channel {
         id: Some(ID(id)),
         private_metadata,
@@ -524,7 +524,7 @@ fn lit_channel(id: String, metadata: Vec<crate::common::MetadataItem>, private_m
     }
 }
 
-fn lit_invoice(id: String, metadata: Vec<crate::common::MetadataItem>, private_metadata: Vec<crate::common::MetadataItem>) -> gen::Invoice {
+pub(crate) fn lit_invoice(id: String, metadata: Vec<crate::common::MetadataItem>, private_metadata: Vec<crate::common::MetadataItem>) -> gen::Invoice {
     gen::Invoice {
         private_metadata,
         metadata,
@@ -536,7 +536,7 @@ fn lit_invoice(id: String, metadata: Vec<crate::common::MetadataItem>, private_m
     }
 }
 
-fn lit_fulfillment(id: String, metadata: Vec<crate::common::MetadataItem>, private_metadata: Vec<crate::common::MetadataItem>) -> gen::Fulfillment {
+pub(crate) fn lit_fulfillment(id: String, metadata: Vec<crate::common::MetadataItem>, private_metadata: Vec<crate::common::MetadataItem>) -> gen::Fulfillment {
     gen::Fulfillment {
         id: Some(ID(id)),
         private_metadata,
@@ -554,7 +554,7 @@ fn lit_fulfillment(id: String, metadata: Vec<crate::common::MetadataItem>, priva
     }
 }
 
-fn lit_app(id: String, metadata: Vec<crate::common::MetadataItem>, private_metadata: Vec<crate::common::MetadataItem>) -> gen::App {
+pub(crate) fn lit_app(id: String, metadata: Vec<crate::common::MetadataItem>, private_metadata: Vec<crate::common::MetadataItem>) -> gen::App {
     gen::App {
         id: Some(ID(id)),
         r#type: None,
@@ -580,7 +580,7 @@ fn lit_app(id: String, metadata: Vec<crate::common::MetadataItem>, private_metad
     }
 }
 
-fn lit_order(id: String, metadata: Vec<crate::common::MetadataItem>, private_metadata: Vec<crate::common::MetadataItem>) -> gen::Order {
+pub(crate) fn lit_order(id: String, metadata: Vec<crate::common::MetadataItem>, private_metadata: Vec<crate::common::MetadataItem>) -> gen::Order {
     gen::Order {
         id: Some(ID(id)),
         private_metadata,
@@ -637,7 +637,7 @@ fn lit_order(id: String, metadata: Vec<crate::common::MetadataItem>, private_met
 }
 
 
-fn lit_promotion(id: String, metadata: Vec<crate::common::MetadataItem>, private_metadata: Vec<crate::common::MetadataItem>) -> gen::Promotion {
+pub(crate) fn lit_promotion(id: String, metadata: Vec<crate::common::MetadataItem>, private_metadata: Vec<crate::common::MetadataItem>) -> gen::Promotion {
     gen::Promotion {
         id: Some(ID(id)),
         r#type: None,
@@ -651,7 +651,7 @@ fn lit_promotion(id: String, metadata: Vec<crate::common::MetadataItem>, private
     }
 }
 
-fn lit_order_line(id: String, metadata: Vec<crate::common::MetadataItem>, private_metadata: Vec<crate::common::MetadataItem>) -> gen::OrderLine {
+pub(crate) fn lit_order_line(id: String, metadata: Vec<crate::common::MetadataItem>, private_metadata: Vec<crate::common::MetadataItem>) -> gen::OrderLine {
     gen::OrderLine {
         id: Some(ID(id)),
         private_metadata,
@@ -680,5 +680,41 @@ fn lit_order_line(id: String, metadata: Vec<crate::common::MetadataItem>, privat
         voucher_code: None,
         is_gift: None,
         discounts: vec![],
+    }
+}
+
+
+pub(crate) fn lit_attribute_value(id: String, _metadata: Vec<crate::common::MetadataItem>, _private_metadata: Vec<crate::common::MetadataItem>) -> gen::AttributeValue {
+    gen::AttributeValue {
+        id: Some(ID(id)),
+        name: None,
+        slug: None,
+        value: None,
+        input_type: None,
+        reference: None,
+        file: None,
+        rich_text: None,
+        plain_text: None,
+        boolean: None,
+        date: None,
+        date_time: None,
+    }
+}
+
+pub(crate) fn lit_shipping_method_type(id: String, metadata: Vec<crate::common::MetadataItem>, private_metadata: Vec<crate::common::MetadataItem>) -> gen::ShippingMethodType {
+    gen::ShippingMethodType {
+        id: Some(ID(id)),
+        r#type: None,
+        private_metadata,
+        metadata,
+        name: None,
+        description: None,
+        channel_listings: vec![],
+        postal_code_rules: vec![],
+        minimum_order_weight: None,
+        maximum_order_weight: None,
+        maximum_delivery_days: None,
+        minimum_delivery_days: None,
+        tax_class: None,
     }
 }

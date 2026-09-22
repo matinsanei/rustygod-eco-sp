@@ -27,7 +27,11 @@ import os
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 IR = "/tmp/schema_ir.json"
-SCHEMA = "/home/matin/Desktop/dev/saleor/saleor-core/saleor/graphql/schema.graphql"
+SCHEMA = os.environ.get(
+    "SALEOR_SCHEMA",
+    # Must match schema_examine.py: the dashboard's own schema-main.graphql.
+    "/home/matin/Desktop/dev/saleor/dashboard/schema-main.graphql",
+)
 DASH_SRC = "/home/matin/Desktop/dev/saleor/dashboard/src"
 OUT = "/home/matin/Desktop/dev/rustygod-saleor/crates/graphql/src/gen.rs"
 
@@ -627,10 +631,33 @@ LEGACY_FIELDS = {
 # (struct, field); the value is Rust emitted verbatim with
 # `ctx: &Context<'_>` in scope. Everything else stays a zero-cost stub.
 REAL_METHODS = {
+    # Entity/TranslatableContent `translation(languageCode:)` lookups.
+    ("Product", "translation"): """{\n        let db = match ctx.data_opt::<crate::context::GqlContext>().and_then(|g| g.db().ok()) {\n            Some(d) => d.clone(),\n            None => return None,\n        };\n        let eid: i32 = self.id.as_ref().and_then(|i| rustygod_db::catalog::parse_gid(&i.0)).unwrap_or(-1);\n        let lang = crate::gen::language_code_value(&_arg_language_code);\n        crate::translations::product_translation(&db, eid, lang).await\n    }""",
+    ("ProductVariant", "translation"): """{\n        let db = match ctx.data_opt::<crate::context::GqlContext>().and_then(|g| g.db().ok()) {\n            Some(d) => d.clone(),\n            None => return None,\n        };\n        let eid: i32 = self.id.as_ref().and_then(|i| rustygod_db::catalog::parse_gid(&i.0)).unwrap_or(-1);\n        let lang = crate::gen::language_code_value(&_arg_language_code);\n        crate::translations::product_variant_translation(&db, eid, lang).await\n    }""",
+    ("Category", "translation"): """{\n        let db = match ctx.data_opt::<crate::context::GqlContext>().and_then(|g| g.db().ok()) {\n            Some(d) => d.clone(),\n            None => return None,\n        };\n        let eid: i32 = self.id.as_ref().and_then(|i| rustygod_db::catalog::parse_gid(&i.0)).unwrap_or(-1);\n        let lang = crate::gen::language_code_value(&_arg_language_code);\n        crate::translations::category_translation(&db, eid, lang).await\n    }""",
+    ("Collection", "translation"): """{\n        let db = match ctx.data_opt::<crate::context::GqlContext>().and_then(|g| g.db().ok()) {\n            Some(d) => d.clone(),\n            None => return None,\n        };\n        let eid: i32 = self.id.as_ref().and_then(|i| rustygod_db::catalog::parse_gid(&i.0)).unwrap_or(-1);\n        let lang = crate::gen::language_code_value(&_arg_language_code);\n        crate::translations::collection_translation(&db, eid, lang).await\n    }""",
+    ("Page", "translation"): """{\n        let db = match ctx.data_opt::<crate::context::GqlContext>().and_then(|g| g.db().ok()) {\n            Some(d) => d.clone(),\n            None => return None,\n        };\n        let eid: i32 = self.id.as_ref().and_then(|i| rustygod_db::catalog::parse_gid(&i.0)).unwrap_or(-1);\n        let lang = crate::gen::language_code_value(&_arg_language_code);\n        crate::translations::page_translation(&db, eid, lang).await\n    }""",
+    ("Voucher", "translation"): """{\n        let db = match ctx.data_opt::<crate::context::GqlContext>().and_then(|g| g.db().ok()) {\n            Some(d) => d.clone(),\n            None => return None,\n        };\n        let eid: i32 = self.id.as_ref().and_then(|i| rustygod_db::catalog::parse_gid(&i.0)).unwrap_or(-1);\n        let lang = crate::gen::language_code_value(&_arg_language_code);\n        crate::translations::voucher_translation(&db, eid, lang).await\n    }""",
+    ("ShippingMethod", "translation"): """{\n        let db = match ctx.data_opt::<crate::context::GqlContext>().and_then(|g| g.db().ok()) {\n            Some(d) => d.clone(),\n            None => return None,\n        };\n        let eid: i32 = self.id.as_ref().and_then(|i| rustygod_db::catalog::parse_gid(&i.0)).unwrap_or(-1);\n        let lang = crate::gen::language_code_value(&_arg_language_code);\n        crate::translations::shipping_method_translation(&db, eid, lang).await\n    }""",
+    # Payload type (dashboard selects translation on it, not on ShippingMethod).
+    ("ShippingMethodType", "translation"): """{\n        let db = match ctx.data_opt::<crate::context::GqlContext>().and_then(|g| g.db().ok()) {\n            Some(d) => d.clone(),\n            None => return None,\n        };\n        let eid: i32 = self.id.as_ref().and_then(|i| rustygod_db::catalog::parse_gid(&i.0)).unwrap_or(-1);\n        let lang = crate::gen::language_code_value(&_arg_language_code);\n        crate::translations::shipping_method_translation(&db, eid, lang).await\n    }""",
+    ("MenuItem", "translation"): """{\n        let db = match ctx.data_opt::<crate::context::GqlContext>().and_then(|g| g.db().ok()) {\n            Some(d) => d.clone(),\n            None => return None,\n        };\n        let eid: i32 = self.id.as_ref().and_then(|i| rustygod_db::catalog::parse_gid(&i.0)).unwrap_or(-1);\n        let lang = crate::gen::language_code_value(&_arg_language_code);\n        crate::translations::menu_item_translation(&db, eid, lang).await\n    }""",
+    ("Attribute", "translation"): """{\n        let db = match ctx.data_opt::<crate::context::GqlContext>().and_then(|g| g.db().ok()) {\n            Some(d) => d.clone(),\n            None => return None,\n        };\n        let eid: i32 = self.id.as_ref().and_then(|i| rustygod_db::catalog::parse_gid(&i.0)).unwrap_or(-1);\n        let lang = crate::gen::language_code_value(&_arg_language_code);\n        crate::translations::attribute_translation(&db, eid, lang).await\n    }""",
+    ("AttributeValue", "translation"): """{\n        let db = match ctx.data_opt::<crate::context::GqlContext>().and_then(|g| g.db().ok()) {\n            Some(d) => d.clone(),\n            None => return None,\n        };\n        let eid: i32 = self.id.as_ref().and_then(|i| rustygod_db::catalog::parse_gid(&i.0)).unwrap_or(-1);\n        let lang = crate::gen::language_code_value(&_arg_language_code);\n        crate::translations::attribute_value_translation(&db, eid, lang).await\n    }""",
+    ("ProductTranslatableContent", "translation"): """{\n        let db = match ctx.data_opt::<crate::context::GqlContext>().and_then(|g| g.db().ok()) {\n            Some(d) => d.clone(),\n            None => return None,\n        };\n        let eid: i32 = self.product.as_ref().and_then(|e| e.id.as_ref()).and_then(|i| rustygod_db::catalog::parse_gid(&i.0)).unwrap_or(-1);\n        let lang = crate::gen::language_code_value(&_arg_language_code);\n        crate::translations::product_translation(&db, eid, lang).await\n    }""",
+    ("ProductVariantTranslatableContent", "translation"): """{\n        let db = match ctx.data_opt::<crate::context::GqlContext>().and_then(|g| g.db().ok()) {\n            Some(d) => d.clone(),\n            None => return None,\n        };\n        let eid: i32 = self.product_variant.as_ref().and_then(|e| e.id.as_ref()).and_then(|i| rustygod_db::catalog::parse_gid(&i.0)).unwrap_or(-1);\n        let lang = crate::gen::language_code_value(&_arg_language_code);\n        crate::translations::product_variant_translation(&db, eid, lang).await\n    }""",
+    ("CategoryTranslatableContent", "translation"): """{\n        let db = match ctx.data_opt::<crate::context::GqlContext>().and_then(|g| g.db().ok()) {\n            Some(d) => d.clone(),\n            None => return None,\n        };\n        let eid: i32 = self.category.as_ref().and_then(|e| e.id.as_ref()).and_then(|i| rustygod_db::catalog::parse_gid(&i.0)).unwrap_or(-1);\n        let lang = crate::gen::language_code_value(&_arg_language_code);\n        crate::translations::category_translation(&db, eid, lang).await\n    }""",
+    ("CollectionTranslatableContent", "translation"): """{\n        let db = match ctx.data_opt::<crate::context::GqlContext>().and_then(|g| g.db().ok()) {\n            Some(d) => d.clone(),\n            None => return None,\n        };\n        let eid: i32 = self.collection.as_ref().and_then(|e| e.id.as_ref()).and_then(|i| rustygod_db::catalog::parse_gid(&i.0)).unwrap_or(-1);\n        let lang = crate::gen::language_code_value(&_arg_language_code);\n        crate::translations::collection_translation(&db, eid, lang).await\n    }""",
+    ("PageTranslatableContent", "translation"): """{\n        let db = match ctx.data_opt::<crate::context::GqlContext>().and_then(|g| g.db().ok()) {\n            Some(d) => d.clone(),\n            None => return None,\n        };\n        let eid: i32 = self.page.as_ref().and_then(|e| e.id.as_ref()).and_then(|i| rustygod_db::catalog::parse_gid(&i.0)).unwrap_or(-1);\n        let lang = crate::gen::language_code_value(&_arg_language_code);\n        crate::translations::page_translation(&db, eid, lang).await\n    }""",
+    ("VoucherTranslatableContent", "translation"): """{\n        let db = match ctx.data_opt::<crate::context::GqlContext>().and_then(|g| g.db().ok()) {\n            Some(d) => d.clone(),\n            None => return None,\n        };\n        let eid: i32 = self.voucher.as_ref().and_then(|e| e.id.as_ref()).and_then(|i| rustygod_db::catalog::parse_gid(&i.0)).unwrap_or(-1);\n        let lang = crate::gen::language_code_value(&_arg_language_code);\n        crate::translations::voucher_translation(&db, eid, lang).await\n    }""",
+    ("ShippingMethodTranslatableContent", "translation"): """{\n        let db = match ctx.data_opt::<crate::context::GqlContext>().and_then(|g| g.db().ok()) {\n            Some(d) => d.clone(),\n            None => return None,\n        };\n        let eid: i32 = self.shipping_method.as_ref().and_then(|e| e.id.as_ref()).and_then(|i| rustygod_db::catalog::parse_gid(&i.0)).unwrap_or(-1);\n        let lang = crate::gen::language_code_value(&_arg_language_code);\n        crate::translations::shipping_method_translation(&db, eid, lang).await\n    }""",
+    ("MenuItemTranslatableContent", "translation"): """{\n        let db = match ctx.data_opt::<crate::context::GqlContext>().and_then(|g| g.db().ok()) {\n            Some(d) => d.clone(),\n            None => return None,\n        };\n        let eid: i32 = self.menu_item.as_ref().and_then(|e| e.id.as_ref()).and_then(|i| rustygod_db::catalog::parse_gid(&i.0)).unwrap_or(-1);\n        let lang = crate::gen::language_code_value(&_arg_language_code);\n        crate::translations::menu_item_translation(&db, eid, lang).await\n    }""",
+    ("AttributeTranslatableContent", "translation"): """{\n        let db = match ctx.data_opt::<crate::context::GqlContext>().and_then(|g| g.db().ok()) {\n            Some(d) => d.clone(),\n            None => return None,\n        };\n        let eid: i32 = self.attribute.as_ref().and_then(|e| e.id.as_ref()).and_then(|i| rustygod_db::catalog::parse_gid(&i.0)).unwrap_or(-1);\n        let lang = crate::gen::language_code_value(&_arg_language_code);\n        crate::translations::attribute_translation(&db, eid, lang).await\n    }""",
+    ("AttributeValueTranslatableContent", "translation"): """{\n        let db = match ctx.data_opt::<crate::context::GqlContext>().and_then(|g| g.db().ok()) {\n            Some(d) => d.clone(),\n            None => return None,\n        };\n        let eid: i32 = self.attribute_value.as_ref().and_then(|e| e.id.as_ref()).and_then(|i| rustygod_db::catalog::parse_gid(&i.0)).unwrap_or(-1);\n        let lang = crate::gen::language_code_value(&_arg_language_code);\n        crate::translations::attribute_value_translation(&db, eid, lang).await\n    }""",
     # Dashboard customer rows read `orders { totalCount }` unconditionally.
     ("User", "orders"): """{
         use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QuerySelect};
-        let uid: i32 = self.id.as_ref().and_then(|i| i.0.parse::<i32>().ok()).unwrap_or(-1);
+        let uid: i32 = self.id.as_ref().and_then(|i| rustygod_db::catalog::parse_gid(&i.0)).unwrap_or(-1);
         let db = match ctx.data_opt::<crate::context::GqlContext>().and_then(|g| g.db().ok()) {
             Some(d) => d.clone(),
             None => return None,
@@ -848,6 +875,17 @@ def emit_all(reg, g, M):
         for v in reg["enums"][ename]:
             W(f"\n    #[graphql(name = \"{v}\")]\n    {pascal(v)},")
         W("\n}\n")
+        if ename == "LanguageCodeEnum":
+            # Saleor enum VALUES are the lowercase codes ("af-na"), but the
+            # wire carries NAMES ("AF_NA") — resolvers only see the variant,
+            # so recover the value deterministically (enums.py: name =
+            # value.upper().replace("-","_")).
+            W("\n/// Saleor `LanguageCodeEnum` value for a variant ('af-na').\n")
+            W("pub fn language_code_value(v: &LanguageCodeEnum) -> &'static str {\n")
+            W("    match v {\n")
+            for v in reg["enums"][ename]:
+                W(f"        LanguageCodeEnum::{pascal(v)} => \"{v.lower().replace('_', '-')}\",\n")
+            W("    }\n}\n")
 
     # ---- inputs (exact shapes) ----
     for iname in sorted(M["inputs"]):

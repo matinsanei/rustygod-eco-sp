@@ -30,5 +30,6 @@ pub mod metadata;
 pub mod order;
 pub mod payment;
 pub mod schema;
+pub mod translations;
 
 pub use schema::{build_schema, AppSchema};

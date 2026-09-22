@@ -23,7 +23,15 @@ import sys
 import glob
 import os
 
-SALEOR_SCHEMA = "/home/matin/Desktop/dev/saleor/saleor-core/saleor/graphql/schema.graphql"
+SALEOR_SCHEMA = os.environ.get(
+    "SALEOR_SCHEMA",
+    # The dashboard's own vendored schema (schema-main.graphql, main-schema
+    # mode = what the released container runs) — NOT saleor-core's 3.24
+    # schema.graphql, which already dropped fields the dashboard selects
+    # (filterableInStorefront et al). Codegen input must be the exact schema
+    # the dashboard's hooks were generated against: zero version-skew class.
+    "/home/matin/Desktop/dev/saleor/dashboard/schema-main.graphql",
+)
 DASH_SRC = "/home/matin/Desktop/dev/saleor/dashboard/src"
 OUR_GQL = "/home/matin/Desktop/dev/rustygod-saleor/crates/graphql/src"
 

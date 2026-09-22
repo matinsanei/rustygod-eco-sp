@@ -563,6 +563,18 @@ pub enum AttributeSortField {
     #[graphql(name = "VISIBLE_IN_STOREFRONT")]
     VISIBLEINSTOREFRONT,
 
+    #[graphql(name = "FILTERABLE_IN_STOREFRONT")]
+    FILTERABLEINSTOREFRONT,
+
+    #[graphql(name = "FILTERABLE_IN_DASHBOARD")]
+    FILTERABLEINDASHBOARD,
+
+    #[graphql(name = "STOREFRONT_SEARCH_POSITION")]
+    STOREFRONTSEARCHPOSITION,
+
+    #[graphql(name = "AVAILABLE_IN_GRID")]
+    AVAILABLEINGRID,
+
 }
 
 
@@ -1792,6 +1804,9 @@ pub enum CustomerEventsEnum {
 
     #[graphql(name = "NOTE_ADDED_TO_ORDER")]
     NOTEADDEDTOORDER,
+
+    #[graphql(name = "DIGITAL_LINK_DOWNLOADED")]
+    DIGITALLINKDOWNLOADED,
 
     #[graphql(name = "CUSTOMER_DELETED")]
     CUSTOMERDELETED,
@@ -4742,6 +4757,1574 @@ pub enum LanguageCodeEnum {
 }
 
 
+/// Saleor `LanguageCodeEnum` value for a variant ('af-na').
+
+pub fn language_code_value(v: &LanguageCodeEnum) -> &'static str {
+
+    match v {
+
+        LanguageCodeEnum::AF => "af",
+
+        LanguageCodeEnum::AFNA => "af-na",
+
+        LanguageCodeEnum::AFZA => "af-za",
+
+        LanguageCodeEnum::AGQ => "agq",
+
+        LanguageCodeEnum::AGQCM => "agq-cm",
+
+        LanguageCodeEnum::AK => "ak",
+
+        LanguageCodeEnum::AKGH => "ak-gh",
+
+        LanguageCodeEnum::AM => "am",
+
+        LanguageCodeEnum::AMET => "am-et",
+
+        LanguageCodeEnum::AR => "ar",
+
+        LanguageCodeEnum::ARAE => "ar-ae",
+
+        LanguageCodeEnum::ARBH => "ar-bh",
+
+        LanguageCodeEnum::ARDJ => "ar-dj",
+
+        LanguageCodeEnum::ARDZ => "ar-dz",
+
+        LanguageCodeEnum::AREG => "ar-eg",
+
+        LanguageCodeEnum::AREH => "ar-eh",
+
+        LanguageCodeEnum::ARER => "ar-er",
+
+        LanguageCodeEnum::ARIL => "ar-il",
+
+        LanguageCodeEnum::ARIQ => "ar-iq",
+
+        LanguageCodeEnum::ARJO => "ar-jo",
+
+        LanguageCodeEnum::ARKM => "ar-km",
+
+        LanguageCodeEnum::ARKW => "ar-kw",
+
+        LanguageCodeEnum::ARLB => "ar-lb",
+
+        LanguageCodeEnum::ARLY => "ar-ly",
+
+        LanguageCodeEnum::ARMA => "ar-ma",
+
+        LanguageCodeEnum::ARMR => "ar-mr",
+
+        LanguageCodeEnum::AROM => "ar-om",
+
+        LanguageCodeEnum::ARPS => "ar-ps",
+
+        LanguageCodeEnum::ARQA => "ar-qa",
+
+        LanguageCodeEnum::ARSA => "ar-sa",
+
+        LanguageCodeEnum::ARSD => "ar-sd",
+
+        LanguageCodeEnum::ARSO => "ar-so",
+
+        LanguageCodeEnum::ARSS => "ar-ss",
+
+        LanguageCodeEnum::ARSY => "ar-sy",
+
+        LanguageCodeEnum::ARTD => "ar-td",
+
+        LanguageCodeEnum::ARTN => "ar-tn",
+
+        LanguageCodeEnum::ARYE => "ar-ye",
+
+        LanguageCodeEnum::AS => "as",
+
+        LanguageCodeEnum::ASIN => "as-in",
+
+        LanguageCodeEnum::ASA => "asa",
+
+        LanguageCodeEnum::ASATZ => "asa-tz",
+
+        LanguageCodeEnum::AST => "ast",
+
+        LanguageCodeEnum::ASTES => "ast-es",
+
+        LanguageCodeEnum::AZ => "az",
+
+        LanguageCodeEnum::AZCYRL => "az-cyrl",
+
+        LanguageCodeEnum::AZCYRLAZ => "az-cyrl-az",
+
+        LanguageCodeEnum::AZLATN => "az-latn",
+
+        LanguageCodeEnum::AZLATNAZ => "az-latn-az",
+
+        LanguageCodeEnum::BAS => "bas",
+
+        LanguageCodeEnum::BASCM => "bas-cm",
+
+        LanguageCodeEnum::BE => "be",
+
+        LanguageCodeEnum::BEBY => "be-by",
+
+        LanguageCodeEnum::BEM => "bem",
+
+        LanguageCodeEnum::BEMZM => "bem-zm",
+
+        LanguageCodeEnum::BEZ => "bez",
+
+        LanguageCodeEnum::BEZTZ => "bez-tz",
+
+        LanguageCodeEnum::BG => "bg",
+
+        LanguageCodeEnum::BGBG => "bg-bg",
+
+        LanguageCodeEnum::BM => "bm",
+
+        LanguageCodeEnum::BMML => "bm-ml",
+
+        LanguageCodeEnum::BN => "bn",
+
+        LanguageCodeEnum::BNBD => "bn-bd",
+
+        LanguageCodeEnum::BNIN => "bn-in",
+
+        LanguageCodeEnum::BO => "bo",
+
+        LanguageCodeEnum::BOCN => "bo-cn",
+
+        LanguageCodeEnum::BOIN => "bo-in",
+
+        LanguageCodeEnum::BR => "br",
+
+        LanguageCodeEnum::BRFR => "br-fr",
+
+        LanguageCodeEnum::BRX => "brx",
+
+        LanguageCodeEnum::BRXIN => "brx-in",
+
+        LanguageCodeEnum::BS => "bs",
+
+        LanguageCodeEnum::BSCYRL => "bs-cyrl",
+
+        LanguageCodeEnum::BSCYRLBA => "bs-cyrl-ba",
+
+        LanguageCodeEnum::BSLATN => "bs-latn",
+
+        LanguageCodeEnum::BSLATNBA => "bs-latn-ba",
+
+        LanguageCodeEnum::CA => "ca",
+
+        LanguageCodeEnum::CAAD => "ca-ad",
+
+        LanguageCodeEnum::CAES => "ca-es",
+
+        LanguageCodeEnum::CAESVALENCIA => "ca-es-valencia",
+
+        LanguageCodeEnum::CAFR => "ca-fr",
+
+        LanguageCodeEnum::CAIT => "ca-it",
+
+        LanguageCodeEnum::CCP => "ccp",
+
+        LanguageCodeEnum::CCPBD => "ccp-bd",
+
+        LanguageCodeEnum::CCPIN => "ccp-in",
+
+        LanguageCodeEnum::CE => "ce",
+
+        LanguageCodeEnum::CERU => "ce-ru",
+
+        LanguageCodeEnum::CEB => "ceb",
+
+        LanguageCodeEnum::CEBPH => "ceb-ph",
+
+        LanguageCodeEnum::CGG => "cgg",
+
+        LanguageCodeEnum::CGGUG => "cgg-ug",
+
+        LanguageCodeEnum::CHR => "chr",
+
+        LanguageCodeEnum::CHRUS => "chr-us",
+
+        LanguageCodeEnum::CKB => "ckb",
+
+        LanguageCodeEnum::CKBIQ => "ckb-iq",
+
+        LanguageCodeEnum::CKBIR => "ckb-ir",
+
+        LanguageCodeEnum::CS => "cs",
+
+        LanguageCodeEnum::CSCZ => "cs-cz",
+
+        LanguageCodeEnum::CU => "cu",
+
+        LanguageCodeEnum::CURU => "cu-ru",
+
+        LanguageCodeEnum::CY => "cy",
+
+        LanguageCodeEnum::CYGB => "cy-gb",
+
+        LanguageCodeEnum::DA => "da",
+
+        LanguageCodeEnum::DADK => "da-dk",
+
+        LanguageCodeEnum::DAGL => "da-gl",
+
+        LanguageCodeEnum::DAV => "dav",
+
+        LanguageCodeEnum::DAVKE => "dav-ke",
+
+        LanguageCodeEnum::DE => "de",
+
+        LanguageCodeEnum::DEAT => "de-at",
+
+        LanguageCodeEnum::DEBE => "de-be",
+
+        LanguageCodeEnum::DECH => "de-ch",
+
+        LanguageCodeEnum::DEDE => "de-de",
+
+        LanguageCodeEnum::DEIT => "de-it",
+
+        LanguageCodeEnum::DELI => "de-li",
+
+        LanguageCodeEnum::DELU => "de-lu",
+
+        LanguageCodeEnum::DJE => "dje",
+
+        LanguageCodeEnum::DJENE => "dje-ne",
+
+        LanguageCodeEnum::DSB => "dsb",
+
+        LanguageCodeEnum::DSBDE => "dsb-de",
+
+        LanguageCodeEnum::DUA => "dua",
+
+        LanguageCodeEnum::DUACM => "dua-cm",
+
+        LanguageCodeEnum::DYO => "dyo",
+
+        LanguageCodeEnum::DYOSN => "dyo-sn",
+
+        LanguageCodeEnum::DZ => "dz",
+
+        LanguageCodeEnum::DZBT => "dz-bt",
+
+        LanguageCodeEnum::EBU => "ebu",
+
+        LanguageCodeEnum::EBUKE => "ebu-ke",
+
+        LanguageCodeEnum::EE => "ee",
+
+        LanguageCodeEnum::EEGH => "ee-gh",
+
+        LanguageCodeEnum::EETG => "ee-tg",
+
+        LanguageCodeEnum::EL => "el",
+
+        LanguageCodeEnum::ELCY => "el-cy",
+
+        LanguageCodeEnum::ELGR => "el-gr",
+
+        LanguageCodeEnum::EN => "en",
+
+        LanguageCodeEnum::ENAE => "en-ae",
+
+        LanguageCodeEnum::ENAG => "en-ag",
+
+        LanguageCodeEnum::ENAI => "en-ai",
+
+        LanguageCodeEnum::ENAS => "en-as",
+
+        LanguageCodeEnum::ENAT => "en-at",
+
+        LanguageCodeEnum::ENAU => "en-au",
+
+        LanguageCodeEnum::ENBB => "en-bb",
+
+        LanguageCodeEnum::ENBE => "en-be",
+
+        LanguageCodeEnum::ENBI => "en-bi",
+
+        LanguageCodeEnum::ENBM => "en-bm",
+
+        LanguageCodeEnum::ENBS => "en-bs",
+
+        LanguageCodeEnum::ENBW => "en-bw",
+
+        LanguageCodeEnum::ENBZ => "en-bz",
+
+        LanguageCodeEnum::ENCA => "en-ca",
+
+        LanguageCodeEnum::ENCC => "en-cc",
+
+        LanguageCodeEnum::ENCH => "en-ch",
+
+        LanguageCodeEnum::ENCK => "en-ck",
+
+        LanguageCodeEnum::ENCM => "en-cm",
+
+        LanguageCodeEnum::ENCX => "en-cx",
+
+        LanguageCodeEnum::ENCY => "en-cy",
+
+        LanguageCodeEnum::ENDE => "en-de",
+
+        LanguageCodeEnum::ENDG => "en-dg",
+
+        LanguageCodeEnum::ENDK => "en-dk",
+
+        LanguageCodeEnum::ENDM => "en-dm",
+
+        LanguageCodeEnum::ENER => "en-er",
+
+        LanguageCodeEnum::ENFI => "en-fi",
+
+        LanguageCodeEnum::ENFJ => "en-fj",
+
+        LanguageCodeEnum::ENFK => "en-fk",
+
+        LanguageCodeEnum::ENFM => "en-fm",
+
+        LanguageCodeEnum::ENGB => "en-gb",
+
+        LanguageCodeEnum::ENGD => "en-gd",
+
+        LanguageCodeEnum::ENGG => "en-gg",
+
+        LanguageCodeEnum::ENGH => "en-gh",
+
+        LanguageCodeEnum::ENGI => "en-gi",
+
+        LanguageCodeEnum::ENGM => "en-gm",
+
+        LanguageCodeEnum::ENGU => "en-gu",
+
+        LanguageCodeEnum::ENGY => "en-gy",
+
+        LanguageCodeEnum::ENHK => "en-hk",
+
+        LanguageCodeEnum::ENIE => "en-ie",
+
+        LanguageCodeEnum::ENIL => "en-il",
+
+        LanguageCodeEnum::ENIM => "en-im",
+
+        LanguageCodeEnum::ENIN => "en-in",
+
+        LanguageCodeEnum::ENIO => "en-io",
+
+        LanguageCodeEnum::ENJE => "en-je",
+
+        LanguageCodeEnum::ENJM => "en-jm",
+
+        LanguageCodeEnum::ENKE => "en-ke",
+
+        LanguageCodeEnum::ENKI => "en-ki",
+
+        LanguageCodeEnum::ENKN => "en-kn",
+
+        LanguageCodeEnum::ENKY => "en-ky",
+
+        LanguageCodeEnum::ENLC => "en-lc",
+
+        LanguageCodeEnum::ENLR => "en-lr",
+
+        LanguageCodeEnum::ENLS => "en-ls",
+
+        LanguageCodeEnum::ENMG => "en-mg",
+
+        LanguageCodeEnum::ENMH => "en-mh",
+
+        LanguageCodeEnum::ENMO => "en-mo",
+
+        LanguageCodeEnum::ENMP => "en-mp",
+
+        LanguageCodeEnum::ENMS => "en-ms",
+
+        LanguageCodeEnum::ENMT => "en-mt",
+
+        LanguageCodeEnum::ENMU => "en-mu",
+
+        LanguageCodeEnum::ENMW => "en-mw",
+
+        LanguageCodeEnum::ENMY => "en-my",
+
+        LanguageCodeEnum::ENNA => "en-na",
+
+        LanguageCodeEnum::ENNF => "en-nf",
+
+        LanguageCodeEnum::ENNG => "en-ng",
+
+        LanguageCodeEnum::ENNL => "en-nl",
+
+        LanguageCodeEnum::ENNR => "en-nr",
+
+        LanguageCodeEnum::ENNU => "en-nu",
+
+        LanguageCodeEnum::ENNZ => "en-nz",
+
+        LanguageCodeEnum::ENPG => "en-pg",
+
+        LanguageCodeEnum::ENPH => "en-ph",
+
+        LanguageCodeEnum::ENPK => "en-pk",
+
+        LanguageCodeEnum::ENPN => "en-pn",
+
+        LanguageCodeEnum::ENPR => "en-pr",
+
+        LanguageCodeEnum::ENPW => "en-pw",
+
+        LanguageCodeEnum::ENRW => "en-rw",
+
+        LanguageCodeEnum::ENSB => "en-sb",
+
+        LanguageCodeEnum::ENSC => "en-sc",
+
+        LanguageCodeEnum::ENSD => "en-sd",
+
+        LanguageCodeEnum::ENSE => "en-se",
+
+        LanguageCodeEnum::ENSG => "en-sg",
+
+        LanguageCodeEnum::ENSH => "en-sh",
+
+        LanguageCodeEnum::ENSI => "en-si",
+
+        LanguageCodeEnum::ENSL => "en-sl",
+
+        LanguageCodeEnum::ENSS => "en-ss",
+
+        LanguageCodeEnum::ENSX => "en-sx",
+
+        LanguageCodeEnum::ENSZ => "en-sz",
+
+        LanguageCodeEnum::ENTC => "en-tc",
+
+        LanguageCodeEnum::ENTK => "en-tk",
+
+        LanguageCodeEnum::ENTO => "en-to",
+
+        LanguageCodeEnum::ENTT => "en-tt",
+
+        LanguageCodeEnum::ENTV => "en-tv",
+
+        LanguageCodeEnum::ENTZ => "en-tz",
+
+        LanguageCodeEnum::ENUG => "en-ug",
+
+        LanguageCodeEnum::ENUM => "en-um",
+
+        LanguageCodeEnum::ENUS => "en-us",
+
+        LanguageCodeEnum::ENVC => "en-vc",
+
+        LanguageCodeEnum::ENVG => "en-vg",
+
+        LanguageCodeEnum::ENVI => "en-vi",
+
+        LanguageCodeEnum::ENVU => "en-vu",
+
+        LanguageCodeEnum::ENWS => "en-ws",
+
+        LanguageCodeEnum::ENZA => "en-za",
+
+        LanguageCodeEnum::ENZM => "en-zm",
+
+        LanguageCodeEnum::ENZW => "en-zw",
+
+        LanguageCodeEnum::EO => "eo",
+
+        LanguageCodeEnum::ES => "es",
+
+        LanguageCodeEnum::ESAR => "es-ar",
+
+        LanguageCodeEnum::ESBO => "es-bo",
+
+        LanguageCodeEnum::ESBR => "es-br",
+
+        LanguageCodeEnum::ESBZ => "es-bz",
+
+        LanguageCodeEnum::ESCL => "es-cl",
+
+        LanguageCodeEnum::ESCO => "es-co",
+
+        LanguageCodeEnum::ESCR => "es-cr",
+
+        LanguageCodeEnum::ESCU => "es-cu",
+
+        LanguageCodeEnum::ESDO => "es-do",
+
+        LanguageCodeEnum::ESEA => "es-ea",
+
+        LanguageCodeEnum::ESEC => "es-ec",
+
+        LanguageCodeEnum::ESES => "es-es",
+
+        LanguageCodeEnum::ESGQ => "es-gq",
+
+        LanguageCodeEnum::ESGT => "es-gt",
+
+        LanguageCodeEnum::ESHN => "es-hn",
+
+        LanguageCodeEnum::ESIC => "es-ic",
+
+        LanguageCodeEnum::ESMX => "es-mx",
+
+        LanguageCodeEnum::ESNI => "es-ni",
+
+        LanguageCodeEnum::ESPA => "es-pa",
+
+        LanguageCodeEnum::ESPE => "es-pe",
+
+        LanguageCodeEnum::ESPH => "es-ph",
+
+        LanguageCodeEnum::ESPR => "es-pr",
+
+        LanguageCodeEnum::ESPY => "es-py",
+
+        LanguageCodeEnum::ESSV => "es-sv",
+
+        LanguageCodeEnum::ESUS => "es-us",
+
+        LanguageCodeEnum::ESUY => "es-uy",
+
+        LanguageCodeEnum::ESVE => "es-ve",
+
+        LanguageCodeEnum::ET => "et",
+
+        LanguageCodeEnum::ETEE => "et-ee",
+
+        LanguageCodeEnum::EU => "eu",
+
+        LanguageCodeEnum::EUES => "eu-es",
+
+        LanguageCodeEnum::EWO => "ewo",
+
+        LanguageCodeEnum::EWOCM => "ewo-cm",
+
+        LanguageCodeEnum::FA => "fa",
+
+        LanguageCodeEnum::FAAF => "fa-af",
+
+        LanguageCodeEnum::FAIR => "fa-ir",
+
+        LanguageCodeEnum::FF => "ff",
+
+        LanguageCodeEnum::FFADLM => "ff-adlm",
+
+        LanguageCodeEnum::FFADLMBF => "ff-adlm-bf",
+
+        LanguageCodeEnum::FFADLMCM => "ff-adlm-cm",
+
+        LanguageCodeEnum::FFADLMGH => "ff-adlm-gh",
+
+        LanguageCodeEnum::FFADLMGM => "ff-adlm-gm",
+
+        LanguageCodeEnum::FFADLMGN => "ff-adlm-gn",
+
+        LanguageCodeEnum::FFADLMGW => "ff-adlm-gw",
+
+        LanguageCodeEnum::FFADLMLR => "ff-adlm-lr",
+
+        LanguageCodeEnum::FFADLMMR => "ff-adlm-mr",
+
+        LanguageCodeEnum::FFADLMNE => "ff-adlm-ne",
+
+        LanguageCodeEnum::FFADLMNG => "ff-adlm-ng",
+
+        LanguageCodeEnum::FFADLMSL => "ff-adlm-sl",
+
+        LanguageCodeEnum::FFADLMSN => "ff-adlm-sn",
+
+        LanguageCodeEnum::FFLATN => "ff-latn",
+
+        LanguageCodeEnum::FFLATNBF => "ff-latn-bf",
+
+        LanguageCodeEnum::FFLATNCM => "ff-latn-cm",
+
+        LanguageCodeEnum::FFLATNGH => "ff-latn-gh",
+
+        LanguageCodeEnum::FFLATNGM => "ff-latn-gm",
+
+        LanguageCodeEnum::FFLATNGN => "ff-latn-gn",
+
+        LanguageCodeEnum::FFLATNGW => "ff-latn-gw",
+
+        LanguageCodeEnum::FFLATNLR => "ff-latn-lr",
+
+        LanguageCodeEnum::FFLATNMR => "ff-latn-mr",
+
+        LanguageCodeEnum::FFLATNNE => "ff-latn-ne",
+
+        LanguageCodeEnum::FFLATNNG => "ff-latn-ng",
+
+        LanguageCodeEnum::FFLATNSL => "ff-latn-sl",
+
+        LanguageCodeEnum::FFLATNSN => "ff-latn-sn",
+
+        LanguageCodeEnum::FI => "fi",
+
+        LanguageCodeEnum::FIFI => "fi-fi",
+
+        LanguageCodeEnum::FIL => "fil",
+
+        LanguageCodeEnum::FILPH => "fil-ph",
+
+        LanguageCodeEnum::FO => "fo",
+
+        LanguageCodeEnum::FODK => "fo-dk",
+
+        LanguageCodeEnum::FOFO => "fo-fo",
+
+        LanguageCodeEnum::FR => "fr",
+
+        LanguageCodeEnum::FRBE => "fr-be",
+
+        LanguageCodeEnum::FRBF => "fr-bf",
+
+        LanguageCodeEnum::FRBI => "fr-bi",
+
+        LanguageCodeEnum::FRBJ => "fr-bj",
+
+        LanguageCodeEnum::FRBL => "fr-bl",
+
+        LanguageCodeEnum::FRCA => "fr-ca",
+
+        LanguageCodeEnum::FRCD => "fr-cd",
+
+        LanguageCodeEnum::FRCF => "fr-cf",
+
+        LanguageCodeEnum::FRCG => "fr-cg",
+
+        LanguageCodeEnum::FRCH => "fr-ch",
+
+        LanguageCodeEnum::FRCI => "fr-ci",
+
+        LanguageCodeEnum::FRCM => "fr-cm",
+
+        LanguageCodeEnum::FRDJ => "fr-dj",
+
+        LanguageCodeEnum::FRDZ => "fr-dz",
+
+        LanguageCodeEnum::FRFR => "fr-fr",
+
+        LanguageCodeEnum::FRGA => "fr-ga",
+
+        LanguageCodeEnum::FRGF => "fr-gf",
+
+        LanguageCodeEnum::FRGN => "fr-gn",
+
+        LanguageCodeEnum::FRGP => "fr-gp",
+
+        LanguageCodeEnum::FRGQ => "fr-gq",
+
+        LanguageCodeEnum::FRHT => "fr-ht",
+
+        LanguageCodeEnum::FRKM => "fr-km",
+
+        LanguageCodeEnum::FRLU => "fr-lu",
+
+        LanguageCodeEnum::FRMA => "fr-ma",
+
+        LanguageCodeEnum::FRMC => "fr-mc",
+
+        LanguageCodeEnum::FRMF => "fr-mf",
+
+        LanguageCodeEnum::FRMG => "fr-mg",
+
+        LanguageCodeEnum::FRML => "fr-ml",
+
+        LanguageCodeEnum::FRMQ => "fr-mq",
+
+        LanguageCodeEnum::FRMR => "fr-mr",
+
+        LanguageCodeEnum::FRMU => "fr-mu",
+
+        LanguageCodeEnum::FRNC => "fr-nc",
+
+        LanguageCodeEnum::FRNE => "fr-ne",
+
+        LanguageCodeEnum::FRPF => "fr-pf",
+
+        LanguageCodeEnum::FRPM => "fr-pm",
+
+        LanguageCodeEnum::FRRE => "fr-re",
+
+        LanguageCodeEnum::FRRW => "fr-rw",
+
+        LanguageCodeEnum::FRSC => "fr-sc",
+
+        LanguageCodeEnum::FRSN => "fr-sn",
+
+        LanguageCodeEnum::FRSY => "fr-sy",
+
+        LanguageCodeEnum::FRTD => "fr-td",
+
+        LanguageCodeEnum::FRTG => "fr-tg",
+
+        LanguageCodeEnum::FRTN => "fr-tn",
+
+        LanguageCodeEnum::FRVU => "fr-vu",
+
+        LanguageCodeEnum::FRWF => "fr-wf",
+
+        LanguageCodeEnum::FRYT => "fr-yt",
+
+        LanguageCodeEnum::FUR => "fur",
+
+        LanguageCodeEnum::FURIT => "fur-it",
+
+        LanguageCodeEnum::FY => "fy",
+
+        LanguageCodeEnum::FYNL => "fy-nl",
+
+        LanguageCodeEnum::GA => "ga",
+
+        LanguageCodeEnum::GAGB => "ga-gb",
+
+        LanguageCodeEnum::GAIE => "ga-ie",
+
+        LanguageCodeEnum::GD => "gd",
+
+        LanguageCodeEnum::GDGB => "gd-gb",
+
+        LanguageCodeEnum::GL => "gl",
+
+        LanguageCodeEnum::GLES => "gl-es",
+
+        LanguageCodeEnum::GSW => "gsw",
+
+        LanguageCodeEnum::GSWCH => "gsw-ch",
+
+        LanguageCodeEnum::GSWFR => "gsw-fr",
+
+        LanguageCodeEnum::GSWLI => "gsw-li",
+
+        LanguageCodeEnum::GU => "gu",
+
+        LanguageCodeEnum::GUIN => "gu-in",
+
+        LanguageCodeEnum::GUZ => "guz",
+
+        LanguageCodeEnum::GUZKE => "guz-ke",
+
+        LanguageCodeEnum::GV => "gv",
+
+        LanguageCodeEnum::GVIM => "gv-im",
+
+        LanguageCodeEnum::HA => "ha",
+
+        LanguageCodeEnum::HAGH => "ha-gh",
+
+        LanguageCodeEnum::HANE => "ha-ne",
+
+        LanguageCodeEnum::HANG => "ha-ng",
+
+        LanguageCodeEnum::HAW => "haw",
+
+        LanguageCodeEnum::HAWUS => "haw-us",
+
+        LanguageCodeEnum::HE => "he",
+
+        LanguageCodeEnum::HEIL => "he-il",
+
+        LanguageCodeEnum::HI => "hi",
+
+        LanguageCodeEnum::HIIN => "hi-in",
+
+        LanguageCodeEnum::HR => "hr",
+
+        LanguageCodeEnum::HRBA => "hr-ba",
+
+        LanguageCodeEnum::HRHR => "hr-hr",
+
+        LanguageCodeEnum::HSB => "hsb",
+
+        LanguageCodeEnum::HSBDE => "hsb-de",
+
+        LanguageCodeEnum::HU => "hu",
+
+        LanguageCodeEnum::HUHU => "hu-hu",
+
+        LanguageCodeEnum::HY => "hy",
+
+        LanguageCodeEnum::HYAM => "hy-am",
+
+        LanguageCodeEnum::IA => "ia",
+
+        LanguageCodeEnum::ID => "id",
+
+        LanguageCodeEnum::IDID => "id-id",
+
+        LanguageCodeEnum::IG => "ig",
+
+        LanguageCodeEnum::IGNG => "ig-ng",
+
+        LanguageCodeEnum::II => "ii",
+
+        LanguageCodeEnum::IICN => "ii-cn",
+
+        LanguageCodeEnum::IS => "is",
+
+        LanguageCodeEnum::ISIS => "is-is",
+
+        LanguageCodeEnum::IT => "it",
+
+        LanguageCodeEnum::ITCH => "it-ch",
+
+        LanguageCodeEnum::ITIT => "it-it",
+
+        LanguageCodeEnum::ITSM => "it-sm",
+
+        LanguageCodeEnum::ITVA => "it-va",
+
+        LanguageCodeEnum::JA => "ja",
+
+        LanguageCodeEnum::JAJP => "ja-jp",
+
+        LanguageCodeEnum::JGO => "jgo",
+
+        LanguageCodeEnum::JGOCM => "jgo-cm",
+
+        LanguageCodeEnum::JMC => "jmc",
+
+        LanguageCodeEnum::JMCTZ => "jmc-tz",
+
+        LanguageCodeEnum::JV => "jv",
+
+        LanguageCodeEnum::JVID => "jv-id",
+
+        LanguageCodeEnum::KA => "ka",
+
+        LanguageCodeEnum::KAGE => "ka-ge",
+
+        LanguageCodeEnum::KAB => "kab",
+
+        LanguageCodeEnum::KABDZ => "kab-dz",
+
+        LanguageCodeEnum::KAM => "kam",
+
+        LanguageCodeEnum::KAMKE => "kam-ke",
+
+        LanguageCodeEnum::KDE => "kde",
+
+        LanguageCodeEnum::KDETZ => "kde-tz",
+
+        LanguageCodeEnum::KEA => "kea",
+
+        LanguageCodeEnum::KEACV => "kea-cv",
+
+        LanguageCodeEnum::KHQ => "khq",
+
+        LanguageCodeEnum::KHQML => "khq-ml",
+
+        LanguageCodeEnum::KI => "ki",
+
+        LanguageCodeEnum::KIKE => "ki-ke",
+
+        LanguageCodeEnum::KK => "kk",
+
+        LanguageCodeEnum::KKKZ => "kk-kz",
+
+        LanguageCodeEnum::KKJ => "kkj",
+
+        LanguageCodeEnum::KKJCM => "kkj-cm",
+
+        LanguageCodeEnum::KL => "kl",
+
+        LanguageCodeEnum::KLGL => "kl-gl",
+
+        LanguageCodeEnum::KLN => "kln",
+
+        LanguageCodeEnum::KLNKE => "kln-ke",
+
+        LanguageCodeEnum::KM => "km",
+
+        LanguageCodeEnum::KMKH => "km-kh",
+
+        LanguageCodeEnum::KN => "kn",
+
+        LanguageCodeEnum::KNIN => "kn-in",
+
+        LanguageCodeEnum::KO => "ko",
+
+        LanguageCodeEnum::KOKP => "ko-kp",
+
+        LanguageCodeEnum::KOKR => "ko-kr",
+
+        LanguageCodeEnum::KOK => "kok",
+
+        LanguageCodeEnum::KOKIN => "kok-in",
+
+        LanguageCodeEnum::KS => "ks",
+
+        LanguageCodeEnum::KSARAB => "ks-arab",
+
+        LanguageCodeEnum::KSARABIN => "ks-arab-in",
+
+        LanguageCodeEnum::KSB => "ksb",
+
+        LanguageCodeEnum::KSBTZ => "ksb-tz",
+
+        LanguageCodeEnum::KSF => "ksf",
+
+        LanguageCodeEnum::KSFCM => "ksf-cm",
+
+        LanguageCodeEnum::KSH => "ksh",
+
+        LanguageCodeEnum::KSHDE => "ksh-de",
+
+        LanguageCodeEnum::KU => "ku",
+
+        LanguageCodeEnum::KUTR => "ku-tr",
+
+        LanguageCodeEnum::KW => "kw",
+
+        LanguageCodeEnum::KWGB => "kw-gb",
+
+        LanguageCodeEnum::KY => "ky",
+
+        LanguageCodeEnum::KYKG => "ky-kg",
+
+        LanguageCodeEnum::LAG => "lag",
+
+        LanguageCodeEnum::LAGTZ => "lag-tz",
+
+        LanguageCodeEnum::LB => "lb",
+
+        LanguageCodeEnum::LBLU => "lb-lu",
+
+        LanguageCodeEnum::LG => "lg",
+
+        LanguageCodeEnum::LGUG => "lg-ug",
+
+        LanguageCodeEnum::LKT => "lkt",
+
+        LanguageCodeEnum::LKTUS => "lkt-us",
+
+        LanguageCodeEnum::LN => "ln",
+
+        LanguageCodeEnum::LNAO => "ln-ao",
+
+        LanguageCodeEnum::LNCD => "ln-cd",
+
+        LanguageCodeEnum::LNCF => "ln-cf",
+
+        LanguageCodeEnum::LNCG => "ln-cg",
+
+        LanguageCodeEnum::LO => "lo",
+
+        LanguageCodeEnum::LOLA => "lo-la",
+
+        LanguageCodeEnum::LRC => "lrc",
+
+        LanguageCodeEnum::LRCIQ => "lrc-iq",
+
+        LanguageCodeEnum::LRCIR => "lrc-ir",
+
+        LanguageCodeEnum::LT => "lt",
+
+        LanguageCodeEnum::LTLT => "lt-lt",
+
+        LanguageCodeEnum::LU => "lu",
+
+        LanguageCodeEnum::LUCD => "lu-cd",
+
+        LanguageCodeEnum::LUO => "luo",
+
+        LanguageCodeEnum::LUOKE => "luo-ke",
+
+        LanguageCodeEnum::LUY => "luy",
+
+        LanguageCodeEnum::LUYKE => "luy-ke",
+
+        LanguageCodeEnum::LV => "lv",
+
+        LanguageCodeEnum::LVLV => "lv-lv",
+
+        LanguageCodeEnum::MAI => "mai",
+
+        LanguageCodeEnum::MAIIN => "mai-in",
+
+        LanguageCodeEnum::MAS => "mas",
+
+        LanguageCodeEnum::MASKE => "mas-ke",
+
+        LanguageCodeEnum::MASTZ => "mas-tz",
+
+        LanguageCodeEnum::MER => "mer",
+
+        LanguageCodeEnum::MERKE => "mer-ke",
+
+        LanguageCodeEnum::MFE => "mfe",
+
+        LanguageCodeEnum::MFEMU => "mfe-mu",
+
+        LanguageCodeEnum::MG => "mg",
+
+        LanguageCodeEnum::MGMG => "mg-mg",
+
+        LanguageCodeEnum::MGH => "mgh",
+
+        LanguageCodeEnum::MGHMZ => "mgh-mz",
+
+        LanguageCodeEnum::MGO => "mgo",
+
+        LanguageCodeEnum::MGOCM => "mgo-cm",
+
+        LanguageCodeEnum::MI => "mi",
+
+        LanguageCodeEnum::MINZ => "mi-nz",
+
+        LanguageCodeEnum::MK => "mk",
+
+        LanguageCodeEnum::MKMK => "mk-mk",
+
+        LanguageCodeEnum::ML => "ml",
+
+        LanguageCodeEnum::MLIN => "ml-in",
+
+        LanguageCodeEnum::MN => "mn",
+
+        LanguageCodeEnum::MNMN => "mn-mn",
+
+        LanguageCodeEnum::MNI => "mni",
+
+        LanguageCodeEnum::MNIBENG => "mni-beng",
+
+        LanguageCodeEnum::MNIBENGIN => "mni-beng-in",
+
+        LanguageCodeEnum::MR => "mr",
+
+        LanguageCodeEnum::MRIN => "mr-in",
+
+        LanguageCodeEnum::MS => "ms",
+
+        LanguageCodeEnum::MSBN => "ms-bn",
+
+        LanguageCodeEnum::MSID => "ms-id",
+
+        LanguageCodeEnum::MSMY => "ms-my",
+
+        LanguageCodeEnum::MSSG => "ms-sg",
+
+        LanguageCodeEnum::MT => "mt",
+
+        LanguageCodeEnum::MTMT => "mt-mt",
+
+        LanguageCodeEnum::MUA => "mua",
+
+        LanguageCodeEnum::MUACM => "mua-cm",
+
+        LanguageCodeEnum::MY => "my",
+
+        LanguageCodeEnum::MYMM => "my-mm",
+
+        LanguageCodeEnum::MZN => "mzn",
+
+        LanguageCodeEnum::MZNIR => "mzn-ir",
+
+        LanguageCodeEnum::NAQ => "naq",
+
+        LanguageCodeEnum::NAQNA => "naq-na",
+
+        LanguageCodeEnum::NB => "nb",
+
+        LanguageCodeEnum::NBNO => "nb-no",
+
+        LanguageCodeEnum::NBSJ => "nb-sj",
+
+        LanguageCodeEnum::ND => "nd",
+
+        LanguageCodeEnum::NDZW => "nd-zw",
+
+        LanguageCodeEnum::NDS => "nds",
+
+        LanguageCodeEnum::NDSDE => "nds-de",
+
+        LanguageCodeEnum::NDSNL => "nds-nl",
+
+        LanguageCodeEnum::NE => "ne",
+
+        LanguageCodeEnum::NEIN => "ne-in",
+
+        LanguageCodeEnum::NENP => "ne-np",
+
+        LanguageCodeEnum::NL => "nl",
+
+        LanguageCodeEnum::NLAW => "nl-aw",
+
+        LanguageCodeEnum::NLBE => "nl-be",
+
+        LanguageCodeEnum::NLBQ => "nl-bq",
+
+        LanguageCodeEnum::NLCW => "nl-cw",
+
+        LanguageCodeEnum::NLNL => "nl-nl",
+
+        LanguageCodeEnum::NLSR => "nl-sr",
+
+        LanguageCodeEnum::NLSX => "nl-sx",
+
+        LanguageCodeEnum::NMG => "nmg",
+
+        LanguageCodeEnum::NMGCM => "nmg-cm",
+
+        LanguageCodeEnum::NN => "nn",
+
+        LanguageCodeEnum::NNNO => "nn-no",
+
+        LanguageCodeEnum::NNH => "nnh",
+
+        LanguageCodeEnum::NNHCM => "nnh-cm",
+
+        LanguageCodeEnum::NUS => "nus",
+
+        LanguageCodeEnum::NUSSS => "nus-ss",
+
+        LanguageCodeEnum::NYN => "nyn",
+
+        LanguageCodeEnum::NYNUG => "nyn-ug",
+
+        LanguageCodeEnum::OM => "om",
+
+        LanguageCodeEnum::OMET => "om-et",
+
+        LanguageCodeEnum::OMKE => "om-ke",
+
+        LanguageCodeEnum::OR => "or",
+
+        LanguageCodeEnum::ORIN => "or-in",
+
+        LanguageCodeEnum::OS => "os",
+
+        LanguageCodeEnum::OSGE => "os-ge",
+
+        LanguageCodeEnum::OSRU => "os-ru",
+
+        LanguageCodeEnum::PA => "pa",
+
+        LanguageCodeEnum::PAARAB => "pa-arab",
+
+        LanguageCodeEnum::PAARABPK => "pa-arab-pk",
+
+        LanguageCodeEnum::PAGURU => "pa-guru",
+
+        LanguageCodeEnum::PAGURUIN => "pa-guru-in",
+
+        LanguageCodeEnum::PCM => "pcm",
+
+        LanguageCodeEnum::PCMNG => "pcm-ng",
+
+        LanguageCodeEnum::PL => "pl",
+
+        LanguageCodeEnum::PLPL => "pl-pl",
+
+        LanguageCodeEnum::PRG => "prg",
+
+        LanguageCodeEnum::PS => "ps",
+
+        LanguageCodeEnum::PSAF => "ps-af",
+
+        LanguageCodeEnum::PSPK => "ps-pk",
+
+        LanguageCodeEnum::PT => "pt",
+
+        LanguageCodeEnum::PTAO => "pt-ao",
+
+        LanguageCodeEnum::PTBR => "pt-br",
+
+        LanguageCodeEnum::PTCH => "pt-ch",
+
+        LanguageCodeEnum::PTCV => "pt-cv",
+
+        LanguageCodeEnum::PTGQ => "pt-gq",
+
+        LanguageCodeEnum::PTGW => "pt-gw",
+
+        LanguageCodeEnum::PTLU => "pt-lu",
+
+        LanguageCodeEnum::PTMO => "pt-mo",
+
+        LanguageCodeEnum::PTMZ => "pt-mz",
+
+        LanguageCodeEnum::PTPT => "pt-pt",
+
+        LanguageCodeEnum::PTST => "pt-st",
+
+        LanguageCodeEnum::PTTL => "pt-tl",
+
+        LanguageCodeEnum::QU => "qu",
+
+        LanguageCodeEnum::QUBO => "qu-bo",
+
+        LanguageCodeEnum::QUEC => "qu-ec",
+
+        LanguageCodeEnum::QUPE => "qu-pe",
+
+        LanguageCodeEnum::RM => "rm",
+
+        LanguageCodeEnum::RMCH => "rm-ch",
+
+        LanguageCodeEnum::RN => "rn",
+
+        LanguageCodeEnum::RNBI => "rn-bi",
+
+        LanguageCodeEnum::RO => "ro",
+
+        LanguageCodeEnum::ROMD => "ro-md",
+
+        LanguageCodeEnum::RORO => "ro-ro",
+
+        LanguageCodeEnum::ROF => "rof",
+
+        LanguageCodeEnum::ROFTZ => "rof-tz",
+
+        LanguageCodeEnum::RU => "ru",
+
+        LanguageCodeEnum::RUBY => "ru-by",
+
+        LanguageCodeEnum::RUKG => "ru-kg",
+
+        LanguageCodeEnum::RUKZ => "ru-kz",
+
+        LanguageCodeEnum::RUMD => "ru-md",
+
+        LanguageCodeEnum::RURU => "ru-ru",
+
+        LanguageCodeEnum::RUUA => "ru-ua",
+
+        LanguageCodeEnum::RW => "rw",
+
+        LanguageCodeEnum::RWRW => "rw-rw",
+
+        LanguageCodeEnum::RWK => "rwk",
+
+        LanguageCodeEnum::RWKTZ => "rwk-tz",
+
+        LanguageCodeEnum::SAH => "sah",
+
+        LanguageCodeEnum::SAHRU => "sah-ru",
+
+        LanguageCodeEnum::SAQ => "saq",
+
+        LanguageCodeEnum::SAQKE => "saq-ke",
+
+        LanguageCodeEnum::SAT => "sat",
+
+        LanguageCodeEnum::SATOLCK => "sat-olck",
+
+        LanguageCodeEnum::SATOLCKIN => "sat-olck-in",
+
+        LanguageCodeEnum::SBP => "sbp",
+
+        LanguageCodeEnum::SBPTZ => "sbp-tz",
+
+        LanguageCodeEnum::SD => "sd",
+
+        LanguageCodeEnum::SDARAB => "sd-arab",
+
+        LanguageCodeEnum::SDARABPK => "sd-arab-pk",
+
+        LanguageCodeEnum::SDDEVA => "sd-deva",
+
+        LanguageCodeEnum::SDDEVAIN => "sd-deva-in",
+
+        LanguageCodeEnum::SE => "se",
+
+        LanguageCodeEnum::SEFI => "se-fi",
+
+        LanguageCodeEnum::SENO => "se-no",
+
+        LanguageCodeEnum::SESE => "se-se",
+
+        LanguageCodeEnum::SEH => "seh",
+
+        LanguageCodeEnum::SEHMZ => "seh-mz",
+
+        LanguageCodeEnum::SES => "ses",
+
+        LanguageCodeEnum::SESML => "ses-ml",
+
+        LanguageCodeEnum::SG => "sg",
+
+        LanguageCodeEnum::SGCF => "sg-cf",
+
+        LanguageCodeEnum::SHI => "shi",
+
+        LanguageCodeEnum::SHILATN => "shi-latn",
+
+        LanguageCodeEnum::SHILATNMA => "shi-latn-ma",
+
+        LanguageCodeEnum::SHITFNG => "shi-tfng",
+
+        LanguageCodeEnum::SHITFNGMA => "shi-tfng-ma",
+
+        LanguageCodeEnum::SI => "si",
+
+        LanguageCodeEnum::SILK => "si-lk",
+
+        LanguageCodeEnum::SK => "sk",
+
+        LanguageCodeEnum::SKSK => "sk-sk",
+
+        LanguageCodeEnum::SL => "sl",
+
+        LanguageCodeEnum::SLSI => "sl-si",
+
+        LanguageCodeEnum::SMN => "smn",
+
+        LanguageCodeEnum::SMNFI => "smn-fi",
+
+        LanguageCodeEnum::SN => "sn",
+
+        LanguageCodeEnum::SNZW => "sn-zw",
+
+        LanguageCodeEnum::SO => "so",
+
+        LanguageCodeEnum::SODJ => "so-dj",
+
+        LanguageCodeEnum::SOET => "so-et",
+
+        LanguageCodeEnum::SOKE => "so-ke",
+
+        LanguageCodeEnum::SOSO => "so-so",
+
+        LanguageCodeEnum::SQ => "sq",
+
+        LanguageCodeEnum::SQAL => "sq-al",
+
+        LanguageCodeEnum::SQMK => "sq-mk",
+
+        LanguageCodeEnum::SQXK => "sq-xk",
+
+        LanguageCodeEnum::SR => "sr",
+
+        LanguageCodeEnum::SRCYRL => "sr-cyrl",
+
+        LanguageCodeEnum::SRCYRLBA => "sr-cyrl-ba",
+
+        LanguageCodeEnum::SRCYRLME => "sr-cyrl-me",
+
+        LanguageCodeEnum::SRCYRLRS => "sr-cyrl-rs",
+
+        LanguageCodeEnum::SRCYRLXK => "sr-cyrl-xk",
+
+        LanguageCodeEnum::SRLATN => "sr-latn",
+
+        LanguageCodeEnum::SRLATNBA => "sr-latn-ba",
+
+        LanguageCodeEnum::SRLATNME => "sr-latn-me",
+
+        LanguageCodeEnum::SRLATNRS => "sr-latn-rs",
+
+        LanguageCodeEnum::SRLATNXK => "sr-latn-xk",
+
+        LanguageCodeEnum::SU => "su",
+
+        LanguageCodeEnum::SULATN => "su-latn",
+
+        LanguageCodeEnum::SULATNID => "su-latn-id",
+
+        LanguageCodeEnum::SV => "sv",
+
+        LanguageCodeEnum::SVAX => "sv-ax",
+
+        LanguageCodeEnum::SVFI => "sv-fi",
+
+        LanguageCodeEnum::SVSE => "sv-se",
+
+        LanguageCodeEnum::SW => "sw",
+
+        LanguageCodeEnum::SWCD => "sw-cd",
+
+        LanguageCodeEnum::SWKE => "sw-ke",
+
+        LanguageCodeEnum::SWTZ => "sw-tz",
+
+        LanguageCodeEnum::SWUG => "sw-ug",
+
+        LanguageCodeEnum::TA => "ta",
+
+        LanguageCodeEnum::TAIN => "ta-in",
+
+        LanguageCodeEnum::TALK => "ta-lk",
+
+        LanguageCodeEnum::TAMY => "ta-my",
+
+        LanguageCodeEnum::TASG => "ta-sg",
+
+        LanguageCodeEnum::TE => "te",
+
+        LanguageCodeEnum::TEIN => "te-in",
+
+        LanguageCodeEnum::TEO => "teo",
+
+        LanguageCodeEnum::TEOKE => "teo-ke",
+
+        LanguageCodeEnum::TEOUG => "teo-ug",
+
+        LanguageCodeEnum::TG => "tg",
+
+        LanguageCodeEnum::TGTJ => "tg-tj",
+
+        LanguageCodeEnum::TH => "th",
+
+        LanguageCodeEnum::THTH => "th-th",
+
+        LanguageCodeEnum::TI => "ti",
+
+        LanguageCodeEnum::TIER => "ti-er",
+
+        LanguageCodeEnum::TIET => "ti-et",
+
+        LanguageCodeEnum::TK => "tk",
+
+        LanguageCodeEnum::TKTM => "tk-tm",
+
+        LanguageCodeEnum::TO => "to",
+
+        LanguageCodeEnum::TOTO => "to-to",
+
+        LanguageCodeEnum::TR => "tr",
+
+        LanguageCodeEnum::TRCY => "tr-cy",
+
+        LanguageCodeEnum::TRTR => "tr-tr",
+
+        LanguageCodeEnum::TT => "tt",
+
+        LanguageCodeEnum::TTRU => "tt-ru",
+
+        LanguageCodeEnum::TWQ => "twq",
+
+        LanguageCodeEnum::TWQNE => "twq-ne",
+
+        LanguageCodeEnum::TZM => "tzm",
+
+        LanguageCodeEnum::TZMMA => "tzm-ma",
+
+        LanguageCodeEnum::UG => "ug",
+
+        LanguageCodeEnum::UGCN => "ug-cn",
+
+        LanguageCodeEnum::UK => "uk",
+
+        LanguageCodeEnum::UKUA => "uk-ua",
+
+        LanguageCodeEnum::UR => "ur",
+
+        LanguageCodeEnum::URIN => "ur-in",
+
+        LanguageCodeEnum::URPK => "ur-pk",
+
+        LanguageCodeEnum::UZ => "uz",
+
+        LanguageCodeEnum::UZARAB => "uz-arab",
+
+        LanguageCodeEnum::UZARABAF => "uz-arab-af",
+
+        LanguageCodeEnum::UZCYRL => "uz-cyrl",
+
+        LanguageCodeEnum::UZCYRLUZ => "uz-cyrl-uz",
+
+        LanguageCodeEnum::UZLATN => "uz-latn",
+
+        LanguageCodeEnum::UZLATNUZ => "uz-latn-uz",
+
+        LanguageCodeEnum::VAI => "vai",
+
+        LanguageCodeEnum::VAILATN => "vai-latn",
+
+        LanguageCodeEnum::VAILATNLR => "vai-latn-lr",
+
+        LanguageCodeEnum::VAIVAII => "vai-vaii",
+
+        LanguageCodeEnum::VAIVAIILR => "vai-vaii-lr",
+
+        LanguageCodeEnum::VI => "vi",
+
+        LanguageCodeEnum::VIVN => "vi-vn",
+
+        LanguageCodeEnum::VO => "vo",
+
+        LanguageCodeEnum::VUN => "vun",
+
+        LanguageCodeEnum::VUNTZ => "vun-tz",
+
+        LanguageCodeEnum::WAE => "wae",
+
+        LanguageCodeEnum::WAECH => "wae-ch",
+
+        LanguageCodeEnum::WO => "wo",
+
+        LanguageCodeEnum::WOSN => "wo-sn",
+
+        LanguageCodeEnum::XH => "xh",
+
+        LanguageCodeEnum::XHZA => "xh-za",
+
+        LanguageCodeEnum::XOG => "xog",
+
+        LanguageCodeEnum::XOGUG => "xog-ug",
+
+        LanguageCodeEnum::YAV => "yav",
+
+        LanguageCodeEnum::YAVCM => "yav-cm",
+
+        LanguageCodeEnum::YI => "yi",
+
+        LanguageCodeEnum::YO => "yo",
+
+        LanguageCodeEnum::YOBJ => "yo-bj",
+
+        LanguageCodeEnum::YONG => "yo-ng",
+
+        LanguageCodeEnum::YUE => "yue",
+
+        LanguageCodeEnum::YUEHANS => "yue-hans",
+
+        LanguageCodeEnum::YUEHANSCN => "yue-hans-cn",
+
+        LanguageCodeEnum::YUEHANT => "yue-hant",
+
+        LanguageCodeEnum::YUEHANTHK => "yue-hant-hk",
+
+        LanguageCodeEnum::ZGH => "zgh",
+
+        LanguageCodeEnum::ZGHMA => "zgh-ma",
+
+        LanguageCodeEnum::ZH => "zh",
+
+        LanguageCodeEnum::ZHHANS => "zh-hans",
+
+        LanguageCodeEnum::ZHHANSCN => "zh-hans-cn",
+
+        LanguageCodeEnum::ZHHANSHK => "zh-hans-hk",
+
+        LanguageCodeEnum::ZHHANSMO => "zh-hans-mo",
+
+        LanguageCodeEnum::ZHHANSSG => "zh-hans-sg",
+
+        LanguageCodeEnum::ZHHANT => "zh-hant",
+
+        LanguageCodeEnum::ZHHANTHK => "zh-hant-hk",
+
+        LanguageCodeEnum::ZHHANTMO => "zh-hant-mo",
+
+        LanguageCodeEnum::ZHHANTTW => "zh-hant-tw",
+
+        LanguageCodeEnum::ZU => "zu",
+
+        LanguageCodeEnum::ZUZA => "zu-za",
+
+    }
+}
+
+
 #[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
 pub enum MarkAsPaidStrategyEnum {
 
@@ -5294,6 +6877,9 @@ pub enum OrderEventsEmailsEnum {
     #[graphql(name = "FULFILLMENT_CONFIRMATION")]
     FULFILLMENTCONFIRMATION,
 
+    #[graphql(name = "DIGITAL_LINKS")]
+    DIGITALLINKS,
+
 }
 
 
@@ -5608,6 +7194,15 @@ pub enum OrderOriginEnum {
 
     #[graphql(name = "BULK_CREATE")]
     BULKCREATE,
+
+}
+
+
+#[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum OrderSettingsErrorCode {
+
+    #[graphql(name = "INVALID")]
+    INVALID,
 
 }
 
@@ -6332,6 +7927,9 @@ pub enum ProductErrorCode {
     #[graphql(name = "UNSUPPORTED_MEDIA_PROVIDER")]
     UNSUPPORTEDMEDIAPROVIDER,
 
+    #[graphql(name = "PREORDER_VARIANT_CANNOT_BE_DEACTIVATED")]
+    PREORDERVARIANTCANNOTBEDEACTIVATED,
+
     #[graphql(name = "INVALID_FILE_TYPE")]
     INVALIDFILETYPE,
 
@@ -6479,6 +8077,9 @@ pub enum ProductTypeConfigurable {
 #[derive(Enum, Clone, Copy, PartialEq, Eq, Debug)]
 pub enum ProductTypeEnum {
 
+    #[graphql(name = "DIGITAL")]
+    DIGITAL,
+
     #[graphql(name = "SHIPPABLE")]
     SHIPPABLE,
 
@@ -6502,6 +8103,9 @@ pub enum ProductTypeSortField {
 
     #[graphql(name = "NAME")]
     NAME,
+
+    #[graphql(name = "DIGITAL")]
+    DIGITAL,
 
     #[graphql(name = "SHIPPING_REQUIRED")]
     SHIPPINGREQUIRED,
@@ -6559,9 +8163,6 @@ pub enum ProductVariantSortField {
 
     #[graphql(name = "LAST_MODIFIED_AT")]
     LASTMODIFIEDAT,
-
-    #[graphql(name = "ID")]
-    ID,
 
 }
 
@@ -8093,6 +9694,9 @@ pub enum WebhookEventTypeAsyncEnum {
     #[graphql(name = "GIFT_CARD_METADATA_UPDATED")]
     GIFTCARDMETADATAUPDATED,
 
+    #[graphql(name = "GIFT_CARD_EXPORT_COMPLETED")]
+    GIFTCARDEXPORTCOMPLETED,
+
     #[graphql(name = "MENU_CREATED")]
     MENUCREATED,
 
@@ -8264,15 +9868,6 @@ pub enum WebhookEventTypeAsyncEnum {
     #[graphql(name = "PRODUCT_EXPORT_COMPLETED")]
     PRODUCTEXPORTCOMPLETED,
 
-    #[graphql(name = "PRODUCT_TYPE_CREATED")]
-    PRODUCTTYPECREATED,
-
-    #[graphql(name = "PRODUCT_TYPE_UPDATED")]
-    PRODUCTTYPEUPDATED,
-
-    #[graphql(name = "PRODUCT_TYPE_DELETED")]
-    PRODUCTTYPEDELETED,
-
     #[graphql(name = "PRODUCT_MEDIA_CREATED")]
     PRODUCTMEDIACREATED,
 
@@ -8434,6 +10029,9 @@ pub enum WebhookEventTypeAsyncEnum {
 
     #[graphql(name = "VOUCHER_METADATA_UPDATED")]
     VOUCHERMETADATAUPDATED,
+
+    #[graphql(name = "VOUCHER_CODE_EXPORT_COMPLETED")]
+    VOUCHERCODEEXPORTCOMPLETED,
 
     #[graphql(name = "OBSERVABILITY")]
     OBSERVABILITY,
@@ -8555,6 +10153,9 @@ pub enum WebhookEventTypeEnum {
     #[graphql(name = "GIFT_CARD_METADATA_UPDATED")]
     GIFTCARDMETADATAUPDATED,
 
+    #[graphql(name = "GIFT_CARD_EXPORT_COMPLETED")]
+    GIFTCARDEXPORTCOMPLETED,
+
     #[graphql(name = "MENU_CREATED")]
     MENUCREATED,
 
@@ -8726,15 +10327,6 @@ pub enum WebhookEventTypeEnum {
     #[graphql(name = "PRODUCT_EXPORT_COMPLETED")]
     PRODUCTEXPORTCOMPLETED,
 
-    #[graphql(name = "PRODUCT_TYPE_CREATED")]
-    PRODUCTTYPECREATED,
-
-    #[graphql(name = "PRODUCT_TYPE_UPDATED")]
-    PRODUCTTYPEUPDATED,
-
-    #[graphql(name = "PRODUCT_TYPE_DELETED")]
-    PRODUCTTYPEDELETED,
-
     #[graphql(name = "PRODUCT_MEDIA_CREATED")]
     PRODUCTMEDIACREATED,
 
@@ -8896,6 +10488,9 @@ pub enum WebhookEventTypeEnum {
 
     #[graphql(name = "VOUCHER_METADATA_UPDATED")]
     VOUCHERMETADATAUPDATED,
+
+    #[graphql(name = "VOUCHER_CODE_EXPORT_COMPLETED")]
+    VOUCHERCODEEXPORTCOMPLETED,
 
     #[graphql(name = "OBSERVABILITY")]
     OBSERVABILITY,
@@ -9158,6 +10753,9 @@ pub enum WebhookSampleEventTypeEnum {
     #[graphql(name = "GIFT_CARD_METADATA_UPDATED")]
     GIFTCARDMETADATAUPDATED,
 
+    #[graphql(name = "GIFT_CARD_EXPORT_COMPLETED")]
+    GIFTCARDEXPORTCOMPLETED,
+
     #[graphql(name = "MENU_CREATED")]
     MENUCREATED,
 
@@ -9329,15 +10927,6 @@ pub enum WebhookSampleEventTypeEnum {
     #[graphql(name = "PRODUCT_EXPORT_COMPLETED")]
     PRODUCTEXPORTCOMPLETED,
 
-    #[graphql(name = "PRODUCT_TYPE_CREATED")]
-    PRODUCTTYPECREATED,
-
-    #[graphql(name = "PRODUCT_TYPE_UPDATED")]
-    PRODUCTTYPEUPDATED,
-
-    #[graphql(name = "PRODUCT_TYPE_DELETED")]
-    PRODUCTTYPEDELETED,
-
     #[graphql(name = "PRODUCT_MEDIA_CREATED")]
     PRODUCTMEDIACREATED,
 
@@ -9499,6 +11088,9 @@ pub enum WebhookSampleEventTypeEnum {
 
     #[graphql(name = "VOUCHER_METADATA_UPDATED")]
     VOUCHERMETADATAUPDATED,
+
+    #[graphql(name = "VOUCHER_CODE_EXPORT_COMPLETED")]
+    VOUCHERCODEEXPORTCOMPLETED,
 
     #[graphql(name = "OBSERVABILITY")]
     OBSERVABILITY,
@@ -9993,6 +11585,18 @@ pub struct AttributeCreateInput {
     #[graphql(name = "visibleInStorefront")]
     pub visible_in_storefront: Option<bool>,
 
+    #[graphql(name = "filterableInStorefront")]
+    pub filterable_in_storefront: Option<bool>,
+
+    #[graphql(name = "filterableInDashboard")]
+    pub filterable_in_dashboard: Option<bool>,
+
+    #[graphql(name = "storefrontSearchPosition")]
+    pub storefront_search_position: Option<i32>,
+
+    #[graphql(name = "availableInGrid")]
+    pub available_in_grid: Option<bool>,
+
     #[graphql(name = "externalReference")]
     pub external_reference: Option<String>,
 
@@ -10048,6 +11652,15 @@ pub struct AttributeFilterInput {
 
     #[graphql(name = "slugs")]
     pub slugs: Option<Vec<String>>,
+
+    #[graphql(name = "filterableInStorefront")]
+    pub filterable_in_storefront: Option<bool>,
+
+    #[graphql(name = "availableInGrid")]
+    pub available_in_grid: Option<bool>,
+
+    #[graphql(name = "filterableInDashboard")]
+    pub filterable_in_dashboard: Option<bool>,
 
     #[graphql(name = "channel")]
     pub channel: Option<String>,
@@ -10149,6 +11762,18 @@ pub struct AttributeUpdateInput {
 
     #[graphql(name = "visibleInStorefront")]
     pub visible_in_storefront: Option<bool>,
+
+    #[graphql(name = "filterableInStorefront")]
+    pub filterable_in_storefront: Option<bool>,
+
+    #[graphql(name = "filterableInDashboard")]
+    pub filterable_in_dashboard: Option<bool>,
+
+    #[graphql(name = "storefrontSearchPosition")]
+    pub storefront_search_position: Option<i32>,
+
+    #[graphql(name = "availableInGrid")]
+    pub available_in_grid: Option<bool>,
 
     #[graphql(name = "externalReference")]
     pub external_reference: Option<String>,
@@ -10401,6 +12026,9 @@ pub struct AttributeWhereInput {
 
     #[graphql(name = "visibleInStorefront")]
     pub visible_in_storefront: Option<bool>,
+
+    #[graphql(name = "filterableInDashboard")]
+    pub filterable_in_dashboard: Option<bool>,
 
     #[graphql(name = "AND")]
     pub and: Option<Vec<AttributeWhereInput>>,
@@ -10711,6 +12339,9 @@ pub struct ChannelListingUpdateInput {
     #[graphql(name = "priorPrice")]
     pub prior_price: Option<GenPositiveDecimal>,
 
+    #[graphql(name = "preorderThreshold")]
+    pub preorder_threshold: Option<i32>,
+
 }
 
 
@@ -10803,7 +12434,7 @@ pub struct CheckoutCreateInput {
     pub channel: Option<String>,
 
     #[graphql(name = "lines")]
-    pub lines: Option<Vec<CheckoutLineInput>>,
+    pub lines: Vec<CheckoutLineInput>,
 
     #[graphql(name = "email")]
     pub email: Option<String>,
@@ -11855,6 +13486,25 @@ pub struct ExportFileSortingInput {
 
 
 #[derive(InputObject, Clone, Debug)]
+#[graphql(name = "ExportGiftCardsInput")]
+pub struct ExportGiftCardsInput {
+
+    #[graphql(name = "scope")]
+    pub scope: ExportScope,
+
+    #[graphql(name = "filter")]
+    pub filter: Option<GiftCardFilterInput>,
+
+    #[graphql(name = "ids")]
+    pub ids: Option<Vec<ID>>,
+
+    #[graphql(name = "fileType")]
+    pub file_type: FileTypesEnum,
+
+}
+
+
+#[derive(InputObject, Clone, Debug)]
 #[graphql(name = "ExportInfoInput")]
 pub struct ExportInfoInput {
 
@@ -11888,6 +13538,22 @@ pub struct ExportProductsInput {
 
     #[graphql(name = "exportInfo")]
     pub export_info: Option<ExportInfoInput>,
+
+    #[graphql(name = "fileType")]
+    pub file_type: FileTypesEnum,
+
+}
+
+
+#[derive(InputObject, Clone, Debug)]
+#[graphql(name = "ExportVoucherCodesInput")]
+pub struct ExportVoucherCodesInput {
+
+    #[graphql(name = "voucherId")]
+    pub voucher_id: Option<ID>,
+
+    #[graphql(name = "ids")]
+    pub ids: Option<Vec<ID>>,
 
     #[graphql(name = "fileType")]
     pub file_type: FileTypesEnum,
@@ -12564,6 +14230,16 @@ pub struct NameTranslationInput {
 
 
 #[derive(InputObject, Clone, Debug)]
+#[graphql(name = "OrderAddNoteInput")]
+pub struct OrderAddNoteInput {
+
+    #[graphql(name = "message")]
+    pub message: String,
+
+}
+
+
+#[derive(InputObject, Clone, Debug)]
 #[graphql(name = "OrderAuthorizeStatusEnumFilterInput")]
 pub struct OrderAuthorizeStatusEnumFilterInput {
 
@@ -12989,6 +14665,9 @@ pub struct OrderFilterInput {
     #[graphql(name = "isClickAndCollect")]
     pub is_click_and_collect: Option<bool>,
 
+    #[graphql(name = "isPreorder")]
+    pub is_preorder: Option<bool>,
+
     #[graphql(name = "ids")]
     pub ids: Option<Vec<ID>>,
 
@@ -13348,6 +15027,19 @@ pub struct OrderSettingsInput {
 
     #[graphql(name = "useLegacyLineDiscountPropagation")]
     pub use_legacy_line_discount_propagation: Option<bool>,
+
+}
+
+
+#[derive(InputObject, Clone, Debug)]
+#[graphql(name = "OrderSettingsUpdateInput")]
+pub struct OrderSettingsUpdateInput {
+
+    #[graphql(name = "automaticallyConfirmAllNewOrders")]
+    pub automatically_confirm_all_new_orders: Option<bool>,
+
+    #[graphql(name = "automaticallyFulfillNonShippableGiftCard")]
+    pub automatically_fulfill_non_shippable_gift_card: Option<bool>,
 
 }
 
@@ -14016,6 +15708,19 @@ pub struct PluginUpdateInput {
 
 
 #[derive(InputObject, Clone, Debug)]
+#[graphql(name = "PreorderSettingsInput")]
+pub struct PreorderSettingsInput {
+
+    #[graphql(name = "globalThreshold")]
+    pub global_threshold: Option<i32>,
+
+    #[graphql(name = "endDate")]
+    pub end_date: Option<DateTime<Utc>>,
+
+}
+
+
+#[derive(InputObject, Clone, Debug)]
 #[graphql(name = "PriceFilterInput")]
 pub struct PriceFilterInput {
 
@@ -14357,6 +16062,9 @@ pub struct ProductFilterInput {
     #[graphql(name = "ids")]
     pub ids: Option<Vec<ID>>,
 
+    #[graphql(name = "hasPreorderedVariants")]
+    pub has_preordered_variants: Option<bool>,
+
     #[graphql(name = "slugs")]
     pub slugs: Option<Vec<String>>,
 
@@ -14532,6 +16240,9 @@ pub struct ProductTypeInput {
     #[graphql(name = "isShippingRequired")]
     pub is_shipping_required: Option<bool>,
 
+    #[graphql(name = "isDigital")]
+    pub is_digital: Option<bool>,
+
     #[graphql(name = "weight")]
     pub weight: Option<GenWeightScalar>,
 
@@ -14575,6 +16286,9 @@ pub struct ProductVariantBulkCreateInput {
 
     #[graphql(name = "weight")]
     pub weight: Option<GenWeightScalar>,
+
+    #[graphql(name = "preorder")]
+    pub preorder: Option<PreorderSettingsInput>,
 
     #[graphql(name = "quantityLimitPerCustomer")]
     pub quantity_limit_per_customer: Option<i32>,
@@ -14635,6 +16349,9 @@ pub struct ProductVariantBulkUpdateInput {
     #[graphql(name = "weight")]
     pub weight: Option<GenWeightScalar>,
 
+    #[graphql(name = "preorder")]
+    pub preorder: Option<PreorderSettingsInput>,
+
     #[graphql(name = "quantityLimitPerCustomer")]
     pub quantity_limit_per_customer: Option<i32>,
 
@@ -14675,6 +16392,9 @@ pub struct ProductVariantChannelListingAddInput {
     #[graphql(name = "priorPrice")]
     pub prior_price: Option<GenPositiveDecimal>,
 
+    #[graphql(name = "preorderThreshold")]
+    pub preorder_threshold: Option<i32>,
+
 }
 
 
@@ -14713,6 +16433,9 @@ pub struct ProductVariantCreateInput {
     #[graphql(name = "weight")]
     pub weight: Option<GenWeightScalar>,
 
+    #[graphql(name = "preorder")]
+    pub preorder: Option<PreorderSettingsInput>,
+
     #[graphql(name = "quantityLimitPerCustomer")]
     pub quantity_limit_per_customer: Option<i32>,
 
@@ -14747,6 +16470,9 @@ pub struct ProductVariantFilterInput {
     #[graphql(name = "metadata")]
     pub metadata: Option<Vec<MetadataFilter>>,
 
+    #[graphql(name = "isPreorder")]
+    pub is_preorder: Option<bool>,
+
     #[graphql(name = "updatedAt")]
     pub updated_at: Option<DateTimeRangeInput>,
 
@@ -14771,6 +16497,9 @@ pub struct ProductVariantInput {
 
     #[graphql(name = "weight")]
     pub weight: Option<GenWeightScalar>,
+
+    #[graphql(name = "preorder")]
+    pub preorder: Option<PreorderSettingsInput>,
 
     #[graphql(name = "quantityLimitPerCustomer")]
     pub quantity_limit_per_customer: Option<i32>,
@@ -14834,12 +16563,6 @@ pub struct ProductVariantWhereInput {
 
     #[graphql(name = "attributes")]
     pub attributes: Option<Vec<AssignedAttributeWhereInput>>,
-
-    #[graphql(name = "stockAvailability")]
-    pub stock_availability: Option<StockAvailability>,
-
-    #[graphql(name = "stocks")]
-    pub stocks: Option<ProductStockFilterInput>,
 
     #[graphql(name = "AND")]
     pub and: Option<Vec<ProductVariantWhereInput>>,
@@ -14910,6 +16633,9 @@ pub struct ProductWhereInput {
 
     #[graphql(name = "giftCard")]
     pub gift_card: Option<bool>,
+
+    #[graphql(name = "hasPreorderedVariants")]
+    pub has_preordered_variants: Option<bool>,
 
     #[graphql(name = "updatedAt")]
     pub updated_at: Option<DateTimeFilterInput>,
@@ -15604,6 +17330,19 @@ pub struct ShopSettingsTranslationInput {
 
     #[graphql(name = "description")]
     pub description: Option<String>,
+
+}
+
+
+#[derive(InputObject, Clone, Debug)]
+#[graphql(name = "SiteDomainInput")]
+pub struct SiteDomainInput {
+
+    #[graphql(name = "domain")]
+    pub domain: Option<String>,
+
+    #[graphql(name = "name")]
+    pub name: Option<String>,
 
 }
 
@@ -17697,9 +19436,6 @@ pub struct Attribute {
     #[graphql(name = "visibleInStorefront")]
     pub visible_in_storefront: Option<bool>,
 
-    #[graphql(name = "withChoices")]
-    pub with_choices: Option<bool>,
-
     #[graphql(name = "filterableInStorefront")]
     pub filterable_in_storefront: Option<bool>,
 
@@ -17708,6 +19444,9 @@ pub struct Attribute {
 
     #[graphql(name = "storefrontSearchPosition")]
     pub storefront_search_position: Option<i32>,
+
+    #[graphql(name = "withChoices")]
+    pub with_choices: Option<bool>,
 
 }
 
@@ -17723,9 +19462,17 @@ impl Attribute {
     }
 
     #[graphql(name = "translation")]
-    async fn translation(&self, #[graphql(name = "languageCode")] _arg_language_code: LanguageCodeEnum) -> Option<AttributeTranslation> {
+    async fn translation(&self, ctx: &Context<'_>, #[graphql(name = "languageCode")] _arg_language_code: LanguageCodeEnum) -> Option<AttributeTranslation> {
 
-        None
+        {
+        let db = match ctx.data_opt::<crate::context::GqlContext>().and_then(|g| g.db().ok()) {
+            Some(d) => d.clone(),
+            None => return None,
+        };
+        let eid: i32 = self.id.as_ref().and_then(|i| rustygod_db::catalog::parse_gid(&i.0)).unwrap_or(-1);
+        let lang = crate::gen::language_code_value(&_arg_language_code);
+        crate::translations::attribute_translation(&db, eid, lang).await
+    }
 
     }
 
@@ -17872,9 +19619,17 @@ pub struct AttributeTranslatableContent {
 impl AttributeTranslatableContent {
 
     #[graphql(name = "translation")]
-    async fn translation(&self, #[graphql(name = "languageCode")] _arg_language_code: LanguageCodeEnum) -> Option<AttributeTranslation> {
+    async fn translation(&self, ctx: &Context<'_>, #[graphql(name = "languageCode")] _arg_language_code: LanguageCodeEnum) -> Option<AttributeTranslation> {
 
-        None
+        {
+        let db = match ctx.data_opt::<crate::context::GqlContext>().and_then(|g| g.db().ok()) {
+            Some(d) => d.clone(),
+            None => return None,
+        };
+        let eid: i32 = self.attribute.as_ref().and_then(|e| e.id.as_ref()).and_then(|i| rustygod_db::catalog::parse_gid(&i.0)).unwrap_or(-1);
+        let lang = crate::gen::language_code_value(&_arg_language_code);
+        crate::translations::attribute_translation(&db, eid, lang).await
+    }
 
     }
 
@@ -17973,9 +19728,17 @@ pub struct AttributeValue {
 impl AttributeValue {
 
     #[graphql(name = "translation")]
-    async fn translation(&self, #[graphql(name = "languageCode")] _arg_language_code: LanguageCodeEnum) -> Option<AttributeValueTranslation> {
+    async fn translation(&self, ctx: &Context<'_>, #[graphql(name = "languageCode")] _arg_language_code: LanguageCodeEnum) -> Option<AttributeValueTranslation> {
 
-        None
+        {
+        let db = match ctx.data_opt::<crate::context::GqlContext>().and_then(|g| g.db().ok()) {
+            Some(d) => d.clone(),
+            None => return None,
+        };
+        let eid: i32 = self.id.as_ref().and_then(|i| rustygod_db::catalog::parse_gid(&i.0)).unwrap_or(-1);
+        let lang = crate::gen::language_code_value(&_arg_language_code);
+        crate::translations::attribute_value_translation(&db, eid, lang).await
+    }
 
     }
 
@@ -18082,9 +19845,17 @@ pub struct AttributeValueTranslatableContent {
 impl AttributeValueTranslatableContent {
 
     #[graphql(name = "translation")]
-    async fn translation(&self, #[graphql(name = "languageCode")] _arg_language_code: LanguageCodeEnum) -> Option<AttributeValueTranslation> {
+    async fn translation(&self, ctx: &Context<'_>, #[graphql(name = "languageCode")] _arg_language_code: LanguageCodeEnum) -> Option<AttributeValueTranslation> {
 
-        None
+        {
+        let db = match ctx.data_opt::<crate::context::GqlContext>().and_then(|g| g.db().ok()) {
+            Some(d) => d.clone(),
+            None => return None,
+        };
+        let eid: i32 = self.attribute_value.as_ref().and_then(|e| e.id.as_ref()).and_then(|i| rustygod_db::catalog::parse_gid(&i.0)).unwrap_or(-1);
+        let lang = crate::gen::language_code_value(&_arg_language_code);
+        crate::translations::attribute_value_translation(&db, eid, lang).await
+    }
 
     }
 
@@ -18295,9 +20066,17 @@ impl Category {
     }
 
     #[graphql(name = "translation")]
-    async fn translation(&self, #[graphql(name = "languageCode")] _arg_language_code: LanguageCodeEnum) -> Option<CategoryTranslation> {
+    async fn translation(&self, ctx: &Context<'_>, #[graphql(name = "languageCode")] _arg_language_code: LanguageCodeEnum) -> Option<CategoryTranslation> {
 
-        None
+        {
+        let db = match ctx.data_opt::<crate::context::GqlContext>().and_then(|g| g.db().ok()) {
+            Some(d) => d.clone(),
+            None => return None,
+        };
+        let eid: i32 = self.id.as_ref().and_then(|i| rustygod_db::catalog::parse_gid(&i.0)).unwrap_or(-1);
+        let lang = crate::gen::language_code_value(&_arg_language_code);
+        crate::translations::category_translation(&db, eid, lang).await
+    }
 
     }
 
@@ -18398,9 +20177,17 @@ pub struct CategoryTranslatableContent {
 impl CategoryTranslatableContent {
 
     #[graphql(name = "translation")]
-    async fn translation(&self, #[graphql(name = "languageCode")] _arg_language_code: LanguageCodeEnum) -> Option<CategoryTranslation> {
+    async fn translation(&self, ctx: &Context<'_>, #[graphql(name = "languageCode")] _arg_language_code: LanguageCodeEnum) -> Option<CategoryTranslation> {
 
-        None
+        {
+        let db = match ctx.data_opt::<crate::context::GqlContext>().and_then(|g| g.db().ok()) {
+            Some(d) => d.clone(),
+            None => return None,
+        };
+        let eid: i32 = self.category.as_ref().and_then(|e| e.id.as_ref()).and_then(|i| rustygod_db::catalog::parse_gid(&i.0)).unwrap_or(-1);
+        let lang = crate::gen::language_code_value(&_arg_language_code);
+        crate::translations::category_translation(&db, eid, lang).await
+    }
 
     }
 
@@ -18757,9 +20544,17 @@ impl Collection {
     }
 
     #[graphql(name = "translation")]
-    async fn translation(&self, #[graphql(name = "languageCode")] _arg_language_code: LanguageCodeEnum) -> Option<CollectionTranslation> {
+    async fn translation(&self, ctx: &Context<'_>, #[graphql(name = "languageCode")] _arg_language_code: LanguageCodeEnum) -> Option<CollectionTranslation> {
 
-        None
+        {
+        let db = match ctx.data_opt::<crate::context::GqlContext>().and_then(|g| g.db().ok()) {
+            Some(d) => d.clone(),
+            None => return None,
+        };
+        let eid: i32 = self.id.as_ref().and_then(|i| rustygod_db::catalog::parse_gid(&i.0)).unwrap_or(-1);
+        let lang = crate::gen::language_code_value(&_arg_language_code);
+        crate::translations::collection_translation(&db, eid, lang).await
+    }
 
     }
 
@@ -18957,9 +20752,17 @@ pub struct CollectionTranslatableContent {
 impl CollectionTranslatableContent {
 
     #[graphql(name = "translation")]
-    async fn translation(&self, #[graphql(name = "languageCode")] _arg_language_code: LanguageCodeEnum) -> Option<CollectionTranslation> {
+    async fn translation(&self, ctx: &Context<'_>, #[graphql(name = "languageCode")] _arg_language_code: LanguageCodeEnum) -> Option<CollectionTranslation> {
 
-        None
+        {
+        let db = match ctx.data_opt::<crate::context::GqlContext>().and_then(|g| g.db().ok()) {
+            Some(d) => d.clone(),
+            None => return None,
+        };
+        let eid: i32 = self.collection.as_ref().and_then(|e| e.id.as_ref()).and_then(|i| rustygod_db::catalog::parse_gid(&i.0)).unwrap_or(-1);
+        let lang = crate::gen::language_code_value(&_arg_language_code);
+        crate::translations::collection_translation(&db, eid, lang).await
+    }
 
     }
 
@@ -20773,9 +22576,17 @@ pub struct MenuItem {
 impl MenuItem {
 
     #[graphql(name = "translation")]
-    async fn translation(&self, #[graphql(name = "languageCode")] _arg_language_code: LanguageCodeEnum) -> Option<MenuItemTranslation> {
+    async fn translation(&self, ctx: &Context<'_>, #[graphql(name = "languageCode")] _arg_language_code: LanguageCodeEnum) -> Option<MenuItemTranslation> {
 
-        None
+        {
+        let db = match ctx.data_opt::<crate::context::GqlContext>().and_then(|g| g.db().ok()) {
+            Some(d) => d.clone(),
+            None => return None,
+        };
+        let eid: i32 = self.id.as_ref().and_then(|i| rustygod_db::catalog::parse_gid(&i.0)).unwrap_or(-1);
+        let lang = crate::gen::language_code_value(&_arg_language_code);
+        crate::translations::menu_item_translation(&db, eid, lang).await
+    }
 
     }
 
@@ -20850,9 +22661,17 @@ pub struct MenuItemTranslatableContent {
 impl MenuItemTranslatableContent {
 
     #[graphql(name = "translation")]
-    async fn translation(&self, #[graphql(name = "languageCode")] _arg_language_code: LanguageCodeEnum) -> Option<MenuItemTranslation> {
+    async fn translation(&self, ctx: &Context<'_>, #[graphql(name = "languageCode")] _arg_language_code: LanguageCodeEnum) -> Option<MenuItemTranslation> {
 
-        None
+        {
+        let db = match ctx.data_opt::<crate::context::GqlContext>().and_then(|g| g.db().ok()) {
+            Some(d) => d.clone(),
+            None => return None,
+        };
+        let eid: i32 = self.menu_item.as_ref().and_then(|e| e.id.as_ref()).and_then(|i| rustygod_db::catalog::parse_gid(&i.0)).unwrap_or(-1);
+        let lang = crate::gen::language_code_value(&_arg_language_code);
+        crate::translations::menu_item_translation(&db, eid, lang).await
+    }
 
     }
 
@@ -22258,9 +24077,17 @@ pub struct PageTranslatableContent {
 impl PageTranslatableContent {
 
     #[graphql(name = "translation")]
-    async fn translation(&self, #[graphql(name = "languageCode")] _arg_language_code: LanguageCodeEnum) -> Option<PageTranslation> {
+    async fn translation(&self, ctx: &Context<'_>, #[graphql(name = "languageCode")] _arg_language_code: LanguageCodeEnum) -> Option<PageTranslation> {
 
-        None
+        {
+        let db = match ctx.data_opt::<crate::context::GqlContext>().and_then(|g| g.db().ok()) {
+            Some(d) => d.clone(),
+            None => return None,
+        };
+        let eid: i32 = self.page.as_ref().and_then(|e| e.id.as_ref()).and_then(|i| rustygod_db::catalog::parse_gid(&i.0)).unwrap_or(-1);
+        let lang = crate::gen::language_code_value(&_arg_language_code);
+        crate::translations::page_translation(&db, eid, lang).await
+    }
 
     }
 
@@ -22844,9 +24671,17 @@ impl Product {
     }
 
     #[graphql(name = "translation")]
-    async fn translation(&self, #[graphql(name = "languageCode")] _arg_language_code: LanguageCodeEnum) -> Option<ProductTranslation> {
+    async fn translation(&self, ctx: &Context<'_>, #[graphql(name = "languageCode")] _arg_language_code: LanguageCodeEnum) -> Option<ProductTranslation> {
 
-        None
+        {
+        let db = match ctx.data_opt::<crate::context::GqlContext>().and_then(|g| g.db().ok()) {
+            Some(d) => d.clone(),
+            None => return None,
+        };
+        let eid: i32 = self.id.as_ref().and_then(|i| rustygod_db::catalog::parse_gid(&i.0)).unwrap_or(-1);
+        let lang = crate::gen::language_code_value(&_arg_language_code);
+        crate::translations::product_translation(&db, eid, lang).await
+    }
 
     }
 
@@ -23204,9 +25039,17 @@ pub struct ProductTranslatableContent {
 impl ProductTranslatableContent {
 
     #[graphql(name = "translation")]
-    async fn translation(&self, #[graphql(name = "languageCode")] _arg_language_code: LanguageCodeEnum) -> Option<ProductTranslation> {
+    async fn translation(&self, ctx: &Context<'_>, #[graphql(name = "languageCode")] _arg_language_code: LanguageCodeEnum) -> Option<ProductTranslation> {
 
-        None
+        {
+        let db = match ctx.data_opt::<crate::context::GqlContext>().and_then(|g| g.db().ok()) {
+            Some(d) => d.clone(),
+            None => return None,
+        };
+        let eid: i32 = self.product.as_ref().and_then(|e| e.id.as_ref()).and_then(|i| rustygod_db::catalog::parse_gid(&i.0)).unwrap_or(-1);
+        let lang = crate::gen::language_code_value(&_arg_language_code);
+        crate::translations::product_translation(&db, eid, lang).await
+    }
 
     }
 
@@ -23503,9 +25346,17 @@ impl ProductVariant {
     }
 
     #[graphql(name = "translation")]
-    async fn translation(&self, #[graphql(name = "languageCode")] _arg_language_code: LanguageCodeEnum) -> Option<ProductVariantTranslation> {
+    async fn translation(&self, ctx: &Context<'_>, #[graphql(name = "languageCode")] _arg_language_code: LanguageCodeEnum) -> Option<ProductVariantTranslation> {
 
-        None
+        {
+        let db = match ctx.data_opt::<crate::context::GqlContext>().and_then(|g| g.db().ok()) {
+            Some(d) => d.clone(),
+            None => return None,
+        };
+        let eid: i32 = self.id.as_ref().and_then(|i| rustygod_db::catalog::parse_gid(&i.0)).unwrap_or(-1);
+        let lang = crate::gen::language_code_value(&_arg_language_code);
+        crate::translations::product_variant_translation(&db, eid, lang).await
+    }
 
     }
 
@@ -23788,9 +25639,17 @@ pub struct ProductVariantTranslatableContent {
 impl ProductVariantTranslatableContent {
 
     #[graphql(name = "translation")]
-    async fn translation(&self, #[graphql(name = "languageCode")] _arg_language_code: LanguageCodeEnum) -> Option<ProductVariantTranslation> {
+    async fn translation(&self, ctx: &Context<'_>, #[graphql(name = "languageCode")] _arg_language_code: LanguageCodeEnum) -> Option<ProductVariantTranslation> {
 
-        None
+        {
+        let db = match ctx.data_opt::<crate::context::GqlContext>().and_then(|g| g.db().ok()) {
+            Some(d) => d.clone(),
+            None => return None,
+        };
+        let eid: i32 = self.product_variant.as_ref().and_then(|e| e.id.as_ref()).and_then(|i| rustygod_db::catalog::parse_gid(&i.0)).unwrap_or(-1);
+        let lang = crate::gen::language_code_value(&_arg_language_code);
+        crate::translations::product_variant_translation(&db, eid, lang).await
+    }
 
     }
 
@@ -24666,9 +26525,17 @@ pub struct ShippingMethodTranslatableContent {
 impl ShippingMethodTranslatableContent {
 
     #[graphql(name = "translation")]
-    async fn translation(&self, #[graphql(name = "languageCode")] _arg_language_code: LanguageCodeEnum) -> Option<ShippingMethodTranslation> {
+    async fn translation(&self, ctx: &Context<'_>, #[graphql(name = "languageCode")] _arg_language_code: LanguageCodeEnum) -> Option<ShippingMethodTranslation> {
 
-        None
+        {
+        let db = match ctx.data_opt::<crate::context::GqlContext>().and_then(|g| g.db().ok()) {
+            Some(d) => d.clone(),
+            None => return None,
+        };
+        let eid: i32 = self.shipping_method.as_ref().and_then(|e| e.id.as_ref()).and_then(|i| rustygod_db::catalog::parse_gid(&i.0)).unwrap_or(-1);
+        let lang = crate::gen::language_code_value(&_arg_language_code);
+        crate::translations::shipping_method_translation(&db, eid, lang).await
+    }
 
     }
 
@@ -24750,9 +26617,17 @@ pub struct ShippingMethodType {
 impl ShippingMethodType {
 
     #[graphql(name = "translation")]
-    async fn translation(&self, #[graphql(name = "languageCode")] _arg_language_code: LanguageCodeEnum) -> Option<ShippingMethodTranslation> {
+    async fn translation(&self, ctx: &Context<'_>, #[graphql(name = "languageCode")] _arg_language_code: LanguageCodeEnum) -> Option<ShippingMethodTranslation> {
 
-        None
+        {
+        let db = match ctx.data_opt::<crate::context::GqlContext>().and_then(|g| g.db().ok()) {
+            Some(d) => d.clone(),
+            None => return None,
+        };
+        let eid: i32 = self.id.as_ref().and_then(|i| rustygod_db::catalog::parse_gid(&i.0)).unwrap_or(-1);
+        let lang = crate::gen::language_code_value(&_arg_language_code);
+        crate::translations::shipping_method_translation(&db, eid, lang).await
+    }
 
     }
 
@@ -26104,7 +27979,7 @@ impl User {
 
         {
         use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QuerySelect};
-        let uid: i32 = self.id.as_ref().and_then(|i| i.0.parse::<i32>().ok()).unwrap_or(-1);
+        let uid: i32 = self.id.as_ref().and_then(|i| rustygod_db::catalog::parse_gid(&i.0)).unwrap_or(-1);
         let db = match ctx.data_opt::<crate::context::GqlContext>().and_then(|g| g.db().ok()) {
             Some(d) => d.clone(),
             None => return None,
@@ -26357,9 +28232,17 @@ impl Voucher {
     }
 
     #[graphql(name = "translation")]
-    async fn translation(&self, #[graphql(name = "languageCode")] _arg_language_code: LanguageCodeEnum) -> Option<VoucherTranslation> {
+    async fn translation(&self, ctx: &Context<'_>, #[graphql(name = "languageCode")] _arg_language_code: LanguageCodeEnum) -> Option<VoucherTranslation> {
 
-        None
+        {
+        let db = match ctx.data_opt::<crate::context::GqlContext>().and_then(|g| g.db().ok()) {
+            Some(d) => d.clone(),
+            None => return None,
+        };
+        let eid: i32 = self.id.as_ref().and_then(|i| rustygod_db::catalog::parse_gid(&i.0)).unwrap_or(-1);
+        let lang = crate::gen::language_code_value(&_arg_language_code);
+        crate::translations::voucher_translation(&db, eid, lang).await
+    }
 
     }
 
@@ -26595,9 +28478,17 @@ pub struct VoucherTranslatableContent {
 impl VoucherTranslatableContent {
 
     #[graphql(name = "translation")]
-    async fn translation(&self, #[graphql(name = "languageCode")] _arg_language_code: LanguageCodeEnum) -> Option<VoucherTranslation> {
+    async fn translation(&self, ctx: &Context<'_>, #[graphql(name = "languageCode")] _arg_language_code: LanguageCodeEnum) -> Option<VoucherTranslation> {
 
-        None
+        {
+        let db = match ctx.data_opt::<crate::context::GqlContext>().and_then(|g| g.db().ok()) {
+            Some(d) => d.clone(),
+            None => return None,
+        };
+        let eid: i32 = self.voucher.as_ref().and_then(|e| e.id.as_ref()).and_then(|i| rustygod_db::catalog::parse_gid(&i.0)).unwrap_or(-1);
+        let lang = crate::gen::language_code_value(&_arg_language_code);
+        crate::translations::voucher_translation(&db, eid, lang).await
+    }
 
     }
 
@@ -27350,20 +29241,6 @@ impl GenQuery {
 
     }
 
-    #[graphql(name = "translations")]
-    async fn translations(&self, #[graphql(name = "kind")] _arg_kind: TranslatableKinds, #[graphql(name = "before")] _arg_before: Option<String>, #[graphql(name = "after")] _arg_after: Option<String>, #[graphql(name = "first")] _arg_first: Option<i32>, #[graphql(name = "last")] _arg_last: Option<i32>) -> Option<TranslatableItemConnection> {
-
-        Some(TranslatableItemConnection { edges: vec![], page_info: Some(PageInfo { has_next_page: false, has_previous_page: false, start_cursor: None, end_cursor: None }) })
-
-    }
-
-    #[graphql(name = "translation")]
-    async fn translation(&self, #[graphql(name = "id")] _arg_id: ID, #[graphql(name = "kind")] _arg_kind: TranslatableKinds) -> Option<TranslatableItem> {
-
-        None
-
-    }
-
     #[graphql(name = "taxConfigurations")]
     async fn tax_configurations(&self, #[graphql(name = "filter")] _arg_filter: Option<TaxConfigurationFilterInput>, #[graphql(name = "before")] _arg_before: Option<String>, #[graphql(name = "after")] _arg_after: Option<String>, #[graphql(name = "first")] _arg_first: Option<i32>, #[graphql(name = "last")] _arg_last: Option<i32>) -> Option<TaxConfigurationCountableConnection> {
 
@@ -27842,13 +29719,6 @@ impl GenMutation {
 
     }
 
-    #[graphql(name = "shippingPriceTranslate")]
-    async fn shipping_price_translate(&self, #[graphql(name = "id")] _arg_id: ID, #[graphql(name = "input")] _arg_input: ShippingPriceTranslationInput, #[graphql(name = "languageCode")] _arg_language_code: LanguageCodeEnum) -> Option<ShippingPriceTranslate> {
-
-        Some(ShippingPriceTranslate { errors: vec![], shipping_method: None })
-
-    }
-
     #[graphql(name = "shippingPriceExcludeProducts")]
     async fn shipping_price_exclude_products(&self, #[graphql(name = "id")] _arg_id: ID, #[graphql(name = "input")] _arg_input: ShippingPriceExcludeProductsInput) -> Option<ShippingPriceExcludeProducts> {
 
@@ -27919,13 +29789,6 @@ impl GenMutation {
 
     }
 
-    #[graphql(name = "categoryTranslate")]
-    async fn category_translate(&self, #[graphql(name = "id")] _arg_id: ID, #[graphql(name = "input")] _arg_input: TranslationInput, #[graphql(name = "languageCode")] _arg_language_code: LanguageCodeEnum) -> Option<CategoryTranslate> {
-
-        Some(CategoryTranslate { errors: vec![], category: None })
-
-    }
-
     #[graphql(name = "collectionReorderProducts")]
     async fn collection_reorder_products(&self, #[graphql(name = "collectionId")] _arg_collection_id: ID, #[graphql(name = "moves")] _arg_moves: Vec<MoveProductInput>) -> Option<CollectionReorderProducts> {
 
@@ -27940,13 +29803,6 @@ impl GenMutation {
 
     }
 
-    #[graphql(name = "collectionTranslate")]
-    async fn collection_translate(&self, #[graphql(name = "id")] _arg_id: ID, #[graphql(name = "input")] _arg_input: TranslationInput, #[graphql(name = "languageCode")] _arg_language_code: LanguageCodeEnum) -> Option<CollectionTranslate> {
-
-        Some(CollectionTranslate { errors: vec![], collection: None })
-
-    }
-
     #[graphql(name = "collectionChannelListingUpdate")]
     async fn collection_channel_listing_update(&self, #[graphql(name = "id")] _arg_id: ID, #[graphql(name = "input")] _arg_input: CollectionChannelListingUpdateInput) -> Option<CollectionChannelListingUpdate> {
 
@@ -27958,13 +29814,6 @@ impl GenMutation {
     async fn product_bulk_delete(&self, #[graphql(name = "ids")] _arg_ids: Vec<ID>) -> Option<ProductBulkDelete> {
 
         Some(ProductBulkDelete { errors: vec![] })
-
-    }
-
-    #[graphql(name = "productTranslate")]
-    async fn product_translate(&self, #[graphql(name = "id")] _arg_id: ID, #[graphql(name = "input")] _arg_input: TranslationInput, #[graphql(name = "languageCode")] _arg_language_code: LanguageCodeEnum) -> Option<ProductTranslate> {
-
-        Some(ProductTranslate { errors: vec![], product: None })
 
     }
 
@@ -28087,13 +29936,6 @@ impl GenMutation {
 
     }
 
-    #[graphql(name = "productVariantTranslate")]
-    async fn product_variant_translate(&self, #[graphql(name = "id")] _arg_id: ID, #[graphql(name = "input")] _arg_input: NameTranslationInput, #[graphql(name = "languageCode")] _arg_language_code: LanguageCodeEnum) -> Option<ProductVariantTranslate> {
-
-        Some(ProductVariantTranslate { errors: vec![], product_variant: None })
-
-    }
-
     #[graphql(name = "variantMediaAssign")]
     async fn variant_media_assign(&self, #[graphql(name = "mediaId")] _arg_media_id: ID, #[graphql(name = "variantId")] _arg_variant_id: ID) -> Option<VariantMediaAssign> {
 
@@ -28161,13 +30003,6 @@ impl GenMutation {
     async fn page_update(&self, #[graphql(name = "id")] _arg_id: ID, #[graphql(name = "input")] _arg_input: PageInput) -> Option<PageUpdate> {
 
         Some(PageUpdate { errors: vec![], page: None })
-
-    }
-
-    #[graphql(name = "pageTranslate")]
-    async fn page_translate(&self, #[graphql(name = "id")] _arg_id: ID, #[graphql(name = "input")] _arg_input: PageTranslationInput, #[graphql(name = "languageCode")] _arg_language_code: LanguageCodeEnum) -> Option<PageTranslate> {
-
-        Some(PageTranslate { errors: vec![], page: None })
 
     }
 
@@ -28472,13 +30307,6 @@ impl GenMutation {
 
     }
 
-    #[graphql(name = "menuItemTranslate")]
-    async fn menu_item_translate(&self, #[graphql(name = "id")] _arg_id: ID, #[graphql(name = "input")] _arg_input: NameTranslationInput, #[graphql(name = "languageCode")] _arg_language_code: LanguageCodeEnum) -> Option<MenuItemTranslate> {
-
-        Some(MenuItemTranslate { errors: vec![], menu_item: None })
-
-    }
-
     #[graphql(name = "menuItemMove")]
     async fn menu_item_move(&self, #[graphql(name = "menu")] _arg_menu: ID, #[graphql(name = "moves")] _arg_moves: Vec<MenuItemMoveInput>) -> Option<MenuItemMove> {
 
@@ -28640,13 +30468,6 @@ impl GenMutation {
 
     }
 
-    #[graphql(name = "saleTranslate")]
-    async fn sale_translate(&self, #[graphql(name = "id")] _arg_id: ID, #[graphql(name = "input")] _arg_input: NameTranslationInput, #[graphql(name = "languageCode")] _arg_language_code: LanguageCodeEnum) -> Option<SaleTranslate> {
-
-        Some(SaleTranslate { errors: vec![], sale: None })
-
-    }
-
     #[graphql(name = "voucherCreate")]
     async fn voucher_create(&self, #[graphql(name = "input")] _arg_input: VoucherInput) -> Option<VoucherCreate> {
 
@@ -28686,13 +30507,6 @@ impl GenMutation {
     async fn voucher_catalogues_remove(&self, #[graphql(name = "id")] _arg_id: ID, #[graphql(name = "input")] _arg_input: CatalogueInput) -> Option<VoucherRemoveCatalogues> {
 
         Some(VoucherRemoveCatalogues { voucher: None, errors: vec![] })
-
-    }
-
-    #[graphql(name = "voucherTranslate")]
-    async fn voucher_translate(&self, #[graphql(name = "id")] _arg_id: ID, #[graphql(name = "input")] _arg_input: NameTranslationInput, #[graphql(name = "languageCode")] _arg_language_code: LanguageCodeEnum) -> Option<VoucherTranslate> {
-
-        Some(VoucherTranslate { errors: vec![], voucher: None })
 
     }
 
@@ -28787,13 +30601,6 @@ impl GenMutation {
 
     }
 
-    #[graphql(name = "attributeTranslate")]
-    async fn attribute_translate(&self, #[graphql(name = "id")] _arg_id: ID, #[graphql(name = "input")] _arg_input: NameTranslationInput, #[graphql(name = "languageCode")] _arg_language_code: LanguageCodeEnum) -> Option<AttributeTranslate> {
-
-        Some(AttributeTranslate { errors: vec![], attribute: None })
-
-    }
-
     #[graphql(name = "attributeBulkDelete")]
     async fn attribute_bulk_delete(&self, #[graphql(name = "ids")] _arg_ids: Vec<ID>) -> Option<AttributeBulkDelete> {
 
@@ -28826,13 +30633,6 @@ impl GenMutation {
     async fn attribute_value_update(&self, #[graphql(name = "externalReference")] _arg_external_reference: Option<String>, #[graphql(name = "id")] _arg_id: Option<ID>, #[graphql(name = "input")] _arg_input: AttributeValueUpdateInput) -> Option<AttributeValueUpdate> {
 
         Some(AttributeValueUpdate { attribute: None, errors: vec![] })
-
-    }
-
-    #[graphql(name = "attributeValueTranslate")]
-    async fn attribute_value_translate(&self, #[graphql(name = "id")] _arg_id: ID, #[graphql(name = "input")] _arg_input: AttributeValueTranslationInput, #[graphql(name = "languageCode")] _arg_language_code: LanguageCodeEnum) -> Option<AttributeValueTranslate> {
-
-        Some(AttributeValueTranslate { errors: vec![], attribute_value: None })
 
     }
 

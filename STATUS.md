@@ -297,3 +297,39 @@ Modified: `catalog.rs` (gen Product/Variant + `ProductCreate` payload),
 scalar maps) + re-run `--emit`. If dashboard upgrades (3.24+), re-run
 `schema_examine.py` (refresh `/tmp/schema_ir.json`), then codegen, then the
 harness — new gaps appear as harness failures by construction.
+
+## 10. Codegen input = dashboard's own schema (2026-09-22)
+
+- Both scripts now read `SALEOR_SCHEMA` env, defaulting to
+  `saleor/dashboard/schema-main.graphql` (main-schema mode = what the
+  released container runs) — NOT saleor-core's 3.24 `schema.graphql`.
+  Proven skew: `filterableInStorefront/availableInGrid/
+  storefrontSearchPosition` exist in main but were already dropped in 3.24
+  (the entire reason LEGACY_FIELDS existed). With the dashboard schema as
+  input the legacy branch is a no-op safety net, not load-bearing.
+- New schema stats: 90 query / 339 mutation roots, 911 types, 318 inputs,
+  209 enums. Regen is clean (PROBLEMS=0, harness 457/457).
+- Note: the dashboard clone is a grafted shallow checkout (main tip,
+  package.json 3.23.33) — schema-main is stable-branch content, safe.
+- Scalar fix (same session): `Decimal/PositiveDecimal/JSONString/
+  WeightScalar` now CARRY their strings (tuple structs) — the old unit
+  structs silently dropped every price/description input, which made
+  variant price writes impossible.
+
+## 11. Translations wired (2026-09-22)
+
+- `translations(kind)` list (10 table-backed kinds, paginated) +
+  `translation(kind, id)` single, returning `TranslatableContent` unions
+  with real nested entities.
+- `translation(languageCode:)` resolves for real on all 10 entity types +
+  all 10 content types + `ShippingMethodType` (REAL_METHODS → shared
+  lookups in `translations.rs`).
+- 10 `*Translate` mutations (product/variant/category/collection/page/
+  voucher/shipping/menuItem/attribute/attributeValue): language-scoped
+  upserts, provided-fields-only. `saleTranslate` returns an honest error
+  (legacy sales don't exist in 3.24). PROMOTION kinds list empty (same).
+- `LanguageCodeEnum` values recovered deterministically
+  (`language_code_value()`: AF_NA → "af-na", Saleor's own enums.py rule);
+  `language { code language }` served from Saleor's frozen
+  `core/languages.py` map (779 entries).
+- Verified live: DE upsert on product 137 → read-back + list + details.
