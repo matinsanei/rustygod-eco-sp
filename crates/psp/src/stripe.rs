@@ -477,7 +477,9 @@ mod tests {
         assert!(seen.lock().unwrap().is_empty(), "no HTTP without a payment method");
     }
 
-    #[tokio::test]
+    /// block_in_place needs the multi-thread runtime (the server runs one;
+    /// single-thread `#[tokio::test]` would panic by design).
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn sync_bridge_used_by_engine() {
         use rustygod_core::psp::Psp;
         let (base, _) = mock_stripe(|_, _| {
@@ -487,7 +489,7 @@ mod tests {
         let p = StripePsp::with_base("sk_test_x", base);
         // Same dynamic call the engine makes (`&dyn Psp` → block_in_place).
         let out = (&p as &dyn Psp).execute(&req(PspAction::Charge, r#"{"payment_method":"pm_1"}"#));
-        assert!(matches!(out, PspOutcome::Completed { psp_reference } if psp_reference == "pi_sync"), "{out:?}");
+        assert!(matches!(&out, PspOutcome::Completed { psp_reference } if psp_reference == "pi_sync"), "{out:?}");
     }
 
     #[test]
