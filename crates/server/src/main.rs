@@ -159,7 +159,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             {
                 req = req.data(rustygod_graphql::context::Bearer(bearer));
             }
-            Json(schema.execute(req).await)
+            Json({
+                let resp = schema.execute(req).await;
+                if !resp.errors.is_empty() {
+                    tracing::warn!(
+                        errors = ?resp.errors.iter().map(|e| e.message.clone()).collect::<Vec<_>>(),
+                        "graphql field errors"
+                    );
+                }
+                resp
+            })
         }
         async fn graphiql() -> axum::response::Html<String> {
             axum::response::Html(GraphiQLSource::build().endpoint("/graphql").finish())

@@ -23577,7 +23577,7 @@ impl OrderLine {
             .filter_map(|(p, alt): (Option<String>, String)| p.map(|path| (path, alt)))
             .next();
         img.map(|(path, alt)| crate::account::GqlImage {
-            url: format!("{}/{path}", std::env::var("SALEOR_MEDIA_URL").unwrap_or_else(|_| "/media".into())),
+            url: crate::common::media_url(&path),
             alt: Some(alt),
         })
     }
@@ -24650,7 +24650,7 @@ impl Product {
             .filter_map(|(p, alt): (Option<String>, String)| p.map(|path| (path, alt)))
             .next();
         img.map(|(path, alt)| crate::account::GqlImage {
-            url: format!("{}/{path}", std::env::var("SALEOR_MEDIA_URL").unwrap_or_else(|_| "/media".into())),
+            url: crate::common::media_url(&path),
             alt: Some(alt),
         })
     }
@@ -24941,7 +24941,7 @@ impl ProductMedia {
         let path: Option<String> = rustygod_db::entities::product_productmedia::Entity::find_by_id(mid)
             .select_only().column(rustygod_db::entities::product_productmedia::Column::Image)
             .into_tuple::<Option<String>>().one(&db).await.unwrap_or(None).flatten();
-        path.map(|pp| format!("{}/{pp}", std::env::var("SALEOR_MEDIA_URL").unwrap_or_else(|_| "/media".into())))
+        path.map(|pp| crate::common::media_url(&pp))
     }
 
     }

@@ -122,6 +122,15 @@ pub fn encode_cursor(i: usize) -> String {
     use base64::Engine;
     base64::engine::general_purpose::STANDARD.encode(format!("cursor:{i}"))
 }
+/// Public media URL. Browsers resolve relative URLs against the DASHBOARD
+/// origin (:80), not the API (:8000) — so the default is absolute.
+/// Override with SALEOR_MEDIA_URL for other deployments.
+pub fn media_url(path: &str) -> String {
+    let base = std::env::var("SALEOR_MEDIA_URL")
+        .unwrap_or_else(|_| "http://localhost:8000/media".into());
+    format!("{}/{path}", base.trim_end_matches('/'))
+}
+
 pub fn decode_cursor(s: &str) -> Option<usize> {
     use base64::Engine;
     let b = base64::engine::general_purpose::STANDARD.decode(s).ok()?;
@@ -147,6 +156,28 @@ pub fn split_gid(s: &str) -> Option<(String, String)> {
         return None;
     }
     Some((ty.to_string(), pk.to_string()))
+}
+
+/// Lenient ID split: global IDs, legacy raw `Type:pk` mintings (Shop:1,
+/// Channel:5 — predating the global-ID migration), but never bare ints
+/// (typeless ids would risk writing the wrong table).
+pub fn split_gid_or_raw(s: &str) -> Option<(String, String)> {
+    if let Some(t) = split_gid(s) {
+        return Some(t);
+    }
+    let s = s.trim();
+    let (ty, pk) = s.split_once(':')?;
+    if ty.is_empty() || pk.is_empty() || ty.contains(|c: char| !c.is_alphanumeric()) {
+        return None;
+    }
+    Some((ty.to_string(), pk.to_string()))
+}
+
+/// Undo one layer of accidental double-encoding (`base64("User:<global>")`,
+/// seen live from dashboard round-trips of old-cached ids). Returns the
+/// inner `(Type, pk)` when the raw part itself decodes to one.
+pub fn unsplit_double(raw: &str) -> Option<(String, String)> {
+    split_gid(raw)
 }
 
 /// Parse a UUID-typed ID: plain UUID or global (`T3JkZXI6...`).

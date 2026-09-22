@@ -655,7 +655,7 @@ REAL_METHODS = {
     ("AttributeTranslatableContent", "translation"): """{\n        let db = match ctx.data_opt::<crate::context::GqlContext>().and_then(|g| g.db().ok()) {\n            Some(d) => d.clone(),\n            None => return None,\n        };\n        let eid: i32 = self.attribute.as_ref().and_then(|e| e.id.as_ref()).and_then(|i| rustygod_db::catalog::parse_gid(&i.0)).unwrap_or(-1);\n        let lang = crate::gen::language_code_value(&_arg_language_code);\n        crate::translations::attribute_translation(&db, eid, lang).await\n    }""",
     ("AttributeValueTranslatableContent", "translation"): """{\n        let db = match ctx.data_opt::<crate::context::GqlContext>().and_then(|g| g.db().ok()) {\n            Some(d) => d.clone(),\n            None => return None,\n        };\n        let eid: i32 = self.attribute_value.as_ref().and_then(|e| e.id.as_ref()).and_then(|i| rustygod_db::catalog::parse_gid(&i.0)).unwrap_or(-1);\n        let lang = crate::gen::language_code_value(&_arg_language_code);\n        crate::translations::attribute_value_translation(&db, eid, lang).await\n    }""",
     # Product details need real media URLs, variant grids, and media lookup.
-    ("ProductMedia", "url"): """{\n        let db = match ctx.data_opt::<crate::context::GqlContext>().and_then(|g| g.db().ok()) {\n            Some(d) => d.clone(),\n            None => return None,\n        };\n        let mid: i32 = self.id.as_ref().and_then(|i| rustygod_db::catalog::parse_gid(&i.0)).unwrap_or(-1);\n        use sea_orm::{EntityTrait, QuerySelect};\n        let path: Option<String> = rustygod_db::entities::product_productmedia::Entity::find_by_id(mid)\n            .select_only().column(rustygod_db::entities::product_productmedia::Column::Image)\n            .into_tuple::<Option<String>>().one(&db).await.unwrap_or(None).flatten();\n        path.map(|pp| format!("{}/{pp}", std::env::var("SALEOR_MEDIA_URL").unwrap_or_else(|_| "/media".into())))\n    }""",
+    ("ProductMedia", "url"): """{\n        let db = match ctx.data_opt::<crate::context::GqlContext>().and_then(|g| g.db().ok()) {\n            Some(d) => d.clone(),\n            None => return None,\n        };\n        let mid: i32 = self.id.as_ref().and_then(|i| rustygod_db::catalog::parse_gid(&i.0)).unwrap_or(-1);\n        use sea_orm::{EntityTrait, QuerySelect};\n        let path: Option<String> = rustygod_db::entities::product_productmedia::Entity::find_by_id(mid)\n            .select_only().column(rustygod_db::entities::product_productmedia::Column::Image)\n            .into_tuple::<Option<String>>().one(&db).await.unwrap_or(None).flatten();\n        path.map(|pp| crate::common::media_url(&pp))\n    }""",
     # Variant attributes grid (selection scope has no DB column; return all).
     ("ProductVariant", "attributes"): """{\n        let db = match ctx.data_opt::<crate::context::GqlContext>().and_then(|g| g.db().ok()) {\n            Some(d) => d.clone(),\n            None => return vec![],\n        };\n        let gid = self.id.as_ref().map(|i| i.0.clone()).unwrap_or_default();\n        crate::catalog::variant_attributes(&db, &gid).await\n    }""",
     ("Product", "productVariants"): """{\n        let db = match ctx.data_opt::<crate::context::GqlContext>().and_then(|g| g.db().ok()) {\n            Some(d) => d.clone(),\n            None => return None,\n        };\n        let pid: i32 = self.id.as_ref().and_then(|i| rustygod_db::catalog::parse_gid(&i.0)).unwrap_or(-1);\n        let search = _arg_filter.as_ref().and_then(|f| f.search.clone());\n        crate::catalog::product_variants_page(&db, pid, search, _arg_first.clone(), _arg_after.clone()).await.unwrap_or(None)\n    }""",
@@ -712,7 +712,7 @@ REAL_METHODS = {
             .filter_map(|(p, alt): (Option<String>, String)| p.map(|path| (path, alt)))
             .next();
         img.map(|(path, alt)| crate::account::GqlImage {
-            url: format!("{}/{path}", std::env::var("SALEOR_MEDIA_URL").unwrap_or_else(|_| "/media".into())),
+            url: crate::common::media_url(&path),
             alt: Some(alt),
         })
     }""",
@@ -759,7 +759,7 @@ REAL_METHODS = {
             .filter_map(|(p, alt): (Option<String>, String)| p.map(|path| (path, alt)))
             .next();
         img.map(|(path, alt)| crate::account::GqlImage {
-            url: format!("{}/{path}", std::env::var("SALEOR_MEDIA_URL").unwrap_or_else(|_| "/media".into())),
+            url: crate::common::media_url(&path),
             alt: Some(alt),
         })
     }""",

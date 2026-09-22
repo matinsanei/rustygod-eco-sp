@@ -80,10 +80,29 @@ async fn apply(
     require_auth(ctx)?;
     let g = ctx.data::<GqlContext>()?;
     let db = g.db().map_err(Error::new)?;
-    let (ty, raw) = common::split_gid(&id.0).ok_or_else(|| {
+    let (mut ty, mut raw) = common::split_gid_or_raw(&id.0).ok_or_else(|| {
         Error::new("metadata mutations require a global ID (Type:pk), got a bare id")
     })?;
-    let (table, pk_col, is_uuid) = target(&ty).ok_or_else(|| {
+    // Self-heal double-encoded ids (base64("User:<global>")) instead of
+    // INVALID: the write lands on the right row either way, and the warn
+    // below tells us where the bad id came from.
+    let mut table_opt = target(&ty);
+    if table_opt.is_some() {
+        let is_uuid = table_opt.map(|t| t.2).unwrap_or(false);
+        let bad = (is_uuid && raw.parse::<uuid::Uuid>().is_err())
+            || (!is_uuid && raw.parse::<i32>().is_err());
+        if bad {
+            if let Some((ity, iraw)) = common::unsplit_double(&raw) {
+                tracing::warn!("metadata: double-encoded id healed: {} -> {}:{}", id.0, ity, iraw);
+                if target(&ity).is_some() {
+                    ty = ity;
+                    raw = iraw;
+                    table_opt = target(&ty);
+                }
+            }
+        }
+    }
+    let (table, pk_col, is_uuid) = table_opt.ok_or_else(|| {
         Error::new(format!("cannot mutate metadata on {ty}"))
     })?;
     let cast = if is_uuid { "uuid" } else { "int" };
