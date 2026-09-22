@@ -50,6 +50,24 @@ p50/p95 slightly better than 09-18 at half the RSS. The `p(99)<50ms` roadmap
 threshold still trips on catalog joins (DB-bound, unchanged) — read replicas /
 caching remain the lever, not codegen.
 
+### Head-to-head vs Saleor Django 2026-09-22 (the speed claim, tested)
+
+Same machine, same PostgreSQL, same query — `products(first: 20, channel:
+"default-channel") { id name slug productType { id name } }`, k6 20 VU × 30s:
+
+| Server | Throughput | p50 | p95 | Notes |
+|---|---|---|---|---|
+| Saleor (uvicorn, 2 workers, `DEBUG=False`) | ~133 rps | ~144ms | ~207ms | stock Django+graphene, same DB |
+| rustygod-server (release LTO) | **~2,592 rps** | **~7.4ms** | **~9.9ms** | RSS ~43MB under load |
+
+≈**20× throughput, ≈19× latency** on this read workload. Honest caveats:
+same-machine/shared resources; Django ran its Dockerfile-default 2 workers;
+read-only catalog query (writes will differ); row ordering differs between
+the two (payload sizes equivalent). Repro: `bench/h2h-graphql.js` with
+`H2H_URL=http://127.0.0.1:8002/graphql/` (Django, from `saleor-core` with
+`DEBUG=False ALLOWED_CLIENT_HOSTS=… RSA_PRIVATE_KEY=…`) vs
+`H2H_URL=http://127.0.0.1:8001/graphql` (ours).
+
 ### Target scorecard (Phase 2 exit criteria)
 
 | Metric | Target | Measured | Verdict |
