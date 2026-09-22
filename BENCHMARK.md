@@ -36,6 +36,18 @@ spike (1000 VU, 40s): 115,808 checks · 100% pass · 0 failed ·
 docker (10 VU smoke): p50 2.8ms · p95 8.7ms · 100% (23.6MB image)
 ```
 
+### Re-run 2026-09-22 (LTO release, 60.5MB binary, same laptop + DB)
+
+```
+load  (200 VU, 30s):  98,575 iters · 100% checks · 3.28k iters/s ·
+                      grpc p50 ~41ms · p95 ~96ms · server RSS ~58MB
+```
+
+Notes: binary 119MB → **60.5MB** (`strip + lto + codegen-units = 1`); throughput
+p50/p95 slightly better than 09-18 at half the RSS. The `p(99)<50ms` roadmap
+threshold still trips on catalog joins (DB-bound, unchanged) — read replicas /
+caching remain the lever, not codegen.
+
 ### Target scorecard (Phase 2 exit criteria)
 
 | Metric | Target | Measured | Verdict |
