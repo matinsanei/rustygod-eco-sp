@@ -390,6 +390,14 @@ impl CommerceQuery {
         Ok(gen::PromotionCountableConnection { edges, page_info: Some(crate::common::PageInfo { has_next_page: false, has_previous_page: false, start_cursor: None, end_cursor: None }) })
     }
 
+    /// Saleor `promotion(id)` — full details for DiscountDetails
+    /// (`/discounts/sales/:id` routes here; the list root stays slim).
+    async fn promotion(&self, ctx: &Context<'_>, id: ID) -> Result<Option<gen::Promotion>> {
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let Some(pid) = crate::common::parse_uuid_gid(&id.0) else { return Ok(None) };
+        Ok(assemble_promotion(db, pid).await.map_err(|e| Error::new(e.to_string()))?)
+    }
+
     /// Saleor `menu(channel, id, name, slug)` — resolve by id, slug, or name.
     async fn menu(&self, ctx: &Context<'_>, channel: Option<String>, id: Option<ID>, name: Option<String>, slug: Option<String>) -> Result<Option<gen::Menu>> {
         let _ = channel;
@@ -540,4 +548,80 @@ impl CommerceMutation {
         let shop = to_gen_shop(ctx).await?;
         Ok(GqlShopSettingsUpdate { shop: Some(shop), errors: vec![] })
     }
+}
+
+/// Full promotion assembly (details page): dates, description, metadata +
+/// rules with channels, gifts, predicates and rewards.
+async fn assemble_promotion(
+    db: &sea_orm::DatabaseConnection,
+    pid: uuid::Uuid,
+) -> Result<Option<gen::Promotion>, String> {
+    use sea_orm::Statement;
+    use sea_orm::ConnectionTrait;
+    use std::collections::HashMap;
+    let q = |sql: String, params: Vec<sea_orm::Value>| async move {
+        db.query_all(Statement::from_sql_and_values(sea_orm::DatabaseBackend::Postgres, sql, params)).await
+    };
+    let prows = q("SELECT id::text AS id, name, description, type, start_date, end_date, metadata, private_metadata FROM discount_promotion WHERE id = $1::uuid".into(),
+        vec![pid.to_string().into()]).await.map_err(|e| e.to_string())?;
+    let Some(prow) = prows.into_iter().next() else { return Ok(None) };
+    let rrows = q("SELECT id::text AS id, name, description, catalogue_predicate, order_predicate, reward_type, reward_value_type, reward_value FROM discount_promotionrule WHERE promotion_id = $1::uuid ORDER BY id".into(),
+        vec![pid.to_string().into()]).await.map_err(|e| e.to_string())?;
+    let rids: Vec<String> = rrows.iter().filter_map(|r| r.try_get::<String>("", "id").ok()).collect();
+    // rule channels + gifts, batched
+    let mut rchannels: HashMap<String, Vec<gen::Channel>> = HashMap::new();
+    let mut rgifts: HashMap<String, Vec<ID>> = HashMap::new();
+    if !rids.is_empty() {
+        let list = rids.iter().enumerate().map(|(i, _)| format!("${}::uuid", i + 1)).collect::<Vec<_>>().join(", ");
+        let params: Vec<sea_orm::Value> = rids.iter().map(|s| s.clone().into()).collect();
+        for r in q(format!("SELECT rc.promotionrule_id::text AS rid, c.id, c.slug, c.name, c.currency_code, c.is_active, c.default_country FROM discount_promotionrule_channels rc JOIN channel_channel c ON c.id = rc.channel_id WHERE rc.promotionrule_id IN ({list})"), params.clone())
+            .await.map_err(|e| e.to_string())? {
+            if let (Ok(rid), Ok(cid)) = (r.try_get::<String>("", "rid"), r.try_get::<i32>("", "id")) {
+                let dc = r.try_get::<String>("", "default_country").unwrap_or_else(|_| "US".into());
+                let mut c = crate::metadata::lit_channel(crate::common::gid("Channel", cid), vec![], vec![]);
+                c.slug = r.try_get::<String>("", "slug").ok();
+                c.name = r.try_get::<String>("", "name").ok();
+                c.is_active = r.try_get::<bool>("", "is_active").ok();
+                c.currency_code = r.try_get::<String>("", "currency_code").ok();
+                c.default_country = Some(GqlCountryDisplay { code: dc.clone(), country: dc });
+                rchannels.entry(rid).or_default().push(c);
+            }
+        }
+        for r in q(format!("SELECT promotionrule_id::text AS rid, productvariant_id FROM discount_promotionrule_gifts WHERE promotionrule_id IN ({list})"), params)
+            .await.map_err(|e| e.to_string())? {
+            if let (Ok(rid), Ok(vid)) = (r.try_get::<String>("", "rid"), r.try_get::<i32>("", "productvariant_id")) {
+                rgifts.entry(rid).or_default().push(ID(crate::common::gid("ProductVariant", vid)));
+            }
+        }
+    }
+    let meta = |r: &sea_orm::QueryResult, c: &str| {
+        r.try_get::<serde_json::Value>("", c).ok()
+            .map(|v| crate::common::json_to_metadata_items(&v)).unwrap_or_default()
+    };
+    let rules = rrows.into_iter().filter_map(|r| {
+        let rid = r.try_get::<String>("", "id").ok()?;
+        Some(gen::PromotionRule {
+            id: Some(ID(crate::common::gid("PromotionRule", &rid))),
+            name: r.try_get::<Option<String>>("", "name").ok().flatten(),
+            description: r.try_get::<Option<serde_json::Value>>("", "description").ok().flatten(),
+            channels: rchannels.get(&rid).cloned().unwrap_or_default(),
+            reward_value: r.try_get::<Option<rust_decimal::Decimal>>("", "reward_value").ok().flatten().map(|d| gen::GenPositiveDecimal(d.to_string())),
+            reward_value_type: r.try_get::<Option<String>>("", "reward_value_type").ok().flatten(),
+            catalogue_predicate: r.try_get::<Option<serde_json::Value>>("", "catalogue_predicate").ok().flatten(),
+            order_predicate: r.try_get::<Option<serde_json::Value>>("", "order_predicate").ok().flatten(),
+            reward_type: r.try_get::<Option<String>>("", "reward_type").ok().flatten(),
+            gift_ids: rgifts.get(&rid).cloned().unwrap_or_default(),
+        })
+    }).collect();
+    Ok(Some(gen::Promotion {
+        id: Some(ID(crate::common::gid("Promotion", pid))),
+        private_metadata: meta(&prow, "private_metadata"),
+        metadata: meta(&prow, "metadata"),
+        name: prow.try_get::<String>("", "name").ok(),
+        r#type: prow.try_get::<String>("", "type").ok().map(|t| t.to_uppercase()),
+        description: prow.try_get::<Option<serde_json::Value>>("", "description").ok().flatten(),
+        start_date: prow.try_get::<Option<chrono::DateTime<chrono::Utc>>>("", "start_date").ok().flatten(),
+        end_date: prow.try_get::<Option<chrono::DateTime<chrono::Utc>>>("", "end_date").ok().flatten(),
+        rules,
+    }))
 }

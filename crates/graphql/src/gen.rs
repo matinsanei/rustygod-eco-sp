@@ -23541,8 +23541,9 @@ impl OrderLine {
             None => return None,
         };
         let line_id = self.id.as_ref().map(|i| i.0.clone()).unwrap_or_default();
-        let variant_id: Option<i32> = match line_id.parse::<uuid::Uuid>() {
-            Ok(u) => rustygod_db::entities::order_orderline::Entity::find()
+        // OrderLine ids are Saleor globals ("OrderLine:<uuid>") or bare UUIDs.
+        let variant_id: Option<i32> = match crate::common::parse_uuid_gid(&line_id) {
+            Some(u) => rustygod_db::entities::order_orderline::Entity::find()
                 .select_only()
                 .column(rustygod_db::entities::order_orderline::Column::VariantId)
                 .filter(rustygod_db::entities::order_orderline::Column::Id.eq(u))
@@ -23551,7 +23552,7 @@ impl OrderLine {
                 .await
                 .unwrap_or(None)
                 .flatten(),
-            Err(_) => None,
+            None => None,
         };
         let pid: i32 = match variant_id {
             Some(vid) => rustygod_db::entities::product_productvariant::Entity::find_by_id(vid)
@@ -24630,7 +24631,7 @@ impl Product {
 
         {
         use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QueryOrder, QuerySelect};
-        let pid: i32 = self.id.as_ref().and_then(|i| i.0.parse::<i32>().ok()).unwrap_or(-1);
+        let pid: i32 = self.id.as_ref().and_then(|i| rustygod_db::catalog::parse_gid(&i.0)).unwrap_or(-1);
         let db = match ctx.data_opt::<crate::context::GqlContext>().and_then(|g| g.db().ok()) {
             Some(d) => d.clone(),
             None => return None,
@@ -24657,16 +24658,30 @@ impl Product {
     }
 
     #[graphql(name = "mediaById")]
-    async fn media_by_id(&self, #[graphql(name = "id")] _arg_id: ID) -> Option<ProductMedia> {
+    async fn media_by_id(&self, ctx: &Context<'_>, #[graphql(name = "id")] _arg_id: ID) -> Option<ProductMedia> {
 
-        None
+        {
+        let db = match ctx.data_opt::<crate::context::GqlContext>().and_then(|g| g.db().ok()) {
+            Some(d) => d.clone(),
+            None => return None,
+        };
+        crate::catalog::media_by_id(&db, &_arg_id.0).await.unwrap_or(None)
+    }
 
     }
 
     #[graphql(name = "productVariants")]
-    async fn product_variants(&self, #[graphql(name = "filter")] _arg_filter: Option<ProductVariantFilterInput>, #[graphql(name = "where")] _arg_where: Option<ProductVariantWhereInput>, #[graphql(name = "sortBy")] _arg_sort_by: Option<ProductVariantSortingInput>, #[graphql(name = "before")] _arg_before: Option<String>, #[graphql(name = "after")] _arg_after: Option<String>, #[graphql(name = "first")] _arg_first: Option<i32>, #[graphql(name = "last")] _arg_last: Option<i32>) -> Option<ProductVariantCountableConnection> {
+    async fn product_variants(&self, ctx: &Context<'_>, #[graphql(name = "filter")] _arg_filter: Option<ProductVariantFilterInput>, #[graphql(name = "where")] _arg_where: Option<ProductVariantWhereInput>, #[graphql(name = "sortBy")] _arg_sort_by: Option<ProductVariantSortingInput>, #[graphql(name = "before")] _arg_before: Option<String>, #[graphql(name = "after")] _arg_after: Option<String>, #[graphql(name = "first")] _arg_first: Option<i32>, #[graphql(name = "last")] _arg_last: Option<i32>) -> Option<ProductVariantCountableConnection> {
 
-        None
+        {
+        let db = match ctx.data_opt::<crate::context::GqlContext>().and_then(|g| g.db().ok()) {
+            Some(d) => d.clone(),
+            None => return None,
+        };
+        let pid: i32 = self.id.as_ref().and_then(|i| rustygod_db::catalog::parse_gid(&i.0)).unwrap_or(-1);
+        let search = _arg_filter.as_ref().and_then(|f| f.search.clone());
+        crate::catalog::product_variants_page(&db, pid, search, _arg_first.clone(), _arg_after.clone()).await.unwrap_or(None)
+    }
 
     }
 
@@ -24914,9 +24929,20 @@ pub struct ProductMedia {
 impl ProductMedia {
 
     #[graphql(name = "url")]
-    async fn url(&self, #[graphql(name = "size")] _arg_size: Option<i32>, #[graphql(name = "format")] _arg_format: Option<ThumbnailFormatEnum>) -> Option<String> {
+    async fn url(&self, ctx: &Context<'_>, #[graphql(name = "size")] _arg_size: Option<i32>, #[graphql(name = "format")] _arg_format: Option<ThumbnailFormatEnum>) -> Option<String> {
 
-        None
+        {
+        let db = match ctx.data_opt::<crate::context::GqlContext>().and_then(|g| g.db().ok()) {
+            Some(d) => d.clone(),
+            None => return None,
+        };
+        let mid: i32 = self.id.as_ref().and_then(|i| rustygod_db::catalog::parse_gid(&i.0)).unwrap_or(-1);
+        use sea_orm::{EntityTrait, QuerySelect};
+        let path: Option<String> = rustygod_db::entities::product_productmedia::Entity::find_by_id(mid)
+            .select_only().column(rustygod_db::entities::product_productmedia::Column::Image)
+            .into_tuple::<Option<String>>().one(&db).await.unwrap_or(None).flatten();
+        path.map(|pp| format!("{}/{pp}", std::env::var("SALEOR_MEDIA_URL").unwrap_or_else(|_| "/media".into())))
+    }
 
     }
 
@@ -25339,9 +25365,16 @@ impl ProductVariant {
     }
 
     #[graphql(name = "attributes")]
-    async fn attributes(&self, #[graphql(name = "variantSelection")] _arg_variant_selection: Option<VariantAttributeScope>) -> Vec<SelectedAttribute> {
+    async fn attributes(&self, ctx: &Context<'_>, #[graphql(name = "variantSelection")] _arg_variant_selection: Option<VariantAttributeScope>) -> Vec<SelectedAttribute> {
 
-        vec![]
+        {
+        let db = match ctx.data_opt::<crate::context::GqlContext>().and_then(|g| g.db().ok()) {
+            Some(d) => d.clone(),
+            None => return vec![],
+        };
+        let gid = self.id.as_ref().map(|i| i.0.clone()).unwrap_or_default();
+        crate::catalog::variant_attributes(&db, &gid).await
+    }
 
     }
 
@@ -29434,13 +29467,6 @@ impl GenQuery {
     async fn vouchers(&self, #[graphql(name = "filter")] _arg_filter: Option<VoucherFilterInput>, #[graphql(name = "sortBy")] _arg_sort_by: Option<VoucherSortingInput>, #[graphql(name = "query")] _arg_query: Option<String>, #[graphql(name = "channel")] _arg_channel: Option<String>, #[graphql(name = "before")] _arg_before: Option<String>, #[graphql(name = "after")] _arg_after: Option<String>, #[graphql(name = "first")] _arg_first: Option<i32>, #[graphql(name = "last")] _arg_last: Option<i32>) -> Option<VoucherCountableConnection> {
 
         Some(VoucherCountableConnection { edges: vec![], page_info: Some(PageInfo { has_next_page: false, has_previous_page: false, start_cursor: None, end_cursor: None }) })
-
-    }
-
-    #[graphql(name = "promotion")]
-    async fn promotion(&self, #[graphql(name = "id")] _arg_id: ID) -> Option<Promotion> {
-
-        None
 
     }
 

@@ -2,7 +2,7 @@
 
 use async_graphql::*;
 
-use crate::{common::*, context::GqlContext, gen};
+use crate::{common::*, context::GqlContext, gen, metadata};
 
 #[derive(SimpleObject, Clone)]
 pub struct GqlProductEdge {
@@ -292,14 +292,308 @@ impl CatalogQuery {
 
 /// Shared list assembly: type/category enrichment (2 batched queries) +
 /// row mapping. Used by `products` and `product`.
+/// Full product-page assembly (dashboard details parity). Populatedb rows
+/// carry media, channel listings, stocks, collections and attributes — all
+/// of it is exposed here in batched queries, never N+1.
+struct VariantBatches {
+    vbase: std::collections::HashMap<i32, (Option<String>, String, bool, Option<i32>)>,
+    vlist: std::collections::HashMap<i32, Vec<(i32, i32, Option<rust_decimal::Decimal>, Option<rust_decimal::Decimal>, String)>>,
+    channels: std::collections::HashMap<i32, gen::Channel>,
+    stocks: std::collections::HashMap<i32, Vec<gen::Stock>>,
+    variant_media: std::collections::HashMap<i32, Vec<gen::ProductMedia>>,
+    vattrs: std::collections::HashMap<i32, Vec<gen::SelectedAttribute>>,
+}
+
+fn money(amount: rust_decimal::Decimal, currency: String) -> crate::common::Money {
+    crate::common::Money { amount: amount.to_string(), currency, fraction_digits: None }
+}
+
+async fn load_variant_batches(
+    db: &sea_orm::DatabaseConnection,
+    vids: &[i32],
+) -> Result<VariantBatches> {
+    use sea_orm::{ConnectionTrait, Statement};
+    use std::collections::{HashMap, HashSet};
+    let mut b = VariantBatches {
+        vbase: HashMap::new(), vlist: HashMap::new(), channels: HashMap::new(),
+        stocks: HashMap::new(), variant_media: HashMap::new(), vattrs: HashMap::new(),
+    };
+    if vids.is_empty() {
+        return Ok(b);
+    }
+    let in_list = (1..=vids.len()).map(|i| format!("${i}")).collect::<Vec<_>>().join(", ");
+    let params: Vec<sea_orm::Value> = vids.iter().map(|i| (*i).into()).collect();
+    let q = |sql: String, params: Vec<sea_orm::Value>| async move {
+        db.query_all(Statement::from_sql_and_values(sea_orm::DatabaseBackend::Postgres, sql, params)).await
+    };
+    for r in q(format!("SELECT id, sku, name, track_inventory, quantity_limit_per_customer FROM product_productvariant WHERE id IN ({in_list})"), params.clone())
+        .await.map_err(|e| Error::new(e.to_string()))? {
+        if let Ok(vid) = r.try_get::<i32>("", "id") {
+            b.vbase.insert(vid, (
+                r.try_get::<Option<String>>("", "sku").ok().flatten(),
+                r.try_get::<String>("", "name").unwrap_or_default(),
+                r.try_get::<bool>("", "track_inventory").unwrap_or(true),
+                r.try_get::<Option<i32>>("", "quantity_limit_per_customer").ok().flatten()));
+        }
+    }
+    let mut chan_ids: HashSet<i32> = HashSet::new();
+    for r in q(format!("SELECT id, variant_id, channel_id, price_amount, cost_price_amount, currency FROM product_productvariantchannellisting WHERE variant_id IN ({in_list})"), params.clone())
+        .await.map_err(|e| Error::new(e.to_string()))? {
+        if let (Ok(lid), Ok(vid), Ok(ch)) = (r.try_get::<i32>("", "id"), r.try_get::<i32>("", "variant_id"), r.try_get::<i32>("", "channel_id")) {
+            chan_ids.insert(ch);
+            b.vlist.entry(vid).or_default().push((
+                lid, ch,
+                r.try_get::<Option<rust_decimal::Decimal>>("", "price_amount").ok().flatten(),
+                r.try_get::<Option<rust_decimal::Decimal>>("", "cost_price_amount").ok().flatten(),
+                r.try_get::<String>("", "currency").unwrap_or_else(|_| "USD".into())));
+        }
+    }
+    if !chan_ids.is_empty() {
+        let cl = (1..=chan_ids.len()).map(|i| format!("${i}")).collect::<Vec<_>>().join(", ");
+        for r in q(format!("SELECT id, slug, name, currency_code, is_active, default_country FROM channel_channel WHERE id IN ({cl})"),
+            chan_ids.into_iter().map(|i| i.into()).collect()).await.map_err(|e| Error::new(e.to_string()))? {
+            if let Ok(cid) = r.try_get::<i32>("", "id") {
+                let dc = r.try_get::<String>("", "default_country").unwrap_or_else(|_| "US".into());
+                let mut c = metadata::lit_channel(crate::common::gid("Channel", cid), vec![], vec![]);
+                c.slug = r.try_get::<String>("", "slug").ok();
+                c.name = r.try_get::<String>("", "name").ok();
+                c.is_active = r.try_get::<bool>("", "is_active").ok();
+                c.currency_code = r.try_get::<String>("", "currency_code").ok();
+                c.default_country = Some(crate::common::GqlCountryDisplay { code: dc.clone(), country: dc });
+                b.channels.insert(cid, c);
+            }
+        }
+    }
+    // stocks + warehouses
+    let mut raw: Vec<(i32, i32, String, i32, i32)> = vec![];
+    let mut wh_ids: HashSet<String> = HashSet::new();
+    for r in q(format!("SELECT id, product_variant_id, warehouse_id::text AS warehouse_id, quantity, quantity_allocated FROM warehouse_stock WHERE product_variant_id IN ({in_list})"), params.clone())
+        .await.map_err(|e| Error::new(e.to_string()))? {
+        if let (Ok(sid), Ok(vid), Ok(wh), Ok(qty), Ok(alc)) = (
+            r.try_get::<i32>("", "id"), r.try_get::<i32>("", "product_variant_id"),
+            r.try_get::<String>("", "warehouse_id"), r.try_get::<i32>("", "quantity"),
+            r.try_get::<i32>("", "quantity_allocated")) {
+            wh_ids.insert(wh.clone());
+            raw.push((sid, vid, wh, qty, alc));
+        }
+    }
+    let mut wh_names: HashMap<String, (String, String)> = HashMap::new();
+    if !wh_ids.is_empty() {
+        let list = wh_ids.iter().enumerate().map(|(i, _)| format!("${}::uuid", i + 1)).collect::<Vec<_>>().join(", ");
+        for w in q(format!("SELECT id::text AS id, name FROM warehouse_warehouse WHERE id IN ({list})"),
+            wh_ids.into_iter().map(|s| s.into()).collect()).await.map_err(|e| Error::new(e.to_string()))? {
+            if let (Ok(id), Ok(name)) = (w.try_get::<String>("", "id"), w.try_get::<String>("", "name")) {
+                wh_names.insert(id.clone(), (id, name));
+            }
+        }
+    }
+    for (sid, vid, wh, qty, alc) in raw {
+        let (wgid, wname) = wh_names.get(&wh).cloned().unwrap_or_else(|| (wh.clone(), wh.clone()));
+        let mut w = metadata::lit_warehouse(crate::common::gid("Warehouse", &wgid), vec![], vec![]);
+        w.name = Some(wname);
+        b.stocks.entry(vid).or_default().push(gen::Stock {
+            id: Some(ID(crate::common::gid("Stock", sid))),
+            warehouse: Some(w),
+            quantity: Some(qty),
+            quantity_allocated: Some(alc),
+        });
+    }
+    // variant media (through m2m, objects from product media rows)
+    let mut media_ids: HashMap<i32, Vec<i32>> = HashMap::new();
+    let mut all_mids: HashSet<i32> = HashSet::new();
+    for r in q(format!("SELECT variant_id, media_id FROM product_variantmedia WHERE variant_id IN ({in_list})"), params.clone())
+        .await.map_err(|e| Error::new(e.to_string()))? {
+        if let (Ok(v), Ok(m)) = (r.try_get::<i32>("", "variant_id"), r.try_get::<i32>("", "media_id")) {
+            media_ids.entry(v).or_default().push(m);
+            all_mids.insert(m);
+        }
+    }
+    if !all_mids.is_empty() {
+        let ml = (1..=all_mids.len()).map(|i| format!("${i}")).collect::<Vec<_>>().join(", ");
+        let mut by_id: HashMap<i32, gen::ProductMedia> = HashMap::new();
+        for r in q(format!("SELECT id, alt, sort_order, \"type\" FROM product_productmedia WHERE id IN ({ml})"),
+            all_mids.into_iter().map(|i| i.into()).collect()).await.map_err(|e| Error::new(e.to_string()))? {
+            if let Ok(mid) = r.try_get::<i32>("", "id") {
+                let mut m = metadata::lit_product_media(crate::common::gid("ProductMedia", mid), vec![], vec![]);
+                m.alt = Some(r.try_get::<String>("", "alt").unwrap_or_default());
+                m.sort_order = r.try_get::<Option<i32>>("", "sort_order").ok().flatten();
+                m.r#type = r.try_get::<String>("", "type").ok();
+                by_id.insert(mid, m);
+            }
+        }
+        for (v, mids) in media_ids {
+            b.variant_media.insert(v, mids.into_iter().filter_map(|m| by_id.get(&m).cloned()).collect());
+        }
+    }
+    // variant attributes
+    for r in q(format!("SELECT av.variant_id, v.id AS vid, v.name AS vname, v.slug AS vslug, a.id AS aid, a.name AS aname FROM attribute_assignedvariantattributevalue av JOIN attribute_attributevalue v ON v.id = av.value_id JOIN attribute_attribute a ON a.id = v.attribute_id WHERE av.variant_id IN ({in_list})"), params)
+        .await.map_err(|e| Error::new(e.to_string()))? {
+        if let (Ok(vid), Ok(vvid), Ok(aid)) = (r.try_get::<i32>("", "variant_id"), r.try_get::<i32>("", "vid"), r.try_get::<i32>("", "aid")) {
+            let mut a = metadata::lit_attribute(crate::common::gid("Attribute", aid), vec![], vec![]);
+            a.name = r.try_get::<String>("", "aname").ok();
+            let mut aval = metadata::lit_attribute_value(crate::common::gid("AttributeValue", vvid), vec![], vec![]);
+            aval.name = r.try_get::<String>("", "vname").ok();
+            aval.slug = r.try_get::<String>("", "vslug").ok();
+            b.vattrs.entry(vid).or_default().push(gen::SelectedAttribute { attribute: Some(a), values: vec![aval] });
+        }
+    }
+    Ok(b)
+}
+
+fn build_variant(m: &VariantBatches, vid: i32, fb_name: String, fb_sku: String, fb_qty: i32) -> gen::ProductVariant {
+    let (sku, name, track, limit) = m.vbase.get(&vid).cloned().unwrap_or((Some(fb_sku), fb_name, true, None));
+    let listings: Vec<gen::ProductVariantChannelListing> = m.vlist.get(&vid).cloned().unwrap_or_default().into_iter().map(|(lid, ch, price, cost, cur)| {
+        gen::ProductVariantChannelListing {
+            id: Some(ID(crate::common::gid("ProductVariantChannelListing", lid))),
+            channel: m.channels.get(&ch).cloned(),
+            price: price.map(|p| money(p, cur.clone())),
+            cost_price: cost.map(|c| money(c, cur.clone())),
+        }
+    }).collect();
+    let stocks = m.stocks.get(&vid).cloned().unwrap_or_default();
+    // Stock math is the truth for availability (core qty mirrors it on the
+    // list path; the grid path synthesizes core rows with qty 0).
+    let qty = stocks.iter().map(|s| s.quantity.unwrap_or(0) - s.quantity_allocated.unwrap_or(0)).sum::<i32>().max(0);
+    let qty_avail = if stocks.is_empty() { fb_qty } else { qty };
+    gen::ProductVariant {
+        id: Some(ID(crate::common::gid("ProductVariant", vid))),
+        name: Some(name),
+        sku,
+        quantity_available: Some(qty_avail),
+        private_metadata: vec![],
+        metadata: vec![],
+        track_inventory: Some(track),
+        quantity_limit_per_customer: limit,
+        weight: None,
+        channel_listings: listings,
+        media: m.variant_media.get(&vid).cloned().unwrap_or_default(),
+        stocks,
+        updated_at: None,
+        product: None,
+    }
+}
+
+/// Variant attributes for `ProductVariant.attributes(variantSelection:)`
+/// (selection scope accepted-ignored: assignments carry no scope column).
+pub(crate) async fn variant_attributes(
+    db: &sea_orm::DatabaseConnection,
+    variant_gid: &str,
+) -> Vec<gen::SelectedAttribute> {
+    let Some(vid) = rustygod_db::catalog::parse_gid(variant_gid) else { return vec![] };
+    load_variant_batches(db, &[vid]).await.map(|m| m.vattrs.get(&vid).cloned().unwrap_or_default()).unwrap_or_default()
+}
+
 async fn assemble_list_products(
     db: &sea_orm::DatabaseConnection,
     all: Vec<rustygod_core::product::Product>,
 ) -> Result<Vec<gen::Product>> {
-        // Batch productType + category (2 queries; dashboard list reads
-        // `productType.name/hasVariants` and category in every row).
-        use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QuerySelect};
+        use sea_orm::{ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter, QuerySelect, Statement};
         use std::collections::{HashMap, HashSet};
+        let pids: Vec<i32> = all.iter().filter_map(|p| p.id.parse::<i32>().ok()).collect();
+        let vids: Vec<i32> = all.iter().flat_map(|p| &p.variants)
+            .filter_map(|v| v.id.parse::<i32>().ok()).collect();
+        let in_list = |n: usize| (1..=n).map(|i| format!("${i}")).collect::<Vec<_>>().join(", ");
+        let qall = |sql: String, params: Vec<sea_orm::Value>| async move {
+            db.query_all(Statement::from_sql_and_values(sea_orm::DatabaseBackend::Postgres, sql, params)).await
+        };
+        let vb = load_variant_batches(db, &vids).await?;
+        // --- product extras (description/seo/rating/tax) ---
+        let mut extras: HashMap<i32, (Option<String>, Option<String>, Option<String>, Option<f64>, Option<i32>)> = HashMap::new();
+        if !pids.is_empty() {
+            let rows = qall(format!("SELECT id, description::text, seo_title, seo_description, rating, tax_class_id FROM product_product WHERE id IN ({})", in_list(pids.len())),
+                pids.iter().map(|i| (*i).into()).collect()).await.map_err(|e| Error::new(e.to_string()))?;
+            for r in rows {
+                extras.insert(
+                    r.try_get::<i32>("", "id").map_err(|e| Error::new(e.to_string()))?,
+                    (r.try_get::<Option<String>>("", "description").ok().flatten(),
+                     r.try_get::<Option<String>>("", "seo_title").ok().flatten(),
+                     r.try_get::<Option<String>>("", "seo_description").ok().flatten(),
+                     r.try_get::<Option<f64>>("", "rating").ok().flatten(),
+                     r.try_get::<Option<i32>>("", "tax_class_id").ok().flatten()));
+            }
+        }
+        let tax_ids: HashSet<i32> = extras.values().filter_map(|e| e.4).collect();
+        let mut tax_names: HashMap<i32, String> = HashMap::new();
+        if !tax_ids.is_empty() {
+            let rows = qall(format!("SELECT id, name FROM tax_taxclass WHERE id IN ({})", in_list(tax_ids.len())),
+                tax_ids.into_iter().map(|i| i.into()).collect()).await.map_err(|e| Error::new(e.to_string()))?;
+            for r in rows {
+                if let (Ok(id), Ok(name)) = (r.try_get::<i32>("", "id"), r.try_get::<String>("", "name")) {
+                    tax_names.insert(id, name);
+                }
+            }
+        }
+        // --- product media ---
+        let mut media_by_product: HashMap<i32, Vec<gen::ProductMedia>> = HashMap::new();
+        if !pids.is_empty() {
+            let rows = qall(format!("SELECT id, product_id, alt, sort_order, \"type\" FROM product_productmedia WHERE product_id IN ({}) ORDER BY sort_order NULLS LAST, id", in_list(pids.len())),
+                pids.iter().map(|i| (*i).into()).collect()).await.map_err(|e| Error::new(e.to_string()))?;
+            for r in rows {
+                let (Ok(mid), pid) = (r.try_get::<i32>("", "id"), r.try_get::<Option<i32>>("", "product_id").ok().flatten()) else { continue };
+                let mut m = metadata::lit_product_media(crate::common::gid("ProductMedia", mid), vec![], vec![]);
+                m.alt = Some(r.try_get::<String>("", "alt").unwrap_or_default());
+                m.sort_order = r.try_get::<Option<i32>>("", "sort_order").ok().flatten();
+                m.r#type = r.try_get::<String>("", "type").ok();
+                if let Some(pid) = pid {
+                    media_by_product.entry(pid).or_default().push(m);
+                }
+            }
+        }
+        // --- product listings ---
+        let mut plist: HashMap<i32, Vec<(i32, i32, bool, Option<chrono::DateTime<chrono::Utc>>, Option<chrono::DateTime<chrono::Utc>>, bool)>> = HashMap::new();
+        let mut pchan: HashMap<i32, gen::Channel> = HashMap::new();
+        if !pids.is_empty() {
+            let rows = qall(format!("SELECT l.id, l.product_id, l.channel_id, l.is_published, l.published_at, l.available_for_purchase_at, l.visible_in_listings, c.slug, c.name, c.currency_code, c.is_active, c.default_country FROM product_productchannellisting l JOIN channel_channel c ON c.id = l.channel_id WHERE l.product_id IN ({})", in_list(pids.len())),
+                pids.iter().map(|i| (*i).into()).collect()).await.map_err(|e| Error::new(e.to_string()))?;
+            for r in rows {
+                let (Ok(lid), Ok(pid), Ok(ch)) = (r.try_get::<i32>("", "id"), r.try_get::<i32>("", "product_id"), r.try_get::<i32>("", "channel_id")) else { continue };
+                let dc = r.try_get::<String>("", "default_country").unwrap_or_else(|_| "US".into());
+                let mut c = metadata::lit_channel(crate::common::gid("Channel", ch), vec![], vec![]);
+                c.slug = r.try_get::<String>("", "slug").ok();
+                c.name = r.try_get::<String>("", "name").ok();
+                c.is_active = r.try_get::<bool>("", "is_active").ok();
+                c.currency_code = r.try_get::<String>("", "currency_code").ok();
+                c.default_country = Some(crate::common::GqlCountryDisplay { code: dc.clone(), country: dc });
+                pchan.insert(ch, c);
+                plist.entry(pid).or_default().push((
+                    lid, ch,
+                    r.try_get::<bool>("", "is_published").unwrap_or(false),
+                    r.try_get::<Option<chrono::DateTime<chrono::Utc>>>("", "published_at").ok().flatten(),
+                    r.try_get::<Option<chrono::DateTime<chrono::Utc>>>("", "available_for_purchase_at").ok().flatten(),
+                    r.try_get::<bool>("", "visible_in_listings").unwrap_or(false)));
+            }
+        }
+        // --- collections ---
+        let mut colls: HashMap<i32, Vec<gen::Collection>> = HashMap::new();
+        if !pids.is_empty() {
+            let rows = qall(format!("SELECT cp.product_id, c.id, c.name, c.slug FROM product_collectionproduct cp JOIN product_collection c ON c.id = cp.collection_id WHERE cp.product_id IN ({})", in_list(pids.len())),
+                pids.iter().map(|i| (*i).into()).collect()).await.map_err(|e| Error::new(e.to_string()))?;
+            for r in rows {
+                if let (Ok(pid), Ok(cid)) = (r.try_get::<i32>("", "product_id"), r.try_get::<i32>("", "id")) {
+                    let mut c = metadata::lit_collection(crate::common::gid("Collection", cid), vec![], vec![]);
+                    c.name = r.try_get::<String>("", "name").ok();
+                    c.slug = r.try_get::<String>("", "slug").ok();
+                    colls.entry(pid).or_default().push(c);
+                }
+            }
+        }
+        // --- product attributes ---
+        let mut pattrs: HashMap<i32, Vec<gen::SelectedAttribute>> = HashMap::new();
+        if !pids.is_empty() {
+            let rows = qall(format!("SELECT ap.product_id, v.id AS vid, v.name AS vname, v.slug AS vslug, a.id AS aid, a.name AS aname FROM attribute_assignedproductattributevalue ap JOIN attribute_attributevalue v ON v.id = ap.value_id JOIN attribute_attribute a ON a.id = v.attribute_id WHERE ap.product_id IN ({})", in_list(pids.len())),
+                pids.iter().map(|i| (*i).into()).collect()).await.map_err(|e| Error::new(e.to_string()))?;
+            for r in rows {
+                if let (Ok(pid), Ok(vid), Ok(aid)) = (r.try_get::<i32>("", "product_id"), r.try_get::<i32>("", "vid"), r.try_get::<i32>("", "aid")) {
+                    let mut a = metadata::lit_attribute(crate::common::gid("Attribute", aid), vec![], vec![]);
+                    a.name = r.try_get::<String>("", "aname").ok();
+                    let mut av = metadata::lit_attribute_value(crate::common::gid("AttributeValue", vid), vec![], vec![]);
+                    av.name = r.try_get::<String>("", "vname").ok();
+                    av.slug = r.try_get::<String>("", "vslug").ok();
+                    pattrs.entry(pid).or_default().push(gen::SelectedAttribute { attribute: Some(a), values: vec![av] });
+                }
+            }
+        }
+        // --- product rows (type + category batches kept) ---
         let type_ids: HashSet<i32> = all.iter().filter_map(|p| p.product_type_id.parse::<i32>().ok()).collect();
         let mut types: HashMap<i32, (String, String, bool)> = HashMap::new();
         if !type_ids.is_empty() {
@@ -327,31 +621,71 @@ async fn assemble_list_products(
                 .all(db).await.map_err(|e| Error::new(e.to_string()))?;
             for (id, name, slug) in rows { cats.insert(id, (name, slug)); }
         }
-        let page: Vec<gen::Product> = all.into_iter().map(|p| gen::Product {
+        // price ranges per (product, channel) from variant listings.
+        let mut ranges: HashMap<(i32, i32), (rust_decimal::Decimal, rust_decimal::Decimal, String)> = HashMap::new();
+        for p in &all {
+            if let Ok(pid) = p.id.parse::<i32>() {
+                for v in &p.variants {
+                    if let Ok(vid) = v.id.parse::<i32>() {
+                        if let Some(ls) = vb.vlist.get(&vid) {
+                            for (_, ch, price, _, cur) in ls {
+                                if let Some(pr) = price {
+                                    ranges.entry((pid, *ch)).and_modify(|e| {
+                                        if *pr < e.0 { e.0 = *pr; }
+                                        if *pr > e.1 { e.1 = *pr; }
+                                    }).or_insert((*pr, *pr, cur.clone()));
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        let taxed = |amount: rust_decimal::Decimal, currency: String| crate::order::GqlTaxedMoney {
+            currency: Some(currency.clone()),
+            gross: money(amount, currency.clone()),
+            net: money(amount, currency),
+            tax: None,
+        };
+        // variant channels come from the SHARED batch (single source of truth
+        // for listing channels); product listings carry their own join.
+        let page: Vec<gen::Product> = all.into_iter().map(|p| {
+            let pid: i32 = p.id.parse().unwrap_or(-1);
+            let default_variant = p.variants.iter().next().and_then(|v| v.id.parse::<i32>().ok())
+                .map(|vid| {
+                    let core_v = p.variants.iter().find(|v| v.id.parse::<i32>().ok() == Some(vid)).unwrap();
+                    build_variant(&vb, vid, core_v.name.clone(), core_v.sku.clone(), core_v.quantity_available)
+                });
+            let listings: Vec<gen::ProductChannelListing> = plist.get(&pid).cloned().unwrap_or_default().into_iter().map(|(lid, ch, pub_, pub_at, avail_at, vis)| {
+                let pricing = ranges.get(&(pid, ch)).map(|(lo, hi, c)| gen::ProductPricingInfo {
+                    price_range: Some(gen::TaxedMoneyRange {
+                        start: Some(taxed(*lo, c.clone())),
+                        stop: Some(taxed(*hi, c.clone())),
+                    }),
+                });
+                gen::ProductChannelListing {
+                    id: Some(ID(crate::common::gid("ProductChannelListing", lid))),
+                    published_at: pub_at,
+                    is_published: Some(pub_),
+                    channel: pchan.get(&ch).cloned().or_else(|| vb.channels.get(&ch).cloned()),
+                    visible_in_listings: Some(vis),
+                    available_for_purchase_at: avail_at,
+                    is_available_for_purchase: Some(pub_),
+                    pricing,
+                }
+            }).collect();
+            let any_pub = plist.get(&pid).map(|ls| ls.iter().any(|l| l.2)).unwrap_or(false);
+            let (desc, seo_t, seo_d, rating, tax_id) = extras.get(&pid).cloned().unwrap_or((None, None, None, None, None));
+            gen::Product {
             id: Some(ID(crate::common::gid("Product", &p.id))),
             name: Some(p.name),
             slug: Some(p.slug),
-            default_variant: p.variants.into_iter().next().map(|v| gen::ProductVariant {
-                id: Some(ID(crate::common::gid("ProductVariant", &v.id))),
-                name: Some(v.name),
-                sku: Some(v.sku),
-                quantity_available: Some(v.quantity_available),
-                private_metadata: vec![],
-                metadata: vec![],
-                track_inventory: None,
-                quantity_limit_per_customer: None,
-                weight: None,
-                channel_listings: vec![],
-                media: vec![],
-                stocks: vec![],
-                updated_at: None,
-                product: None,
-            }),
+            default_variant,
             private_metadata: vec![],
             metadata: vec![],
-            seo_title: None,
-            seo_description: None,
-            description: None,
+            seo_title: seo_t,
+            seo_description: seo_d,
+            description: desc.map(gen::GenJSONString),
             product_type: p.product_type_id.parse::<i32>().ok().and_then(|tid| types.get(&tid)).map(|(name, slug, hv)| gen::ProductType {
                 id: Some(ID(crate::common::gid("ProductType", &p.product_type_id))),
                 private_metadata: vec![],
@@ -382,16 +716,89 @@ async fn assemble_list_products(
             created: None,
             updated_at: None,
             weight: None,
-            rating: None,
-            is_available: None,
-            attributes: vec![],
-            channel_listings: vec![],
-            media: vec![],
-            collections: vec![],
-            is_available_for_purchase: None,
-            tax_class: None,
-        }).collect();
+            rating,
+            is_available: Some(any_pub),
+            attributes: pattrs.get(&pid).cloned().unwrap_or_default(),
+            channel_listings: listings,
+            media: media_by_product.get(&pid).cloned().unwrap_or_default(),
+            collections: colls.get(&pid).cloned().unwrap_or_default(),
+            is_available_for_purchase: Some(any_pub),
+            tax_class: tax_id.and_then(|t| tax_names.get(&t)).map(|n| {
+                let mut tc = metadata::lit_tax_class(crate::common::gid("TaxClass", tax_id.unwrap_or(0)), vec![], vec![]);
+                tc.name = Some(n.clone());
+                tc
+            }),
+        }}).collect();
         Ok(page)
+}
+
+/// Full variant assembly for arbitrary variant ids (grids, payloads).
+pub(crate) async fn assemble_variants(
+    db: &sea_orm::DatabaseConnection,
+    variant_ids: Vec<i32>,
+) -> Result<Vec<(i32, gen::ProductVariant)>> {
+    if variant_ids.is_empty() {
+        return Ok(vec![]);
+    }
+    let vb = load_variant_batches(db, &variant_ids).await?;
+    let mut out: Vec<(i32, gen::ProductVariant)> = variant_ids.iter().map(|vid| {
+        let (sku, name, _, _) = vb.vbase.get(vid).cloned().unwrap_or((None, String::new(), true, None));
+        (*vid, build_variant(&vb, *vid, name, sku.unwrap_or_default(), 0))
+    }).collect();
+    out.sort_by_key(|t| t.0);
+    Ok(out)
+}
+
+/// Variants grid (`product.productVariants`) with search + pagination.
+pub(crate) async fn product_variants_page(
+    db: &sea_orm::DatabaseConnection,
+    product_id: i32,
+    search: Option<String>,
+    first: Option<i32>,
+    after: Option<String>,
+) -> Result<Option<gen::ProductVariantCountableConnection>> {
+    use sea_orm::{ConnectionTrait, Statement};
+    let mut sql = "SELECT id FROM product_productvariant WHERE product_id = $1".to_string();
+    let mut params: Vec<sea_orm::Value> = vec![product_id.into()];
+    if let Some(s) = search.as_ref().filter(|s| !s.trim().is_empty()) {
+        params.push(format!("%{s}%").into());
+        sql.push_str(" AND (name ILIKE $2 OR sku ILIKE $2)");
+    }
+    sql.push_str(" ORDER BY id");
+    let rows = db.query_all(Statement::from_sql_and_values(sea_orm::DatabaseBackend::Postgres, sql, params))
+        .await.map_err(|e| Error::new(e.to_string()))?;
+    let ids: Vec<i32> = rows.into_iter().filter_map(|r| r.try_get::<i32>("", "id").ok()).collect();
+    let total = ids.len() as i32;
+    let off = after.and_then(|c| crate::common::decode_cursor(&c)).unwrap_or(0);
+    let lim = first.unwrap_or(20).clamp(1, 100) as usize;
+    let page_ids: Vec<i32> = ids.into_iter().skip(off).take(lim).collect();
+    let assembled = assemble_variants(db, page_ids).await?;
+    let edges = assembled.into_iter().map(|(_, v)| gen::ProductVariantCountableEdge { node: Some(v) }).collect();
+    Ok(Some(gen::ProductVariantCountableConnection {
+        page_info: Some(crate::common::PageInfo { has_next_page: false, has_previous_page: off > 0, start_cursor: None, end_cursor: None }),
+        edges,
+        total_count: Some(total),
+    }))
+}
+
+/// Single media lookup (`product.media_by_id`).
+pub(crate) async fn media_by_id(
+    db: &sea_orm::DatabaseConnection,
+    media_gid: &str,
+) -> Result<Option<gen::ProductMedia>> {
+    use sea_orm::{ConnectionTrait, Statement};
+    let Some(mid) = rustygod_db::catalog::parse_gid(media_gid) else { return Ok(None) };
+    let rows = db.query_all(Statement::from_sql_and_values(
+        sea_orm::DatabaseBackend::Postgres,
+        "SELECT id, alt, sort_order, \"type\" FROM product_productmedia WHERE id = $1",
+        [mid.into()],
+    )).await.map_err(|e| Error::new(e.to_string()))?;
+    let Some(r) = rows.into_iter().next() else { return Ok(None) };
+    let mut m = metadata::lit_product_media(crate::common::gid("ProductMedia", mid), vec![], vec![]);
+    m.alt = Some(r.try_get::<String>("", "alt").unwrap_or_default());
+    m.sort_order = r.try_get::<Option<i32>>("", "sort_order").ok().flatten();
+    m.r#type = r.try_get::<String>("", "type").ok();
+    Ok(Some(m))
 }
 
 /// Dashboard `ProductCreate` payload shape (`product { id }`, `errors`).
