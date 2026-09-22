@@ -6,7 +6,9 @@ PostgreSQL (`populatedb` data, 52 orders).
 
 ## Setup
 
-- **Binary:** release profile, 20MB stripped binary, 23.6MB Docker image
+- **Binary:** release profile, ~95MB stripped (Sep 2026; the old 20MB figure
+  predates the wasmtime/aws-lc/codegen deps). `[profile.release]` now sets
+  `strip + lto + codegen-units = 1` — rebuild in background, it takes a while.
 - **DB:** PostgreSQL on `127.0.0.1:5434`, Saleor `populatedb` dataset
 - **Machine:** dev laptop, 15GB RAM — server, k6 and Postgres share it
   (single-machine numbers; a split setup would read better)

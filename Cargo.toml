@@ -41,3 +41,11 @@ tower = "0.4"
 extism = "1"
 wat = "1"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls-manual-roots"] }
+
+# Small, shippable binary: strip symbols, full LTO, single codegen unit.
+# NOTE: this makes release builds slow (~30-60min on a laptop) — build in
+# background with `nice`. See README benchmarks.
+[profile.release]
+strip = true
+lto = true
+codegen-units = 1

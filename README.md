@@ -75,7 +75,7 @@ The contract (same schema, same constraints) is identical either way.
 ## Benchmarks (release binary, local Postgres, 2026-09)
 
 ```
-idle:             RSS ~8MB (binary 20MB)
+idle:             RSS ~8MB (binary ~95MB stripped, Sep 2026)
 load  (20 conn):  ~5,400 rps · p50 3.8ms · p99 6.7ms · errors=0
 spike (1000 conn): ~5,400 rps · p50 194ms · errors=2/108k · RSS →101MB
 cool:             instant recovery to p50 ~4ms
