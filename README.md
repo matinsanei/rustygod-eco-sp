@@ -75,15 +75,36 @@ The contract (same schema, same constraints) is identical either way.
 ## Benchmarks (release binary, local Postgres, 2026-09)
 
 ```
-idle:             RSS ~8MB (binary ~95MB stripped, Sep 2026)
-load  (20 conn):  ~5,400 rps · p50 3.8ms · p99 6.7ms · errors=0
-spike (1000 conn): ~5,400 rps · p50 194ms · errors=2/108k · RSS →101MB
-cool:             instant recovery to p50 ~4ms
+binary:          ~60.5MB stripped (strip + LTO + codegen-units = 1)
+k6 (200 VU, 30s): 3.28k iters/s · grpc p50 ~41ms · p95 ~96ms · 100% checks · RSS ~58MB
 ```
 
-Fixes that moved the needle 6x: batched catalog reads (3 queries no
-matter the page size — the dataloader fix), DB pool 16→64, release
-profile. Next: per-query shaping + k6 suite (Phase 2).
+Full history + methodology: [BENCHMARK.md](BENCHMARK.md). The `p(99)<50ms`
+roadmap target still trips on catalog joins (DB-bound) — read replicas /
+caching are the lever, not codegen.
+
+## Current state (Sep 2026)
+
+The stock Saleor Dashboard runs against `/graphql` with zero schema errors
+(**457/457 operations validate**, `scripts/verify_dashboard_ops.py`):
+
+- **Auth parity:** staff JWT + `authorization-bearer` header (the only header
+  the Dashboard sends — same priority as Saleor's `SALEOR_AUTH_HEADER`),
+  `tokenCreate/tokenRefresh/me`, superuser bypass, `MANAGE_*` enum codes so
+  the sidebar renders fully and survives page refresh.
+- **Pages that render with real rows:** product list (type/category), order
+  details (lines → variant → product, undiscounted/subtotal/shipping/tax
+  totals, channel order settings), plus the boot queries everything depends
+  on (`shop`, channels, permissions).
+- **Processes:** one binary, Saleor's layout — `api` (gRPC :50051 + GraphQL
+  :8000 + metrics :9000), `worker` (webhook outbox), `beat` (20-entry
+  scheduler), `check` (readiness), `migrate`/`seed`/`createsuperuser`
+  (delegated to Saleor's own `manage.py` — DDL and mock data are never
+  re-guessed).
+- **Known gaps:** many of the 244 mutations are still validated stubs
+  (`None`/empty until their domain port lands); `extensions/installed` is
+  correctly empty on a fresh `populatedb` (0 apps); media URLs 404 (no file
+  server yet). Tracked in [BUGS.md](BUGS.md) / [STATUS.md](STATUS.md).
 
 ## Zero-friction migration
 
