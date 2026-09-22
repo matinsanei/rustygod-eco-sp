@@ -242,26 +242,44 @@ pub struct OrderHeader {
     pub currency: String,
     pub total_gross_amount: Decimal,
     pub created_at: chrono::DateTime<chrono::Utc>,
+    pub shipping_price_net_amount: Decimal,
+    pub shipping_price_gross_amount: Decimal,
+    pub shipping_method_name: Option<String>,
 }
 
 pub async fn get_order_rows(
     db: &impl sea_orm::ConnectionTrait,
     id: Uuid,
 ) -> Result<Option<(OrderHeader, Vec<order_orderline::Model>)>> {
-    let row: Option<(Uuid, i32, String, String, String, Decimal, chrono::DateTime<chrono::Utc>)> =
-        order_order::Entity::find_by_id(id)
-            .select_only()
-            .column(order_order::Column::Id)
-            .column(order_order::Column::Number)
-            .column(order_order::Column::UserEmail)
-            .column(order_order::Column::Status)
-            .column(order_order::Column::Currency)
-            .column(order_order::Column::TotalGrossAmount)
-            .column(order_order::Column::CreatedAt)
-            .into_tuple()
-            .one(db)
-            .await?;
-    let Some((oid, number, user_email, status, currency, total, created_at)) = row else {
+    let row: Option<(
+        Uuid,
+        i32,
+        String,
+        String,
+        String,
+        Decimal,
+        chrono::DateTime<chrono::Utc>,
+        Decimal,
+        Decimal,
+        Option<String>,
+    )> = order_order::Entity::find_by_id(id)
+        .select_only()
+        .column(order_order::Column::Id)
+        .column(order_order::Column::Number)
+        .column(order_order::Column::UserEmail)
+        .column(order_order::Column::Status)
+        .column(order_order::Column::Currency)
+        .column(order_order::Column::TotalGrossAmount)
+        .column(order_order::Column::CreatedAt)
+        .column(order_order::Column::ShippingPriceNetAmount)
+        .column(order_order::Column::ShippingPriceGrossAmount)
+        .column(order_order::Column::ShippingMethodName)
+        .into_tuple()
+        .one(db)
+        .await?;
+    let Some((oid, number, user_email, status, currency, total, created_at, ship_net, ship_gross, ship_name)) =
+        row
+    else {
         return Ok(None);
     };
     let lines = order_orderline::Entity::find()
@@ -278,6 +296,9 @@ pub async fn get_order_rows(
             currency,
             total_gross_amount: total,
             created_at,
+            shipping_price_net_amount: ship_net,
+            shipping_price_gross_amount: ship_gross,
+            shipping_method_name: ship_name,
         },
         lines,
     )))

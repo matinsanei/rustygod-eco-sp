@@ -49,6 +49,37 @@ impl CatalogQuery {
         let lim = first.unwrap_or(20).clamp(1, 100) as usize;
         let all = rustygod_db::catalog::list_products(db, &ch, None, 200).await.map_err(|e| Error::new(e.to_string()))?;
         let total = all.len() as i32;
+        // Batch productType + category (2 queries; dashboard list reads
+        // `productType.name/hasVariants` and category in every row).
+        use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QuerySelect};
+        use std::collections::{HashMap, HashSet};
+        let type_ids: HashSet<i32> = all.iter().filter_map(|p| p.product_type_id.parse::<i32>().ok()).collect();
+        let mut types: HashMap<i32, (String, String, bool)> = HashMap::new();
+        if !type_ids.is_empty() {
+            let rows = rustygod_db::entities::product_producttype::Entity::find()
+                .select_only()
+                .column(rustygod_db::entities::product_producttype::Column::Id)
+                .column(rustygod_db::entities::product_producttype::Column::Name)
+                .column(rustygod_db::entities::product_producttype::Column::Slug)
+                .column(rustygod_db::entities::product_producttype::Column::HasVariants)
+                .filter(rustygod_db::entities::product_producttype::Column::Id.is_in(type_ids.into_iter().collect::<Vec<_>>()))
+                .into_tuple::<(i32, String, String, bool)>()
+                .all(db).await.map_err(|e| Error::new(e.to_string()))?;
+            for (id, name, slug, hv) in rows { types.insert(id, (name, slug, hv)); }
+        }
+        let cat_ids: HashSet<i32> = all.iter().filter_map(|p| p.category_id.as_ref().and_then(|c| c.parse::<i32>().ok())).collect();
+        let mut cats: HashMap<i32, (String, String)> = HashMap::new();
+        if !cat_ids.is_empty() {
+            let rows = rustygod_db::entities::product_category::Entity::find()
+                .select_only()
+                .column(rustygod_db::entities::product_category::Column::Id)
+                .column(rustygod_db::entities::product_category::Column::Name)
+                .column(rustygod_db::entities::product_category::Column::Slug)
+                .filter(rustygod_db::entities::product_category::Column::Id.is_in(cat_ids.into_iter().collect::<Vec<_>>()))
+                .into_tuple::<(i32, String, String)>()
+                .all(db).await.map_err(|e| Error::new(e.to_string()))?;
+            for (id, name, slug) in rows { cats.insert(id, (name, slug)); }
+        }
         let page: Vec<gen::Product> = all.into_iter().skip(off).take(lim).map(|p| gen::Product {
             id: Some(ID(p.id)),
             name: Some(p.name),
@@ -74,8 +105,33 @@ impl CatalogQuery {
             seo_title: None,
             seo_description: None,
             description: None,
-            product_type: None,
-            category: None,
+            product_type: p.product_type_id.parse::<i32>().ok().and_then(|tid| types.get(&tid)).map(|(name, slug, hv)| gen::ProductType {
+                id: Some(ID(p.product_type_id.clone())),
+                private_metadata: vec![],
+                metadata: vec![],
+                name: Some(name.clone()),
+                slug: Some(slug.clone()),
+                has_variants: Some(*hv),
+                is_shipping_required: None,
+                weight: None,
+                kind: None,
+                tax_class: None,
+                assigned_variant_attributes: vec![],
+                product_attributes: vec![],
+            }),
+            category: p.category_id.as_ref().and_then(|c| c.parse::<i32>().ok()).and_then(|cid| cats.get(&cid)).map(|(name, slug)| gen::Category {
+                id: Some(ID(p.category_id.clone().unwrap_or_default())),
+                private_metadata: vec![],
+                metadata: vec![],
+                seo_title: None,
+                seo_description: None,
+                name: Some(name.clone()),
+                description: None,
+                slug: Some(slug.clone()),
+                parent: None,
+                level: None,
+                updated_at: None,
+            }),
             created: None,
             updated_at: None,
             weight: None,

@@ -87,8 +87,7 @@ fn to_gql_money(amount: rust_decimal::Decimal, currency: String) -> Money {
     Money { amount: amount.to_string(), currency, fraction_digits: None }
 }
 fn to_taxed(amount: rust_decimal::Decimal, currency: String) -> GqlTaxedMoney {
-    let m = to_gql_money(amount, currency.clone());
-    GqlTaxedMoney { gross: m.clone(), net: m, tax: None, currency: Some(currency) }
+    to_taxed2(amount, amount, currency)
 }
 
 fn parse_id(s: &str) -> Uuid {
@@ -103,11 +102,115 @@ fn parse_id(s: &str) -> Uuid {
 }
 
 /// Shared order assembly: real rows where we have them (id/number/status/
-/// totals/lines/channel), `None`/`[]` elsewhere (enterprise stubs).
-fn to_gen_order(
+ /// totals/lines/channel/variant+product/totals), `None`/`[]` elsewhere.
+async fn to_gen_order(
+    db: &sea_orm::DatabaseConnection,
     h: &rustygod_db::order_store::OrderHeader,
     ls: Vec<rustygod_db::entities::order_orderline::Model>,
 ) -> gen::Order {
+    use sea_orm::EntityTrait;
+    // Order-level undiscounted total = sum of line undiscounted totals
+    // (OrderHeader doesn't carry it; same arithmetic Django's data holds).
+    let und_net: rust_decimal::Decimal = ls.iter().map(|l| l.undiscounted_total_price_net_amount).sum();
+    let und_gross: rust_decimal::Decimal = ls.iter().map(|l| l.undiscounted_total_price_gross_amount).sum();
+    // subtotal = sum of line totals (what the dashboard price summary reads).
+    let sub_net: rust_decimal::Decimal = ls.iter().map(|l| l.total_price_net_amount).sum();
+    let sub_gross: rust_decimal::Decimal = ls.iter().map(|l| l.total_price_gross_amount).sum();
+    let mut lines = Vec::with_capacity(ls.len());
+    for l in ls {
+        // Real variant + product (dashboard lines datagrid reads
+        // `variant.product.id` unconditionally — null product crashes it).
+        let mut variant_name = None;
+        let mut variant_sku = None;
+        let mut product_stub = None;
+        if let Some(vid) = l.variant_id {
+            if let Ok(Some(v)) = rustygod_db::entities::product_productvariant::Entity::find_by_id(vid).one(db).await {
+                variant_name = Some(v.name.clone());
+                variant_sku = v.sku.clone();
+                // Slim select: product_product.search_vector is tsvector and
+                // crashes full-model decode (same class as channel INTERVAL).
+                use sea_orm::{ColumnTrait, QueryFilter, QuerySelect};
+                type PP = rustygod_db::entities::product_product::Entity;
+                use rustygod_db::entities::product_product::Column as PPCol;
+                let prow: Option<(i32, String, String, Option<String>, Option<String>)> = PP::find()
+                    .select_only()
+                    .column(PPCol::Id).column(PPCol::Name).column(PPCol::Slug)
+                    .column(PPCol::SeoTitle).column(PPCol::SeoDescription)
+                    .filter(PPCol::Id.eq(v.product_id))
+                    .into_tuple().one(db).await.unwrap_or(None);
+                if let Some((pid, pname, pslug, pseo_t, pseo_d)) = prow {
+                    product_stub = Some(Box::new(gen::Product {
+                        id: Some(ID(pid.to_string())),
+                        private_metadata: vec![],
+                        metadata: vec![],
+                        seo_title: pseo_t,
+                        seo_description: pseo_d,
+                        name: Some(pname.clone()),
+                        description: None,
+                        product_type: None,
+                        slug: Some(pslug),
+                        category: None,
+                        created: None,
+                        updated_at: None,
+                        weight: None,
+                        default_variant: None,
+                        rating: None,
+                        channel_listings: vec![],
+                        media: vec![],
+                        collections: vec![],
+                        attributes: vec![],
+                        tax_class: None,
+                        is_available: None,
+                        is_available_for_purchase: None,
+                    }));
+                }
+            }
+        }
+        lines.push(gen::OrderLine {
+            id: Some(ID(l.id.to_string())),
+            private_metadata: vec![],
+            metadata: vec![],
+            product_name: product_stub.as_ref().and_then(|p| p.name.clone()),
+            variant_name: variant_name.clone(),
+            product_sku: variant_sku.clone(),
+            is_shipping_required: None,
+            quantity: Some(l.quantity),
+            quantity_fulfilled: Some(l.quantity_fulfilled),
+            tax_rate: None,
+            unit_price: Some(to_taxed(l.unit_price_gross_amount, l.currency.clone())),
+            undiscounted_unit_price: Some(to_taxed2(l.undiscounted_unit_price_net_amount, l.undiscounted_unit_price_gross_amount, l.currency.clone())),
+            unit_discount: None,
+            unit_discount_reason: None,
+            unit_discount_value: None,
+            unit_discount_type: None,
+            total_price: Some(to_taxed(l.total_price_gross_amount, l.currency.clone())),
+            undiscounted_total_price: Some(to_taxed2(l.undiscounted_total_price_net_amount, l.undiscounted_total_price_gross_amount, l.currency.clone())),
+            is_price_overridden: None,
+            price_override_reason: None,
+            variant: l.variant_id.map(|vid| gen::ProductVariant {
+                id: Some(ID(vid.to_string())),
+                private_metadata: vec![],
+                metadata: vec![],
+                name: variant_name,
+                sku: variant_sku,
+                product: product_stub,
+                track_inventory: None,
+                quantity_limit_per_customer: None,
+                weight: None,
+                channel_listings: vec![],
+                media: vec![],
+                stocks: vec![],
+                quantity_available: None,
+                updated_at: None,
+            }),
+            allocations: vec![],
+            quantity_to_fulfill: None,
+            tax_class: None,
+            voucher_code: None,
+            is_gift: Some(l.is_gift),
+            discounts: vec![],
+        });
+    }
     gen::Order {
         id: Some(ID(h.id.to_string())),
         private_metadata: vec![],
@@ -118,7 +221,7 @@ fn to_gen_order(
         user: None,
         billing_address: None,
         shipping_address: None,
-        shipping_method_name: None,
+        shipping_method_name: h.shipping_method_name.clone(),
         collection_point_name: None,
         channel: Some(gen::Channel {
             id: Some(ID("Q2hhbm5lbDox".into())),
@@ -132,41 +235,22 @@ fn to_gen_order(
             default_country: Some(crate::common::GqlCountryDisplay { code: "US".into(), country: "United States".into() }),
             warehouses: vec![],
             stock_settings: Some(crate::common::GqlStockSettings { allocation_strategy: "prioritize-sorting-order".into() }),
-            order_settings: None,
+            // Dashboard reads channel.orderSettings.markAsPaidStrategy
+            // unconditionally (Saleor default strategy for channels).
+            order_settings: Some(gen::OrderSettings {
+                automatically_confirm_all_new_orders: None,
+                automatically_fulfill_non_shippable_gift_card: None,
+                expire_orders_after: None,
+                mark_as_paid_strategy: Some("PAYMENT_FLOW".into()),
+                delete_expired_orders_after: None,
+                allow_unpaid_orders: None,
+            }),
             checkout_settings: None,
             payment_settings: None,
             tax_configuration: None,
         }),
         fulfillments: vec![],
-        lines: ls.into_iter().map(|l| gen::OrderLine {
-            id: Some(ID(l.id.to_string())),
-            private_metadata: vec![],
-            metadata: vec![],
-            product_name: None,
-            variant_name: None,
-            product_sku: None,
-            is_shipping_required: None,
-            quantity: Some(l.quantity),
-            quantity_fulfilled: Some(l.quantity_fulfilled),
-            tax_rate: None,
-            unit_price: Some(to_taxed(l.unit_price_gross_amount, l.currency.clone())),
-            undiscounted_unit_price: None,
-            unit_discount: None,
-            unit_discount_reason: None,
-            unit_discount_value: None,
-            unit_discount_type: None,
-            total_price: Some(to_taxed(l.total_price_gross_amount, l.currency)),
-            undiscounted_total_price: None,
-            is_price_overridden: None,
-            price_override_reason: None,
-            variant: l.variant_id.map(minimal_variant),
-            allocations: vec![],
-            quantity_to_fulfill: None,
-            tax_class: None,
-            voucher_code: None,
-            is_gift: Some(l.is_gift),
-            discounts: vec![],
-        }).collect(),
+        lines,
         actions: vec![],
         shipping_methods: vec![],
         invoices: vec![],
@@ -178,14 +262,14 @@ fn to_gen_order(
         transactions: vec![],
         payments: vec![],
         total: Some(to_taxed(h.total_gross_amount, h.currency.clone())),
-        undiscounted_total: None,
+        undiscounted_total: Some(to_taxed2(und_net, und_gross, h.currency.clone())),
         shipping_method: None,
-        shipping_price: None,
+        shipping_price: Some(to_taxed2(h.shipping_price_net_amount, h.shipping_price_gross_amount, h.currency.clone())),
         voucher: None,
         voucher_code: None,
         gift_cards: vec![],
         customer_note: None,
-        subtotal: None,
+        subtotal: Some(to_taxed2(sub_net, sub_gross, h.currency.clone())),
         total_authorized: None,
         total_charged: None,
         total_canceled: None,
@@ -207,24 +291,11 @@ fn to_gen_order(
     }
 }
 
-/// Id-only variant stub (lets Dashboard normalize line → variant links).
-fn minimal_variant(id: i32) -> gen::ProductVariant {
-    gen::ProductVariant {
-        id: Some(ID(id.to_string())),
-        private_metadata: vec![],
-        metadata: vec![],
-        name: None,
-        sku: None,
-        product: None,
-        track_inventory: None,
-        quantity_limit_per_customer: None,
-        weight: None,
-        channel_listings: vec![],
-        media: vec![],
-        stocks: vec![],
-        quantity_available: None,
-        updated_at: None,
-    }
+/// Taxed money with distinct net/gross; tax = gross − net (exact from the
+/// rows — dashboard datagrids read `tax.amount` unconditionally, so a null
+/// tax crashes the page while a zero one renders).
+fn to_taxed2(net: rust_decimal::Decimal, gross: rust_decimal::Decimal, currency: String) -> GqlTaxedMoney {
+    GqlTaxedMoney { gross: to_gql_money(gross, currency.clone()), net: to_gql_money(net, currency.clone()), tax: Some(to_gql_money(gross - net, currency.clone())), currency: Some(currency) }
 }
 
 #[derive(Default)]
@@ -236,7 +307,7 @@ impl OrderQuery {
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
         let oid = parse_id(&id.0);
         let Some((h, ls)) = rustygod_db::order_store::get_order_rows(db, oid).await.map_err(|e| Error::new(e.to_string()))? else { return Ok(None) };
-        Ok(Some(to_gen_order(&h, ls)))
+        Ok(Some(to_gen_order(db, &h, ls).await))
     }
 
     async fn orders(
@@ -257,7 +328,7 @@ impl OrderQuery {
         let mut out = Vec::new();
         for oid in ids.into_iter().skip(off).take(lim) {
             if let Some((hh, ll)) = rustygod_db::order_store::get_order_rows(db, oid).await.map_err(|e| Error::new(e.to_string()))? {
-                out.push(to_gen_order(&hh, ll));
+                out.push(to_gen_order(db, &hh, ll).await);
             }
         }
         let edges = out.into_iter().enumerate().map(|(i, node)| GqlOrderEdge { node, cursor: encode_cursor(off + i) }).collect();
@@ -284,7 +355,7 @@ impl OrderMutation {
         let oid = parse_id(&id.0);
         rustygod_db::cancel::cancel_order(db, oid).await.map_err(|e| Error::new(e.to_string()))?;
         let (h, ls) = rustygod_db::order_store::get_order_rows(db, oid).await.map_err(|e| Error::new(e.to_string()))?.ok_or_else(|| Error::new("order vanished"))?;
-        Ok(GqlOrderCancel { order: Some(to_gen_order(&h, ls)), errors: vec![] })
+        Ok(GqlOrderCancel { order: Some(to_gen_order(db, &h, ls).await), errors: vec![] })
     }
 
     /// Saleor `orderFulfill(order: ID, input: OrderFulfillInput!)`
@@ -306,7 +377,10 @@ impl OrderMutation {
         }
         let tracking = input.tracking_number.unwrap_or_default();
         rustygod_db::fulfillment::create_fulfillment(db, oid, &items, &tracking).await.map_err(|e| Error::new(e.to_string()))?;
-        let order_view = rustygod_db::order_store::get_order_rows(db, oid).await.map_err(|e| Error::new(e.to_string()))?.map(|(h, ll)| to_gen_order(&h, ll));
+        let order_view = match rustygod_db::order_store::get_order_rows(db, oid).await.map_err(|e| Error::new(e.to_string()))? {
+            Some((h, ll)) => Some(to_gen_order(db, &h, ll).await),
+            None => None,
+        };
         Ok(Some(gen::OrderFulfill { order: order_view, errors: vec![] }))
     }
 

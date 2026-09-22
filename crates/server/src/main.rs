@@ -144,10 +144,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             // Debug log: first 500 chars of query so Dashboard mismatches are visible
             // in backend logs (RUST_LOG=info).
             tracing::info!(query = %req.query.chars().take(500).collect::<String>(), op = ?req.operation_name);
-            if let Some(bearer) = headers.get(axum::http::header::AUTHORIZATION)
+            // Auth: Saleor reads HTTP_AUTHORIZATION_BEARER first
+            // (`authorization-bearer: <token>`, what the Dashboard always
+            // sends — see dashboard/src/graphql/authFetch.ts), falling back
+            // to standard `Authorization: Bearer <token>`
+            // (saleor/core/auth.py: SALEOR_AUTH_HEADER / DEFAULT_AUTH_HEADER).
+            if let Some(bearer) = headers.get("authorization-bearer")
                 .and_then(|v| v.to_str().ok())
-                .and_then(|s| s.strip_prefix("Bearer ").or_else(|| s.strip_prefix("bearer ")))
                 .map(|s| s.to_string())
+                .or_else(|| headers.get(axum::http::header::AUTHORIZATION)
+                    .and_then(|v| v.to_str().ok())
+                    .and_then(|s| s.strip_prefix("Bearer ").or_else(|| s.strip_prefix("bearer ")))
+                    .map(|s| s.to_string()))
             {
                 req = req.data(rustygod_graphql::context::Bearer(bearer));
             }
