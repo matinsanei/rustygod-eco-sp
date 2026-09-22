@@ -127,6 +127,194 @@ fn resolve_where_ids<'a>(
 
 #[Object]
 impl CatalogQuery {
+    /// Dashboard category list (roots only, `level: 0`): name/sort/search
+    /// server-side; children/products counts per row (subtree, Saleor parity).
+    async fn categories(
+        &self,
+        ctx: &Context<'_>,
+        filter: Option<gen::CategoryFilterInput>,
+        #[graphql(name = "where")] where_input: Option<gen::CategoryWhereInput>,
+        #[graphql(name = "sortBy")] sort_by: Option<gen::CategorySortingInput>,
+        level: Option<i32>,
+        before: Option<String>,
+        after: Option<String>,
+        first: Option<i32>,
+        last: Option<i32>,
+    ) -> Result<Option<gen::CategoryCountableConnection>> {
+        let _ = (where_input, before, last);
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        use sea_orm::{ConnectionTrait, Statement};
+        let mut conds: Vec<String> = vec![];
+        let mut params: Vec<sea_orm::Value> = vec![];
+        if let Some(lv) = level {
+            // Roots (dashboard passes level: 0): no parent. Deeper levels
+            // match MPTT level exactly (same column Django filters).
+            if lv == 0 {
+                conds.push("parent_id IS NULL".into());
+            } else {
+                params.push(lv.into());
+                conds.push(format!("level = ${}", params.len()));
+            }
+        }
+        if let Some(f) = filter.as_ref() {
+            if let Some(s) = f.search.as_ref().filter(|s| !s.trim().is_empty()) {
+                params.push(format!("%{s}%").into());
+                let p = params.len();
+                conds.push(format!("(name ILIKE ${p} OR slug ILIKE ${p})"));
+            }
+            if let Some(ids) = f.ids.as_ref() {
+                let list: Vec<i32> = ids.iter().filter_map(|i| rustygod_db::catalog::parse_gid(&i.0)).collect();
+                if !list.is_empty() {
+                    let base = params.len();
+                    let ph = (1..=list.len()).map(|i| format!("${}", base + i)).collect::<Vec<_>>().join(", ");
+                    conds.push(format!("id IN ({ph})"));
+                    params.extend(list.into_iter().map(|i| i.into()));
+                }
+            }
+            if let Some(slugs) = f.slugs.as_ref().filter(|s| !s.is_empty()) {
+                let base = params.len();
+                let ph = (1..=slugs.len()).map(|i| format!("${}", base + i)).collect::<Vec<_>>().join(", ");
+                conds.push(format!("slug IN ({ph})"));
+                params.extend(slugs.iter().map(|s| s.clone().into()));
+            }
+        }
+        let order = match sort_by.as_ref().map(|s| (&s.field, &s.direction)) {
+            Some((gen::CategorySortField::NAME, gen::OrderDirection::DESC)) => "name DESC, id",
+            _ => "name ASC, id",
+        };
+        let where_sql = if conds.is_empty() { String::new() } else { format!("WHERE {}", conds.join(" AND ")) };
+        let rows = db.query_all(Statement::from_sql_and_values(
+            sea_orm::DatabaseBackend::Postgres,
+            format!("SELECT id, name, slug FROM product_category {where_sql} ORDER BY {order}"),
+            params,
+        )).await.map_err(|e| Error::new(e.to_string()))?;
+        let all: Vec<(i32, String, String)> = rows.into_iter().filter_map(|r| {
+            Some((r.try_get::<i32>("", "id").ok()?,
+                  r.try_get::<String>("", "name").ok()?,
+                  r.try_get::<String>("", "slug").ok()?))
+        }).collect();
+        let total = all.len() as i32;
+        let off = after.and_then(|c| crate::common::decode_cursor(&c)).unwrap_or(0);
+        let lim = first.unwrap_or(20).clamp(1, 100) as usize;
+        let edges = all.into_iter().skip(off).take(lim).map(|(id, name, slug)| {
+            let mut c = metadata::lit_category(crate::common::gid("Category", id), vec![], vec![]);
+            c.name = Some(name);
+            c.slug = Some(slug);
+            gen::CategoryCountableEdge { node: Some(Box::new(c)) }
+        }).collect();
+        Ok(Some(gen::CategoryCountableConnection {
+            page_info: Some(crate::common::PageInfo { has_next_page: false, has_previous_page: off > 0, start_cursor: None, end_cursor: None }),
+            edges,
+            total_count: Some(total),
+        }))
+    }
+
+    /// Dashboard collection list: search/sort/channel server-side;
+    /// channelListings + product counts per row.
+    async fn collections(
+        &self,
+        ctx: &Context<'_>,
+        filter: Option<gen::CollectionFilterInput>,
+        #[graphql(name = "where")] where_input: Option<gen::CollectionWhereInput>,
+        #[graphql(name = "sortBy")] sort_by: Option<gen::CollectionSortingInput>,
+        channel: Option<String>,
+        before: Option<String>,
+        after: Option<String>,
+        first: Option<i32>,
+        last: Option<i32>,
+    ) -> Result<Option<gen::CollectionCountableConnection>> {
+        let _ = (where_input, before, last);
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        use sea_orm::{ConnectionTrait, Statement};
+        use std::collections::HashMap;
+        let mut conds: Vec<String> = vec![];
+        let mut params: Vec<sea_orm::Value> = vec![];
+        if let Some(f) = filter.as_ref() {
+            if let Some(s) = f.search.as_ref().filter(|s| !s.trim().is_empty()) {
+                params.push(format!("%{s}%").into());
+                let p = params.len();
+                conds.push(format!("(c.name ILIKE ${p} OR c.slug ILIKE ${p})"));
+            }
+            if let Some(ids) = f.ids.as_ref() {
+                let list: Vec<i32> = ids.iter().filter_map(|i| rustygod_db::catalog::parse_gid(&i.0)).collect();
+                if !list.is_empty() {
+                    let base = params.len();
+                    let ph = (1..=list.len()).map(|i| format!("${}", base + i)).collect::<Vec<_>>().join(", ");
+                    conds.push(format!("c.id IN ({ph})"));
+                    params.extend(list.into_iter().map(|i| i.into()));
+                }
+            }
+            if let Some(slugs) = f.slugs.as_ref().filter(|s| !s.is_empty()) {
+                let base = params.len();
+                let ph = (1..=slugs.len()).map(|i| format!("${}", base + i)).collect::<Vec<_>>().join(", ");
+                conds.push(format!("c.slug IN ({ph})"));
+                params.extend(slugs.iter().map(|s| s.clone().into()));
+            }
+            if let Some(pub_) = f.published.as_ref() {
+                match pub_ {
+                    gen::CollectionPublished::PUBLISHED => conds.push("EXISTS(SELECT 1 FROM product_collectionchannellisting l WHERE l.collection_id = c.id AND l.is_published)".into()),
+                    gen::CollectionPublished::HIDDEN => conds.push("NOT EXISTS(SELECT 1 FROM product_collectionchannellisting l WHERE l.collection_id = c.id AND l.is_published)".into()),
+                }
+            }
+        }
+        if let Some(ch) = channel.as_ref() {
+            params.push(ch.clone().into());
+            let p = params.len();
+            conds.push(format!("EXISTS(SELECT 1 FROM product_collectionchannellisting l JOIN channel_channel c2 ON c2.id = l.channel_id WHERE l.collection_id = c.id AND c2.slug = ${p})"));
+        }
+        let desc = matches!(sort_by.as_ref().map(|s| &s.direction), Some(gen::OrderDirection::DESC));
+        let order = if desc { "c.name DESC, c.id" } else { "c.name ASC, c.id" };
+        let where_sql = if conds.is_empty() { String::new() } else { format!("WHERE {}", conds.join(" AND ")) };
+        let rows = db.query_all(Statement::from_sql_and_values(
+            sea_orm::DatabaseBackend::Postgres,
+            format!("SELECT c.id, c.name, c.slug FROM product_collection c {where_sql} ORDER BY {order}"),
+            params,
+        )).await.map_err(|e| Error::new(e.to_string()))?;
+        let all: Vec<(i32, String, String)> = rows.into_iter().filter_map(|r| {
+            Some((r.try_get::<i32>("", "id").ok()?,
+                  r.try_get::<String>("", "name").ok()?,
+                  r.try_get::<String>("", "slug").ok()?))
+        }).collect();
+        let total = all.len() as i32;
+        let off = after.and_then(|c| crate::common::decode_cursor(&c)).unwrap_or(0);
+        let lim = first.unwrap_or(20).clamp(1, 100) as usize;
+        // channel listings per collection, batched
+        let page_ids: Vec<i32> = all.iter().map(|t| t.0).collect();
+        let mut listings: HashMap<i32, Vec<gen::CollectionChannelListing>> = HashMap::new();
+        if !page_ids.is_empty() {
+            let list = (1..=page_ids.len()).map(|i| format!("${i}")).collect::<Vec<_>>().join(", ");
+            let lrows = db.query_all(Statement::from_sql_and_values(
+                sea_orm::DatabaseBackend::Postgres,
+                format!("SELECT l.id, l.collection_id, l.is_published, l.published_at, c.id AS chid, c.slug, c.name FROM product_collectionchannellisting l JOIN channel_channel c ON c.id = l.channel_id WHERE l.collection_id IN ({list})"),
+                page_ids.iter().map(|i| (*i).into()).collect::<Vec<sea_orm::Value>>(),
+            )).await.map_err(|e| Error::new(e.to_string()))?;
+            for r in lrows {
+                if let (Ok(_lid), Ok(cid), Ok(ch)) = (r.try_get::<i32>("", "id"), r.try_get::<i32>("", "collection_id"), r.try_get::<i32>("", "chid")) {
+                    let mut c = metadata::lit_channel(crate::common::gid("Channel", ch), vec![], vec![]);
+                    c.slug = r.try_get::<String>("", "slug").ok();
+                    c.name = r.try_get::<String>("", "name").ok();
+                    listings.entry(cid).or_default().push(gen::CollectionChannelListing {
+                        is_published: r.try_get::<bool>("", "is_published").ok(),
+                        published_at: r.try_get::<Option<chrono::DateTime<chrono::Utc>>>("", "published_at").ok().flatten(),
+                        channel: Some(c),
+                    });
+                }
+            }
+        }
+        let edges = all.into_iter().skip(off).take(lim).map(|(id, name, slug)| {
+            let mut c = metadata::lit_collection(crate::common::gid("Collection", id), vec![], vec![]);
+            c.name = Some(name);
+            c.slug = Some(slug);
+            c.channel_listings = listings.get(&id).cloned().unwrap_or_default();
+            gen::CollectionCountableEdge { node: Some(c) }
+        }).collect();
+        Ok(Some(gen::CollectionCountableConnection {
+            page_info: Some(crate::common::PageInfo { has_next_page: false, has_previous_page: off > 0, start_cursor: None, end_cursor: None }),
+            edges,
+            total_count: Some(total),
+        }))
+    }
+
     /// Mirrors dashboard `ProductList` — channel defaults to
     /// `default-channel` (populatedb). Filter/where/search/sort are applied
     /// server-side with Saleor semantics (see `rustygod_db::catalog`);
@@ -1272,4 +1460,163 @@ impl CatalogWriteMutation {
             Err(e) => Ok(gen::CollectionRemoveProducts { collection: None, errors: vec![cerr(None, e.to_string())] }),
         }
     }
+}
+
+/// Category node resolvers (list counts + details page relations).
+/// Counts are single-row queries; the list page reads only totalCounts.
+pub(crate) async fn category_children(
+    db: &sea_orm::DatabaseConnection,
+    cid_gid: &str,
+    first: Option<i32>,
+    after: Option<String>,
+) -> Option<gen::CategoryCountableConnection> {
+    use sea_orm::{ConnectionTrait, Statement};
+    let cid = rustygod_db::catalog::parse_gid(cid_gid)?;
+    let rows = db.query_all(Statement::from_sql_and_values(
+        sea_orm::DatabaseBackend::Postgres,
+        "SELECT id, name, slug FROM product_category WHERE parent_id = $1 ORDER BY name, id",
+        [cid.into()],
+    )).await.ok()?;
+    let total = rows.len() as i32;
+    let off = after.and_then(|c| crate::common::decode_cursor(&c)).unwrap_or(0);
+    let lim = first.unwrap_or(20).clamp(1, 100) as usize;
+    let edges = rows.into_iter().skip(off).take(lim).filter_map(|r| {
+        let (id, name, slug) = (r.try_get::<i32>("", "id").ok()?,
+            r.try_get::<String>("", "name").ok()?, r.try_get::<String>("", "slug").ok()?);
+        let mut c = metadata::lit_category(crate::common::gid("Category", id), vec![], vec![]);
+        c.name = Some(name);
+        c.slug = Some(slug);
+        Some(gen::CategoryCountableEdge { node: Some(Box::new(c)) })
+    }).collect();
+    Some(gen::CategoryCountableConnection {
+        page_info: Some(crate::common::PageInfo { has_next_page: false, has_previous_page: off > 0, start_cursor: None, end_cursor: None }),
+        edges,
+        total_count: Some(total),
+    })
+}
+
+/// Subtree product count (Saleor counts descendants, not just direct).
+pub(crate) async fn category_products(
+    db: &sea_orm::DatabaseConnection,
+    cid_gid: &str,
+) -> Option<GqlProductConnection> {
+    use sea_orm::{ConnectionTrait, Statement};
+    let cid = rustygod_db::catalog::parse_gid(cid_gid)?;
+    let n: i32 = db.query_one(Statement::from_sql_and_values(
+        sea_orm::DatabaseBackend::Postgres,
+        "SELECT COUNT(p.id) AS n FROM product_category c JOIN product_category d ON d.tree_id = c.tree_id AND d.lft BETWEEN c.lft AND c.rght LEFT JOIN product_product p ON p.category_id = d.id WHERE c.id = $1",
+        [cid.into()],
+    )).await.ok()??.try_get::<i64>("", "n").ok()? as i32;
+    Some(GqlProductConnection {
+        total_count: Some(n),
+        edges: vec![],
+        page_info: crate::common::PageInfo { has_next_page: false, has_previous_page: false, start_cursor: None, end_cursor: None },
+    })
+}
+
+pub(crate) async fn category_ancestors(
+    db: &sea_orm::DatabaseConnection,
+    cid_gid: &str,
+    first: Option<i32>,
+) -> Option<gen::CategoryCountableConnection> {
+    use sea_orm::{ConnectionTrait, Statement};
+    let cid = rustygod_db::catalog::parse_gid(cid_gid)?;
+    let rows = db.query_all(Statement::from_sql_and_values(
+        sea_orm::DatabaseBackend::Postgres,
+        "SELECT a.id, a.name, a.slug FROM product_category c JOIN product_category a ON a.tree_id = c.tree_id AND a.lft < c.lft AND c.lft < a.rght WHERE c.id = $1 ORDER BY a.lft",
+        [cid.into()],
+    )).await.ok()?;
+    let total = rows.len() as i32;
+    let lim = first.unwrap_or(100).clamp(1, 100) as usize;
+    let edges = rows.into_iter().take(lim).filter_map(|r| {
+        let (id, name, slug) = (r.try_get::<i32>("", "id").ok()?,
+            r.try_get::<String>("", "name").ok()?, r.try_get::<String>("", "slug").ok()?);
+        let mut c = metadata::lit_category(crate::common::gid("Category", id), vec![], vec![]);
+        c.name = Some(name);
+        c.slug = Some(slug);
+        Some(gen::CategoryCountableEdge { node: Some(Box::new(c)) })
+    }).collect();
+    Some(gen::CategoryCountableConnection {
+        page_info: Some(crate::common::PageInfo { has_next_page: false, has_previous_page: false, start_cursor: None, end_cursor: None }),
+        edges,
+        total_count: Some(total),
+    })
+}
+
+pub(crate) async fn category_bg_image(
+    db: &sea_orm::DatabaseConnection,
+    cid_gid: &str,
+) -> Option<crate::account::GqlImage> {
+    use sea_orm::{ConnectionTrait, Statement};
+    let cid = rustygod_db::catalog::parse_gid(cid_gid)?;
+    let r = db.query_one(Statement::from_sql_and_values(
+        sea_orm::DatabaseBackend::Postgres,
+        "SELECT background_image, background_image_alt FROM product_category WHERE id = $1",
+        [cid.into()],
+    )).await.ok()??;
+    let path: String = r.try_get::<Option<String>>("", "background_image").ok()??;
+    Some(crate::account::GqlImage {
+        url: crate::common::media_url(&path),
+        alt: r.try_get::<String>("", "background_image_alt").ok(),
+    })
+}
+
+/// Collection products tab + list counts (real rows via the shared assembly).
+pub(crate) async fn collection_products(
+    db: &sea_orm::DatabaseConnection,
+    coll_gid: &str,
+    first: Option<i32>,
+    after: Option<String>,
+) -> Option<GqlProductConnection> {
+    use sea_orm::{ConnectionTrait, Statement};
+    let cid = rustygod_db::catalog::parse_gid(coll_gid)?;
+    let rows = db.query_all(Statement::from_sql_and_values(
+        sea_orm::DatabaseBackend::Postgres,
+        "SELECT product_id FROM product_collectionproduct WHERE collection_id = $1 ORDER BY product_id",
+        [cid.into()],
+    )).await.ok()?;
+    let ids: Vec<i32> = rows.into_iter().filter_map(|r| r.try_get::<i32>("", "product_id").ok()).collect();
+    let total = ids.len() as i32;
+    let off = after.and_then(|c| crate::common::decode_cursor(&c)).unwrap_or(0);
+    let lim = first.unwrap_or(20).clamp(1, 100) as usize;
+    let page: Vec<i32> = ids.into_iter().skip(off).take(lim).collect();
+    if page.is_empty() {
+        return Some(GqlProductConnection {
+            total_count: Some(total), edges: vec![],
+            page_info: crate::common::PageInfo { has_next_page: false, has_previous_page: off > 0, start_cursor: None, end_cursor: None },
+        });
+    }
+    let mut f = rustygod_db::catalog::ProductListFilter::default();
+    f.ids = page;
+    // Channel-agnostic: list_products_filtered needs a channel for pricing;
+    // default-channel prices are correct for the dashboard (single currency view).
+    let items = rustygod_db::catalog::list_products_filtered(db, "default-channel", &f, 100)
+        .await.ok()?;
+    let assembled = assemble_list_products(db, items).await.ok()?;
+    let edges = assembled.into_iter().map(|p| GqlProductEdge {
+        cursor: crate::common::encode_cursor(0),
+        node: p,
+    }).collect();
+    Some(GqlProductConnection {
+        total_count: Some(total), edges,
+        page_info: crate::common::PageInfo { has_next_page: false, has_previous_page: off > 0, start_cursor: None, end_cursor: None },
+    })
+}
+
+pub(crate) async fn collection_bg_image(
+    db: &sea_orm::DatabaseConnection,
+    coll_gid: &str,
+) -> Option<crate::account::GqlImage> {
+    use sea_orm::{ConnectionTrait, Statement};
+    let cid = rustygod_db::catalog::parse_gid(coll_gid)?;
+    let r = db.query_one(Statement::from_sql_and_values(
+        sea_orm::DatabaseBackend::Postgres,
+        "SELECT background_image, background_image_alt FROM product_collection WHERE id = $1",
+        [cid.into()],
+    )).await.ok()??;
+    let path: String = r.try_get::<Option<String>>("", "background_image").ok()??;
+    Some(crate::account::GqlImage {
+        url: crate::common::media_url(&path),
+        alt: r.try_get::<String>("", "background_image_alt").ok(),
+    })
 }

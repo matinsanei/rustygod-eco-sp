@@ -227,6 +227,81 @@ impl CommerceQuery {
         to_gen_shop(ctx).await
     }
 
+    /// Taxes → channels page: per-channel tax configurations with
+    /// per-country overrides.
+    async fn tax_configurations(
+        &self, ctx: &Context<'_>,
+        filter: Option<gen::TaxConfigurationFilterInput>,
+        before: Option<String>, after: Option<String>, first: Option<i32>, last: Option<i32>,
+    ) -> Result<Option<gen::TaxConfigurationCountableConnection>> {
+        let _ = (before, last);
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        use sea_orm::{ConnectionTrait, Statement};
+        use std::collections::HashMap;
+        let mut conds: Vec<String> = vec![];
+        let mut params: Vec<sea_orm::Value> = vec![];
+        if let Some(f) = filter.as_ref() {
+            if let Some(ids) = f.ids.as_ref() {
+                let list: Vec<i32> = ids.iter().filter_map(|i| rustygod_db::catalog::parse_gid(&i.0)).collect();
+                if !list.is_empty() {
+                    let ph = (1..=list.len()).map(|i| format!("${i}")).collect::<Vec<_>>().join(", ");
+                    conds.push(format!("t.id IN ({ph})"));
+                    params.extend(list.into_iter().map(|i| i.into()));
+                }
+            }
+        }
+        let where_sql = if conds.is_empty() { String::new() } else { format!("WHERE {}", conds.join(" AND ")) };
+        let rows = db.query_all(Statement::from_sql_and_values(
+            sea_orm::DatabaseBackend::Postgres,
+            format!("SELECT t.id, t.channel_id, c.slug AS channel_slug, c.name AS channel_name, t.charge_taxes, t.tax_calculation_strategy, t.display_gross_prices, t.prices_entered_with_tax, t.tax_app_id, t.metadata, t.private_metadata FROM tax_taxconfiguration t JOIN channel_channel c ON c.id = t.channel_id {where_sql} ORDER BY t.id"),
+            params,
+        )).await.map_err(|e| Error::new(e.to_string()))?;
+        let off = after.and_then(|c| crate::common::decode_cursor(&c)).unwrap_or(0);
+        let lim = first.unwrap_or(20).clamp(1, 100) as usize;
+        let tids: Vec<i32> = rows.iter().filter_map(|r| r.try_get::<i32>("", "id").ok()).collect();
+        let mut per_country: HashMap<i32, Vec<gen::TaxConfigurationPerCountry>> = HashMap::new();
+        if !tids.is_empty() {
+            let list = (1..=tids.len()).map(|i| format!("${i}")).collect::<Vec<_>>().join(", ");
+            for r in db.query_all(Statement::from_sql_and_values(
+                sea_orm::DatabaseBackend::Postgres,
+                format!("SELECT tax_configuration_id, country, charge_taxes, tax_calculation_strategy, display_gross_prices, tax_app_id FROM tax_taxconfigurationpercountry WHERE tax_configuration_id IN ({list}) ORDER BY country"),
+                tids.iter().map(|i| (*i).into()).collect::<Vec<sea_orm::Value>>(),
+            )).await.map_err(|e| Error::new(e.to_string()))? {
+                if let (Ok(tid), Ok(code)) = (r.try_get::<i32>("", "tax_configuration_id"), r.try_get::<String>("", "country")) {
+                    per_country.entry(tid).or_default().push(gen::TaxConfigurationPerCountry {
+                        country: Some(crate::common::GqlCountryDisplay { code: code.clone(), country: code }),
+                        charge_taxes: r.try_get::<bool>("", "charge_taxes").ok(),
+                        tax_calculation_strategy: r.try_get::<Option<String>>("", "tax_calculation_strategy").ok().flatten(),
+                        display_gross_prices: r.try_get::<bool>("", "display_gross_prices").ok(),
+                        tax_app_id: r.try_get::<Option<String>>("", "tax_app_id").ok().flatten(),
+                    });
+                }
+            }
+        }
+        let meta = |r: &sea_orm::QueryResult, c: &str| {
+            r.try_get::<serde_json::Value>("", c).ok()
+                .map(|v| crate::common::json_to_metadata_items(&v)).unwrap_or_default()
+        };
+        let edges = rows.into_iter().skip(off).take(lim).filter_map(|r| {
+            let (tid, ch) = (r.try_get::<i32>("", "id").ok()?, r.try_get::<i32>("", "channel_id").ok()?);
+            let mut channel = crate::metadata::lit_channel(crate::common::gid("Channel", ch), vec![], vec![]);
+            channel.name = r.try_get::<String>("", "channel_name").ok();
+            Some(gen::TaxConfigurationCountableEdge { node: Some(gen::TaxConfiguration {
+                id: Some(ID(crate::common::gid("TaxConfiguration", tid))),
+                private_metadata: meta(&r, "private_metadata"),
+                metadata: meta(&r, "metadata"),
+                channel: Some(Box::new(channel)),
+                charge_taxes: r.try_get::<bool>("", "charge_taxes").ok(),
+                tax_calculation_strategy: r.try_get::<Option<String>>("", "tax_calculation_strategy").ok().flatten(),
+                display_gross_prices: r.try_get::<bool>("", "display_gross_prices").ok(),
+                prices_entered_with_tax: r.try_get::<bool>("", "prices_entered_with_tax").ok(),
+                countries: per_country.get(&tid).cloned().unwrap_or_default(),
+                tax_app_id: r.try_get::<Option<String>>("", "tax_app_id").ok().flatten(),
+            })})
+        }).collect();
+        Ok(Some(gen::TaxConfigurationCountableConnection { edges }))
+    }
+
     /// Shipping zones with channels + warehouses (channel setup banner
     /// coverage + zone pages). `channel` slug narrows to that channel.
     async fn shipping_zones(
@@ -264,10 +339,154 @@ impl CommerceQuery {
     }
 
     /// Saleor `shippingZone(id)`.
+    /// Saleor `shippingZone(id)`.
     async fn shipping_zone(&self, ctx: &Context<'_>, id: ID) -> Result<Option<gen::ShippingZone>> {
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
         let Some(zid) = rustygod_db::catalog::parse_gid(&id.0) else { return Ok(None) };
         Ok(assemble_zone(db, zid).await.map_err(Error::new)?)
+    }
+
+    /// Dashboard gift-card list: search/filter/sort server-side; product,
+    /// tags and balances per row.
+    async fn gift_cards(
+        &self, ctx: &Context<'_>,
+        #[graphql(name = "sortBy")] sort_by: Option<gen::GiftCardSortingInput>,
+        filter: Option<gen::GiftCardFilterInput>,
+        search: Option<String>,
+        before: Option<String>, after: Option<String>, first: Option<i32>, last: Option<i32>,
+    ) -> Result<Option<gen::GiftCardCountableConnection>> {
+        let _ = (before, last);
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        use sea_orm::{ConnectionTrait, Statement};
+        use std::collections::HashMap;
+        let mut conds: Vec<String> = vec![];
+        let mut params: Vec<sea_orm::Value> = vec![];
+        if let Some(s) = search.as_ref().filter(|s| !s.trim().is_empty()) {
+            params.push(format!("%{s}%").into());
+            let p = params.len();
+            conds.push(format!("(g.code ILIKE ${p} OR g.assigned_to_email ILIKE ${p} OR g.created_by_email ILIKE ${p})"));
+        }
+        if let Some(f) = filter.as_ref() {
+            if let Some(a) = f.is_active {
+                params.push(a.into());
+                conds.push(format!("g.is_active = ${}", params.len()));
+            }
+            if let Some(c) = f.code.as_ref().filter(|s| !s.trim().is_empty()) {
+                params.push(format!("%{c}%").into());
+                conds.push(format!("g.code ILIKE ${}", params.len()));
+            }
+            if let Some(c) = f.currency.as_ref() {
+                params.push(c.clone().into());
+                conds.push(format!("g.currency = ${}", params.len()));
+            }
+            if let Some(e) = f.created_by_email.as_ref() {
+                params.push(e.clone().into());
+                conds.push(format!("g.created_by_email = ${}", params.len()));
+            }
+            if let Some(u) = f.used {
+                conds.push(if u { "g.used_by_id IS NOT NULL".into() } else { "g.used_by_id IS NULL".into() });
+            }
+            if let Some(prods) = f.products.as_ref() {
+                let list: Vec<i32> = prods.iter().filter_map(|i| rustygod_db::catalog::parse_gid(&i.0)).collect();
+                if !list.is_empty() {
+                    let base = params.len();
+                    let ph = (1..=list.len()).map(|i| format!("${}", base + i)).collect::<Vec<_>>().join(", ");
+                    conds.push(format!("g.product_id IN ({ph})"));
+                    params.extend(list.into_iter().map(|i| i.into()));
+                }
+            }
+            if let Some(tags) = f.tags.as_ref().filter(|t| !t.is_empty()) {
+                let base = params.len();
+                let ph = (1..=tags.len()).map(|i| format!("${}", base + i)).collect::<Vec<_>>().join(", ");
+                conds.push(format!("EXISTS(SELECT 1 FROM giftcard_giftcard_tags gt JOIN giftcard_giftcardtag t ON t.id = gt.giftcardtag_id WHERE gt.giftcard_id = g.id AND t.name IN ({ph}))"));
+                params.extend(tags.iter().map(|s| s.clone().into()));
+            }
+        }
+        let desc = matches!(sort_by.as_ref().map(|s| &s.direction), Some(gen::OrderDirection::DESC));
+        let order = match sort_by.as_ref().map(|s| &s.field) {
+            Some(gen::GiftCardSortField::CURRENTBALANCE) if desc => "g.current_balance_amount DESC, g.id",
+            Some(gen::GiftCardSortField::CURRENTBALANCE) => "g.current_balance_amount ASC, g.id",
+            Some(gen::GiftCardSortField::CREATEDAT) if desc => "g.created_at DESC, g.id",
+            Some(gen::GiftCardSortField::CREATEDAT) => "g.created_at ASC, g.id",
+            _ if desc => "g.id DESC",
+            _ => "g.id ASC",
+        };
+        let where_sql = if conds.is_empty() { String::new() } else { format!("WHERE {}", conds.join(" AND ")) };
+        let rows = db.query_all(Statement::from_sql_and_values(
+            sea_orm::DatabaseBackend::Postgres,
+            format!("SELECT g.id, g.code, g.is_active, g.expiry_date, g.current_balance_amount, g.currency, g.product_id, g.assigned_to_email FROM giftcard_giftcard g {where_sql} ORDER BY {order}"),
+            params,
+        )).await.map_err(|e| Error::new(e.to_string()))?;
+        let off = after.and_then(|c| crate::common::decode_cursor(&c)).unwrap_or(0);
+        let lim = first.unwrap_or(20).clamp(1, 100) as usize;
+        let page: Vec<(i32, String, bool, Option<chrono::DateTime<chrono::Utc>>, rust_decimal::Decimal, String, Option<i32>, Option<String>)> =
+            rows.into_iter().filter_map(|r| {
+                let exp: Option<chrono::DateTime<chrono::Utc>> = r.try_get::<Option<chrono::NaiveDate>>("", "expiry_date").ok().flatten()
+                    .and_then(|d| d.and_hms_opt(0, 0, 0)).map(|n| chrono::DateTime::<chrono::Utc>::from_naive_utc_and_offset(n, chrono::Utc));
+                Some((r.try_get::<i32>("", "id").ok()?,
+                      r.try_get::<String>("", "code").ok()?,
+                      r.try_get::<bool>("", "is_active").ok()?,
+                      exp,
+                      r.try_get::<rust_decimal::Decimal>("", "current_balance_amount").ok()?,
+                      r.try_get::<String>("", "currency").ok()?,
+                      r.try_get::<Option<i32>>("", "product_id").ok().flatten(),
+                      r.try_get::<Option<String>>("", "assigned_to_email").ok().flatten()))
+            }).collect();
+        // product names + tags, batched
+        let pids: Vec<i32> = page.iter().filter_map(|t| t.6).collect();
+        let mut pnames: HashMap<i32, String> = HashMap::new();
+        if !pids.is_empty() {
+            let list = (1..=pids.len()).map(|i| format!("${i}")).collect::<Vec<_>>().join(", ");
+            for r in db.query_all(Statement::from_sql_and_values(
+                sea_orm::DatabaseBackend::Postgres,
+                format!("SELECT id, name FROM product_product WHERE id IN ({list})"),
+                pids.iter().map(|i| (*i).into()).collect::<Vec<sea_orm::Value>>(),
+            )).await.map_err(|e| Error::new(e.to_string()))? {
+                if let (Ok(id), Ok(name)) = (r.try_get::<i32>("", "id"), r.try_get::<String>("", "name")) {
+                    pnames.insert(id, name);
+                }
+            }
+        }
+        let gids: Vec<i32> = page.iter().map(|t| t.0).collect();
+        let mut tags: HashMap<i32, Vec<gen::GiftCardTag>> = HashMap::new();
+        if !gids.is_empty() {
+            let list = (1..=gids.len()).map(|i| format!("${i}")).collect::<Vec<_>>().join(", ");
+            for r in db.query_all(Statement::from_sql_and_values(
+                sea_orm::DatabaseBackend::Postgres,
+                format!("SELECT gt.giftcard_id, t.id, t.name FROM giftcard_giftcard_tags gt JOIN giftcard_giftcardtag t ON t.id = gt.giftcardtag_id WHERE gt.giftcard_id IN ({list})"),
+                gids.iter().map(|i| (*i).into()).collect::<Vec<sea_orm::Value>>(),
+            )).await.map_err(|e| Error::new(e.to_string()))? {
+                if let (Ok(gid), Ok(tid), Ok(name)) = (r.try_get::<i32>("", "giftcard_id"), r.try_get::<i32>("", "id"), r.try_get::<String>("", "name")) {
+                    tags.entry(gid).or_default().push(gen::GiftCardTag {
+                        id: Some(ID(crate::common::gid("GiftCardTag", tid))),
+                        name: Some(name),
+                    });
+                }
+            }
+        }
+        let all_count = page.len() as i32;
+        let edges = page.into_iter().skip(off).take(lim).map(|(id, code, active, exp, bal, cur, pid, email)| {
+            let last4: String = code.chars().rev().take(4).collect::<String>().chars().rev().collect();
+            let product = pid.map(|p| {
+                let mut pr = crate::metadata::lit_product(crate::common::gid("Product", p), vec![], vec![]);
+                pr.name = pnames.get(&p).cloned();
+                pr
+            });
+            let mut gc = crate::metadata::lit_gift_card(crate::common::gid("GiftCard", id), vec![], vec![]);
+            gc.last4_code_chars = Some(last4);
+            gc.assigned_to_email = email;
+            gc.is_active = Some(active);
+            gc.expiry_date = exp;
+            gc.product = product;
+            gc.tags = tags.get(&id).cloned().unwrap_or_default();
+            gc.current_balance = Some(crate::common::Money { amount: bal.to_string(), currency: cur, fraction_digits: None });
+            gen::GiftCardCountableEdge { node: Some(gc) }
+        }).collect();
+        Ok(Some(gen::GiftCardCountableConnection {
+            page_info: Some(crate::common::PageInfo { has_next_page: false, has_previous_page: off > 0, start_cursor: None, end_cursor: None }),
+            edges,
+            total_count: Some(all_count),
+        }))
     }
 
     /// Dashboard channels list fetches FULL `...ChannelDetails` per channel

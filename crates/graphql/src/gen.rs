@@ -20038,30 +20038,58 @@ pub struct Category {
 impl Category {
 
     #[graphql(name = "ancestors")]
-    async fn ancestors(&self, #[graphql(name = "before")] _arg_before: Option<String>, #[graphql(name = "after")] _arg_after: Option<String>, #[graphql(name = "first")] _arg_first: Option<i32>, #[graphql(name = "last")] _arg_last: Option<i32>) -> Option<CategoryCountableConnection> {
+    async fn ancestors(&self, ctx: &Context<'_>, #[graphql(name = "before")] _arg_before: Option<String>, #[graphql(name = "after")] _arg_after: Option<String>, #[graphql(name = "first")] _arg_first: Option<i32>, #[graphql(name = "last")] _arg_last: Option<i32>) -> Option<CategoryCountableConnection> {
 
-        None
+        {
+        let db = match ctx.data_opt::<crate::context::GqlContext>().and_then(|g| g.db().ok()) {
+            Some(d) => d.clone(),
+            None => return None,
+        };
+        let gid = self.id.as_ref().map(|i| i.0.clone()).unwrap_or_default();
+        crate::catalog::category_ancestors(&db, &gid, _arg_first.clone()).await
+    }
 
     }
 
     #[graphql(name = "products")]
-    async fn products(&self, #[graphql(name = "filter")] _arg_filter: Option<ProductFilterInput>, #[graphql(name = "where")] _arg_where: Option<ProductWhereInput>, #[graphql(name = "sortBy")] _arg_sort_by: Option<ProductOrder>, #[graphql(name = "search")] _arg_search: Option<String>, #[graphql(name = "channel")] _arg_channel: Option<String>, #[graphql(name = "before")] _arg_before: Option<String>, #[graphql(name = "after")] _arg_after: Option<String>, #[graphql(name = "first")] _arg_first: Option<i32>, #[graphql(name = "last")] _arg_last: Option<i32>) -> Option<crate::catalog::GqlProductConnection> {
+    async fn products(&self, ctx: &Context<'_>, #[graphql(name = "filter")] _arg_filter: Option<ProductFilterInput>, #[graphql(name = "where")] _arg_where: Option<ProductWhereInput>, #[graphql(name = "sortBy")] _arg_sort_by: Option<ProductOrder>, #[graphql(name = "search")] _arg_search: Option<String>, #[graphql(name = "channel")] _arg_channel: Option<String>, #[graphql(name = "before")] _arg_before: Option<String>, #[graphql(name = "after")] _arg_after: Option<String>, #[graphql(name = "first")] _arg_first: Option<i32>, #[graphql(name = "last")] _arg_last: Option<i32>) -> Option<crate::catalog::GqlProductConnection> {
 
-        None
+        {
+        let db = match ctx.data_opt::<crate::context::GqlContext>().and_then(|g| g.db().ok()) {
+            Some(d) => d.clone(),
+            None => return None,
+        };
+        let gid = self.id.as_ref().map(|i| i.0.clone()).unwrap_or_default();
+        crate::catalog::category_products(&db, &gid).await
+    }
 
     }
 
     #[graphql(name = "children")]
-    async fn children(&self, #[graphql(name = "before")] _arg_before: Option<String>, #[graphql(name = "after")] _arg_after: Option<String>, #[graphql(name = "first")] _arg_first: Option<i32>, #[graphql(name = "last")] _arg_last: Option<i32>) -> Option<CategoryCountableConnection> {
+    async fn children(&self, ctx: &Context<'_>, #[graphql(name = "before")] _arg_before: Option<String>, #[graphql(name = "after")] _arg_after: Option<String>, #[graphql(name = "first")] _arg_first: Option<i32>, #[graphql(name = "last")] _arg_last: Option<i32>) -> Option<CategoryCountableConnection> {
 
-        None
+        {
+        let db = match ctx.data_opt::<crate::context::GqlContext>().and_then(|g| g.db().ok()) {
+            Some(d) => d.clone(),
+            None => return None,
+        };
+        let gid = self.id.as_ref().map(|i| i.0.clone()).unwrap_or_default();
+        crate::catalog::category_children(&db, &gid, _arg_first.clone(), _arg_after.clone()).await
+    }
 
     }
 
     #[graphql(name = "backgroundImage")]
-    async fn background_image(&self, #[graphql(name = "size")] _arg_size: Option<i32>, #[graphql(name = "format")] _arg_format: Option<ThumbnailFormatEnum>) -> Option<crate::account::GqlImage> {
+    async fn background_image(&self, ctx: &Context<'_>, #[graphql(name = "size")] _arg_size: Option<i32>, #[graphql(name = "format")] _arg_format: Option<ThumbnailFormatEnum>) -> Option<crate::account::GqlImage> {
 
-        None
+        {
+        let db = match ctx.data_opt::<crate::context::GqlContext>().and_then(|g| g.db().ok()) {
+            Some(d) => d.clone(),
+            None => return None,
+        };
+        let gid = self.id.as_ref().map(|i| i.0.clone()).unwrap_or_default();
+        crate::catalog::category_bg_image(&db, &gid).await
+    }
 
     }
 
@@ -20530,16 +20558,30 @@ pub struct Collection {
 impl Collection {
 
     #[graphql(name = "products")]
-    async fn products(&self, #[graphql(name = "filter")] _arg_filter: Option<ProductFilterInput>, #[graphql(name = "where")] _arg_where: Option<ProductWhereInput>, #[graphql(name = "search")] _arg_search: Option<String>, #[graphql(name = "sortBy")] _arg_sort_by: Option<ProductOrder>, #[graphql(name = "before")] _arg_before: Option<String>, #[graphql(name = "after")] _arg_after: Option<String>, #[graphql(name = "first")] _arg_first: Option<i32>, #[graphql(name = "last")] _arg_last: Option<i32>) -> Option<crate::catalog::GqlProductConnection> {
+    async fn products(&self, ctx: &Context<'_>, #[graphql(name = "filter")] _arg_filter: Option<ProductFilterInput>, #[graphql(name = "where")] _arg_where: Option<ProductWhereInput>, #[graphql(name = "search")] _arg_search: Option<String>, #[graphql(name = "sortBy")] _arg_sort_by: Option<ProductOrder>, #[graphql(name = "before")] _arg_before: Option<String>, #[graphql(name = "after")] _arg_after: Option<String>, #[graphql(name = "first")] _arg_first: Option<i32>, #[graphql(name = "last")] _arg_last: Option<i32>) -> Option<crate::catalog::GqlProductConnection> {
 
-        None
+        {
+        let db = match ctx.data_opt::<crate::context::GqlContext>().and_then(|g| g.db().ok()) {
+            Some(d) => d.clone(),
+            None => return None,
+        };
+        let gid = self.id.as_ref().map(|i| i.0.clone()).unwrap_or_default();
+        crate::catalog::collection_products(&db, &gid, _arg_first.clone(), _arg_after.clone()).await
+    }
 
     }
 
     #[graphql(name = "backgroundImage")]
-    async fn background_image(&self, #[graphql(name = "size")] _arg_size: Option<i32>, #[graphql(name = "format")] _arg_format: Option<ThumbnailFormatEnum>) -> Option<crate::account::GqlImage> {
+    async fn background_image(&self, ctx: &Context<'_>, #[graphql(name = "size")] _arg_size: Option<i32>, #[graphql(name = "format")] _arg_format: Option<ThumbnailFormatEnum>) -> Option<crate::account::GqlImage> {
 
-        None
+        {
+        let db = match ctx.data_opt::<crate::context::GqlContext>().and_then(|g| g.db().ok()) {
+            Some(d) => d.clone(),
+            None => return None,
+        };
+        let gid = self.id.as_ref().map(|i| i.0.clone()).unwrap_or_default();
+        crate::catalog::collection_bg_image(&db, &gid).await
+    }
 
     }
 
@@ -29274,13 +29316,6 @@ impl GenQuery {
 
     }
 
-    #[graphql(name = "taxConfigurations")]
-    async fn tax_configurations(&self, #[graphql(name = "filter")] _arg_filter: Option<TaxConfigurationFilterInput>, #[graphql(name = "before")] _arg_before: Option<String>, #[graphql(name = "after")] _arg_after: Option<String>, #[graphql(name = "first")] _arg_first: Option<i32>, #[graphql(name = "last")] _arg_last: Option<i32>) -> Option<TaxConfigurationCountableConnection> {
-
-        Some(TaxConfigurationCountableConnection { edges: vec![] })
-
-    }
-
     #[graphql(name = "taxCountryConfigurations")]
     async fn tax_country_configurations(&self) -> Vec<TaxCountryConfiguration> {
 
@@ -29306,20 +29341,6 @@ impl GenQuery {
     async fn return_settings(&self) -> Option<ReturnSettings> {
 
         None
-
-    }
-
-    #[graphql(name = "categories")]
-    async fn categories(&self, #[graphql(name = "filter")] _arg_filter: Option<CategoryFilterInput>, #[graphql(name = "where")] _arg_where: Option<CategoryWhereInput>, #[graphql(name = "sortBy")] _arg_sort_by: Option<CategorySortingInput>, #[graphql(name = "level")] _arg_level: Option<i32>, #[graphql(name = "before")] _arg_before: Option<String>, #[graphql(name = "after")] _arg_after: Option<String>, #[graphql(name = "first")] _arg_first: Option<i32>, #[graphql(name = "last")] _arg_last: Option<i32>) -> Option<CategoryCountableConnection> {
-
-        Some(CategoryCountableConnection { total_count: None, edges: vec![], page_info: Some(PageInfo { has_next_page: false, has_previous_page: false, start_cursor: None, end_cursor: None }) })
-
-    }
-
-    #[graphql(name = "collections")]
-    async fn collections(&self, #[graphql(name = "filter")] _arg_filter: Option<CollectionFilterInput>, #[graphql(name = "where")] _arg_where: Option<CollectionWhereInput>, #[graphql(name = "sortBy")] _arg_sort_by: Option<CollectionSortingInput>, #[graphql(name = "channel")] _arg_channel: Option<String>, #[graphql(name = "before")] _arg_before: Option<String>, #[graphql(name = "after")] _arg_after: Option<String>, #[graphql(name = "first")] _arg_first: Option<i32>, #[graphql(name = "last")] _arg_last: Option<i32>) -> Option<CollectionCountableConnection> {
-
-        Some(CollectionCountableConnection { total_count: None, edges: vec![], page_info: Some(PageInfo { has_next_page: false, has_previous_page: false, start_cursor: None, end_cursor: None }) })
 
     }
 
@@ -29397,13 +29418,6 @@ impl GenQuery {
     async fn gift_card(&self, #[graphql(name = "id")] _arg_id: ID) -> Option<GiftCard> {
 
         None
-
-    }
-
-    #[graphql(name = "giftCards")]
-    async fn gift_cards(&self, #[graphql(name = "sortBy")] _arg_sort_by: Option<GiftCardSortingInput>, #[graphql(name = "filter")] _arg_filter: Option<GiftCardFilterInput>, #[graphql(name = "search")] _arg_search: Option<String>, #[graphql(name = "before")] _arg_before: Option<String>, #[graphql(name = "after")] _arg_after: Option<String>, #[graphql(name = "first")] _arg_first: Option<i32>, #[graphql(name = "last")] _arg_last: Option<i32>) -> Option<GiftCardCountableConnection> {
-
-        Some(GiftCardCountableConnection { total_count: None, edges: vec![], page_info: Some(PageInfo { has_next_page: false, has_previous_page: false, start_cursor: None, end_cursor: None }) })
 
     }
 
