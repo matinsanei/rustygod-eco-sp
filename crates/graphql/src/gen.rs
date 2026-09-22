@@ -26031,9 +26031,35 @@ impl User {
     }
 
     #[graphql(name = "orders")]
-    async fn orders(&self, #[graphql(name = "where")] _arg_where: Option<CustomerOrderWhereInput>, #[graphql(name = "before")] _arg_before: Option<String>, #[graphql(name = "after")] _arg_after: Option<String>, #[graphql(name = "first")] _arg_first: Option<i32>, #[graphql(name = "last")] _arg_last: Option<i32>) -> Option<crate::order::GqlOrderConnection> {
+    async fn orders(&self, ctx: &Context<'_>, #[graphql(name = "where")] _arg_where: Option<CustomerOrderWhereInput>, #[graphql(name = "before")] _arg_before: Option<String>, #[graphql(name = "after")] _arg_after: Option<String>, #[graphql(name = "first")] _arg_first: Option<i32>, #[graphql(name = "last")] _arg_last: Option<i32>) -> Option<crate::order::GqlOrderConnection> {
 
-        None
+        {
+        use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QuerySelect};
+        let uid: i32 = self.id.as_ref().and_then(|i| i.0.parse::<i32>().ok()).unwrap_or(-1);
+        let db = match ctx.data_opt::<crate::context::GqlContext>().and_then(|g| g.db().ok()) {
+            Some(d) => d.clone(),
+            None => return None,
+        };
+        let n = rustygod_db::entities::order_order::Entity::find()
+            .select_only()
+            .column(rustygod_db::entities::order_order::Column::Id)
+            .filter(rustygod_db::entities::order_order::Column::UserId.eq(uid))
+            .into_tuple::<uuid::Uuid>()
+            .all(&db)
+            .await
+            .unwrap_or_default()
+            .len();
+        Some(crate::order::GqlOrderConnection {
+            total_count: Some(n as i32),
+            edges: vec![],
+            page_info: crate::common::PageInfo {
+                has_next_page: false,
+                has_previous_page: false,
+                start_cursor: None,
+                end_cursor: None,
+            },
+        })
+    }
 
     }
 
@@ -27546,13 +27572,6 @@ impl GenQuery {
     async fn address_validation_rules(&self, #[graphql(name = "countryCode")] _arg_country_code: CountryCode, #[graphql(name = "countryArea")] _arg_country_area: Option<String>, #[graphql(name = "city")] _arg_city: Option<String>, #[graphql(name = "cityArea")] _arg_city_area: Option<String>) -> Option<AddressValidationData> {
 
         None
-
-    }
-
-    #[graphql(name = "customers")]
-    async fn customers(&self, #[graphql(name = "filter")] _arg_filter: Option<CustomerFilterInput>, #[graphql(name = "where")] _arg_where: Option<CustomerWhereInput>, #[graphql(name = "sortBy")] _arg_sort_by: Option<UserSortingInput>, #[graphql(name = "search")] _arg_search: Option<String>, #[graphql(name = "before")] _arg_before: Option<String>, #[graphql(name = "after")] _arg_after: Option<String>, #[graphql(name = "first")] _arg_first: Option<i32>, #[graphql(name = "last")] _arg_last: Option<i32>) -> Option<UserCountableConnection> {
-
-        Some(UserCountableConnection { total_count: None, edges: vec![], page_info: Some(PageInfo { has_next_page: false, has_previous_page: false, start_cursor: None, end_cursor: None }) })
 
     }
 

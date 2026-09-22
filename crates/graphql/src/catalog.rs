@@ -23,11 +23,114 @@ pub struct GqlProductConnection {
 #[derive(Default)]
 pub struct CatalogQuery;
 
+/// Empty connection (where-branch matched nothing — Saleor returns empty, not error).
+fn empty_connection() -> GqlProductConnection {
+    GqlProductConnection { total_count: Some(0), edges: vec![], page_info: crate::common::PageInfo { has_next_page: false, has_previous_page: false, start_cursor: None, end_cursor: None } }
+}
+
+/// Dashboard IDs are plain ints (ours) or Saleor global IDs — both resolve.
+pub(crate) fn gid_vec(ids: Option<Vec<ID>>) -> Vec<i32> {
+    ids.unwrap_or_default().into_iter().filter_map(|i| rustygod_db::catalog::parse_gid(&i.0)).collect()
+}
+
+pub(crate) fn gid_filter(f: Option<gen::GlobalIDFilterInput>) -> Vec<i32> {
+    let mut out = vec![];
+    if let Some(ff) = f {
+        if let Some(eq) = ff.eq {
+            out.extend(rustygod_db::catalog::parse_gid(&eq.0));
+        }
+        out.extend(ff.one_of.unwrap_or_default().into_iter().filter_map(|i| rustygod_db::catalog::parse_gid(&i.0)));
+    }
+    out
+}
+
+pub(crate) fn str_filter(f: Option<gen::StringFilterInput>) -> (Option<String>, Vec<String>) {
+    match f {
+        None => (None, vec![]),
+        Some(ff) => (ff.eq, ff.one_of.unwrap_or_default()),
+    }
+}
+
+/// Merge one where-level's flat fields (no AND/OR) into the DB filter.
+fn merge_where_flat(f: &mut rustygod_db::catalog::ProductListFilter, w: &gen::ProductWhereInput) {
+    f.ids.extend(gid_vec(w.ids.clone()));
+    let (neq, none_of) = str_filter(w.name.clone());
+    if neq.is_some() { f.name_eq = neq; }
+    f.name_one_of.extend(none_of);
+    let (seq, sone_of) = str_filter(w.slug.clone());
+    if seq.is_some() { f.slug_eq = seq; }
+    f.slug_one_of.extend(sone_of);
+    f.product_type_ids.extend(gid_filter(w.product_type.clone()));
+    f.category_ids.extend(gid_filter(w.category.clone()));
+    f.collection_ids.extend(gid_filter(w.collection.clone()));
+    if w.is_published.is_some() { f.is_published = w.is_published; }
+    if w.has_category.is_some() { f.has_category = w.has_category; }
+}
+
+/// Resolve AND/OR nesting to an id set (`None` = unconstrained). Branches are
+/// evaluated with the fast ids-only path; AND intersects, OR unions.
+fn resolve_where_ids<'a>(
+    db: &'a sea_orm::DatabaseConnection,
+    ch: &'a str,
+    w: &'a gen::ProductWhereInput,
+) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<Option<std::collections::HashSet<i32>>, sea_orm::DbErr>> + Send + 'a>> {
+    Box::pin(async move {
+        use std::collections::HashSet;
+        let mut acc: Option<HashSet<i32>> = None;
+        // AND: intersect. A branch with only-flat fields folds into the
+        // parent query; nested AND/OR resolves recursively.
+        for sub in w.and.clone().unwrap_or_default() {
+            if let Some(set) = resolve_where_ids(db, ch, &sub).await? {
+                acc = Some(match acc {
+                    None => set,
+                    Some(a) => a.intersection(&set).cloned().collect(),
+                });
+            }
+        }
+        // OR: union; an unconstrained branch unconstrains the whole OR.
+        if let Some(ors) = w.or.clone() {
+            let mut union = HashSet::new();
+            let mut unconstrained = false;
+            for sub in ors {
+                match resolve_where_ids(db, ch, &sub).await? {
+                    Some(set) => { union.extend(set); }
+                    None => { unconstrained = true; break; }
+                }
+            }
+            if unconstrained {
+                return Ok(acc);
+            }
+            acc = Some(match acc {
+                None => union,
+                Some(a) => a.intersection(&union).cloned().collect(),
+            });
+        }
+        // This level's own flat fields (if it has any + the level is a pure
+        // branch; the top level is applied by the caller — here we only
+        // resolve what AND/OR need).
+        let mut flat = rustygod_db::catalog::ProductListFilter::default();
+        merge_where_flat(&mut flat, w);
+        let has_flat = !flat.ids.is_empty() || flat.name_eq.is_some() || !flat.name_one_of.is_empty()
+            || flat.slug_eq.is_some() || !flat.slug_one_of.is_empty() || !flat.product_type_ids.is_empty()
+            || !flat.category_ids.is_empty() || !flat.collection_ids.is_empty()
+            || flat.is_published.is_some() || flat.has_category.is_some();
+        if has_flat {
+            let ids: HashSet<i32> = rustygod_db::catalog::product_ids_filtered(db, ch, &flat).await.map_err(|_| sea_orm::DbErr::RecordNotFound("product filter".into()))?.into_iter().collect();
+            acc = Some(match acc {
+                None => ids,
+                Some(a) => a.intersection(&ids).cloned().collect(),
+            });
+        }
+        Ok(acc)
+    })
+}
+
 #[Object]
 impl CatalogQuery {
     /// Mirrors dashboard `ProductList` — channel defaults to
-    /// `default-channel` (populatedb). Filter/sort inputs accepted for
-    /// shape-compat (server-side filtering is a documented gap).
+    /// `default-channel` (populatedb). Filter/where/search/sort are applied
+    /// server-side with Saleor semantics (see `rustygod_db::catalog`);
+    /// price/attribute/stock/date/metadata sub-filters stay accepted-ignored.
     async fn products(
         &self,
         ctx: &Context<'_>,
@@ -41,13 +144,47 @@ impl CatalogQuery {
         #[graphql(name = "where")] where_input: Option<gen::ProductWhereInput>,
         search: Option<String>,
     ) -> Result<GqlProductConnection> {
-        let _ = (before, last, filter, sort_by, where_input, search);
+        let _ = (before, last);
         let g = ctx.data::<GqlContext>()?;
         let db = g.db()?;
         let ch = channel.unwrap_or_else(|| "default-channel".into());
         let off = after.and_then(|c| decode_cursor(&c)).unwrap_or(0);
         let lim = first.unwrap_or(20).clamp(1, 100) as usize;
-        let all = rustygod_db::catalog::list_products(db, &ch, None, 200).await.map_err(|e| Error::new(e.to_string()))?;
+        let mut f = rustygod_db::catalog::ProductListFilter::default();
+        // Deprecated filter input (dashboard search boxes still send it).
+        if let Some(flt) = filter.as_ref() {
+            f.ids.extend(gid_vec(flt.ids.clone()));
+            f.slugs.extend(flt.slugs.clone().unwrap_or_default());
+            f.collection_ids.extend(gid_vec(flt.collections.clone()));
+            f.category_ids.extend(gid_vec(flt.categories.clone()));
+            f.product_type_ids.extend(gid_vec(flt.product_types.clone()));
+            if flt.is_published.is_some() { f.is_published = flt.is_published; }
+            if flt.has_category.is_some() { f.has_category = flt.has_category; }
+            if f.search.is_none() { f.search = flt.search.clone(); }
+        }
+        if f.search.is_none() { f.search = search.clone(); }
+        // Where input (ConditionalFilter): flat fields + AND/OR nesting.
+        if let Some(w) = where_input.as_ref() {
+            merge_where_flat(&mut f, w);
+            if let Some(sub) = resolve_where_ids(db, &ch, w).await.map_err(|e| Error::new(e.to_string()))? {
+                if sub.is_empty() {
+                    return Ok(empty_connection());
+                }
+                // Intersect with any ids already constrained.
+                if f.ids.is_empty() {
+                    f.ids = sub.into_iter().collect();
+                } else {
+                    let keep: std::collections::HashSet<i32> = f.ids.iter().cloned().collect();
+                    f.ids = sub.into_iter().filter(|i| keep.contains(i)).collect();
+                }
+            }
+        }
+        if let Some(sort) = sort_by.as_ref() {
+            if matches!(sort.field, Some(gen::ProductOrderField::NAME)) {
+                f.order_name_asc = Some(matches!(sort.direction, gen::OrderDirection::ASC));
+            }
+        }
+        let all = rustygod_db::catalog::list_products_filtered(db, &ch, &f, 200).await.map_err(|e| Error::new(e.to_string()))?;
         let total = all.len() as i32;
         // Batch productType + category (2 queries; dashboard list reads
         // `productType.name/hasVariants` and category in every row).

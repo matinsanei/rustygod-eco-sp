@@ -103,6 +103,97 @@ impl AccountQuery {
         let channels = rustygod_db::commerce::list_channels(db).await.unwrap_or_default();
         Ok(Some(to_gen_user(user, claims.user_id, perms, channels)))
     }
+
+    /// Dashboard customer list: non-staff users with search/filter/where/sort.
+    /// Saleor `customers` = `is_staff=False`; per-row `orders { totalCount }`
+    /// resolves via the real `User.orders` method.
+    async fn customers(
+        &self, ctx: &Context<'_>,
+        first: Option<i32>, after: Option<String>, before: Option<String>, last: Option<i32>,
+        filter: Option<gen::CustomerFilterInput>,
+        #[graphql(name = "where")] where_input: Option<gen::CustomerWhereInput>,
+        #[graphql(name = "sortBy")] sort_by: Option<gen::UserSortingInput>,
+        search: Option<String>,
+    ) -> Result<gen::UserCountableConnection> {
+        let _ = (before, last);
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let off = after.and_then(|c| crate::common::decode_cursor(&c)).unwrap_or(0);
+        let lim = first.unwrap_or(20).clamp(1, 100) as usize;
+        use rustygod_db::entities::account_user::{Column as UCol, Entity as UEnt};
+        use sea_orm::{ColumnTrait, Condition, EntityTrait, QueryFilter, QueryOrder, QuerySelect};
+        let mut cond = Condition::all().add(UCol::IsStaff.eq(false));
+        let mut search_terms: Vec<String> = vec![];
+        if let Some(s) = search.clone() { search_terms.push(s); }
+        if let Some(flt) = filter.as_ref() {
+            let ids = crate::catalog::gid_vec(flt.ids.clone());
+            if !ids.is_empty() { cond = cond.add(UCol::Id.is_in(ids)); }
+            if let Some(s) = flt.search.as_ref() { search_terms.push(s.clone()); }
+        }
+        if let Some(w) = where_input.as_ref() {
+            let ids = crate::catalog::gid_vec(w.ids.clone());
+            if !ids.is_empty() { cond = cond.add(UCol::Id.is_in(ids)); }
+            let (eq, one) = crate::catalog::str_filter(w.email.clone());
+            if let Some(e) = eq { cond = cond.add(UCol::Email.eq(e)); }
+            if !one.is_empty() { cond = cond.add(UCol::Email.is_in(one)); }
+            let (feq, fone) = crate::catalog::str_filter(w.first_name.clone());
+            if let Some(e) = feq { cond = cond.add(UCol::FirstName.eq(e)); }
+            if !fone.is_empty() { cond = cond.add(UCol::FirstName.is_in(fone)); }
+            let (leq, lone) = crate::catalog::str_filter(w.last_name.clone());
+            if let Some(e) = leq { cond = cond.add(UCol::LastName.eq(e)); }
+            if !lone.is_empty() { cond = cond.add(UCol::LastName.is_in(lone)); }
+            if let Some(a) = w.is_active { cond = cond.add(UCol::IsActive.eq(a)); }
+            if let Some(r) = w.date_joined.as_ref() {
+                if let Some(gte) = r.gte { cond = cond.add(UCol::DateJoined.gte(gte)); }
+                if let Some(lte) = r.lte { cond = cond.add(UCol::DateJoined.lte(lte)); }
+            }
+        }
+        for s in search_terms.iter().map(|s| s.trim()).filter(|s| !s.is_empty()) {
+            let like = format!("%{s}%");
+            cond = cond.add(Condition::any()
+                .add(UCol::Email.like(like.clone()))
+                .add(UCol::FirstName.like(like.clone()))
+                .add(UCol::LastName.like(like)));
+        }
+        let mut q = UEnt::find().filter(cond);
+        let asc = sort_by.as_ref().map(|s| matches!(s.direction, gen::OrderDirection::ASC)).unwrap_or(true);
+        q = match sort_by.as_ref().map(|s| &s.field) {
+            Some(gen::UserSortField::EMAIL) => if asc { q.order_by_asc(UCol::Email) } else { q.order_by_desc(UCol::Email) },
+            Some(gen::UserSortField::FIRSTNAME) => if asc { q.order_by_asc(UCol::FirstName) } else { q.order_by_desc(UCol::FirstName) },
+            Some(gen::UserSortField::LASTNAME) => if asc { q.order_by_asc(UCol::LastName) } else { q.order_by_desc(UCol::LastName) },
+            Some(gen::UserSortField::CREATEDAT) => if asc { q.order_by_asc(UCol::DateJoined) } else { q.order_by_desc(UCol::DateJoined) },
+            _ => q.order_by_asc(UCol::Email),
+        };
+        // Slim select: full-model decode crashes on search_vector (tsvector).
+        let rows: Vec<(i32, String, String, String, bool, bool, chrono::DateTime<chrono::Utc>)> = q
+            .select_only()
+            .column(UCol::Id)
+            .column(UCol::Email)
+            .column(UCol::FirstName)
+            .column(UCol::LastName)
+            .column(UCol::IsStaff)
+            .column(UCol::IsActive)
+            .column(UCol::DateJoined)
+            .into_tuple()
+            .all(db)
+            .await
+            .map_err(|e| Error::new(e.to_string()))?;
+        let total = rows.len() as i32;
+        let mut edges = vec![];
+        for (i, (uid, email, first, last, staff, active, joined)) in rows.into_iter().skip(off).take(lim).enumerate() {
+            // Slim row: the list fragment needs identity fields only, and
+            // per-row orders resolve via the real User.orders method.
+            let node = slim_list_user(uid, email, first, last, staff, active, joined);
+            edges.push(gen::UserCountableEdge {
+                node: Some(node),
+                cursor: Some(crate::common::encode_cursor(off + i)),
+            });
+        }
+        Ok(gen::UserCountableConnection {
+            page_info: Some(crate::common::PageInfo { has_next_page: off + lim < total as usize, has_previous_page: off > 0, start_cursor: None, end_cursor: None }),
+            edges,
+            total_count: Some(total),
+        })
+    }
 }
 
 #[derive(SimpleObject, Clone)]
@@ -225,6 +316,44 @@ fn err_update(code: &str, message: &str) -> GqlAccountUpdate {
     GqlAccountUpdate {
         user: None,
         errors: vec![GqlAccountError { address_type: None, attributes: None, field: None, message: message.into(), code: code.into() }],
+    }
+}
+
+/// Slim customer-list row (identity fields only; see `customers`).
+/// Full gen::User constructor — permissions empty (list fragment doesn't
+/// read them), orders resolve per-row via the real `User.orders` method.
+fn slim_list_user(
+    uid: i32,
+    email: String,
+    first_name: String,
+    last_name: String,
+    is_staff: bool,
+    is_active: bool,
+    date_joined: chrono::DateTime<chrono::Utc>,
+) -> gen::User {
+    gen::User {
+        id: Some(ID(uid.to_string())),
+        private_metadata: vec![],
+        metadata: vec![],
+        email: Some(email),
+        first_name: Some(first_name),
+        last_name: Some(last_name),
+        is_staff: Some(is_staff),
+        is_active: Some(is_active),
+        is_confirmed: None,
+        addresses: vec![],
+        note: None,
+        user_permissions: vec![],
+        permission_groups: vec![],
+        editable_groups: vec![],
+        accessible_channels: vec![],
+        restricted_access_to_channels: None,
+        default_shipping_address: None,
+        default_billing_address: None,
+        external_reference: None,
+        customer_type: None,
+        last_login: None,
+        date_joined: Some(date_joined.into()),
     }
 }
 

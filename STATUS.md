@@ -223,7 +223,12 @@ user `addresses`/`orders`, category/product `products` connections
 ### 5f. Explicit non-goals (documented gaps, do not chase blindly)
 
 - `Upload` multipart handling (`fileUpload` validates, execution deferred).
-- Server-side filtering/sorting (`filter/sortBy/where` accepted, ignored).
+- Server-side filtering/sorting — DONE 2026-09-22 for products/orders/
+  customers (see §8): search/ids/slugs/name/type/category(subtree)/
+  collection/isPublished/hasCategory + AND/OR (products); status/ids/number/
+  email/created/channels + sort (orders); search/ids/email/name/isActive/
+  dateJoined + sort (customers). Still ignored: price/attribute/stock/date/
+  metadata sub-filters, order AND/OR nesting, payment-state pseudo-filters.
 - `problems`/`webhooks.eventDeliveries` (always empty = healthy).
 - Announcements feed, brand logos, avatar binaries (empty/None).
 - Payment-gateway mutations beyond stubs (need PSP decisions per gateway).
@@ -243,6 +248,26 @@ Modified: `catalog.rs` (gen Product/Variant + `ProductCreate` payload),
 `order.rs` `GqlAddress` (+metadata, `complex`, iface backers),
 `schema.rs` (+`GenQuery`/`GenMutation`), `lib.rs` (+`gen` mod),
 `server/src/main.rs` (query logging only).
+
+## 8. Server-side filtering (2026-09-22)
+
+- DB layer (`crates/db/src/catalog.rs`): `parse_gid` (plain int or Saleor
+  global ID), `ProductListFilter`, `list_products_filtered` /
+  `product_ids_filtered` (fast ids-only path for AND/OR branches), MPTT
+  category subtree (self + descendants, like Saleor), collection m2m,
+  channel-listing publication flag, ILIKE + tsvector search.
+- GraphQL: `catalog.rs` translates ProductFilterInput/Where (+AND/OR via
+  branch id-set intersect/union) and ProductOrder NAME; `order.rs` builds
+  SeaORM Conditions (status/ids/number/email/created/channels/search/sort);
+  `account.rs` hand `customers` root (non-staff + search/filter/sort;
+  gen stub dropped by regen via `ours`); `User.orders` is a REAL_METHODS
+  codegen entry (COUNT by user_id).
+- tsvector/INTERVAL rule still holds: `account_user.search_vector` crashed
+  the customers list — slim selects only.
+- Infra note: `/tmp/*.json` (schema_ir, our_fields) does NOT survive
+  reboots — regen via `schema_examine.py --json-out`; `our_fields.json`
+  now lives in-repo (`scripts/`) with `dump_our_fields.py`; codegen
+  PROBLEMS back to 0.
 
 ## 7. Regeneration contract (or gen.rs rots)
 

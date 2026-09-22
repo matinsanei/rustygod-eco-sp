@@ -298,6 +298,60 @@ fn to_taxed2(net: rust_decimal::Decimal, gross: rust_decimal::Decimal, currency:
     GqlTaxedMoney { gross: to_gql_money(gross, currency.clone()), net: to_gql_money(net, currency.clone()), tax: Some(to_gql_money(gross - net, currency.clone())), currency: Some(currency) }
 }
 
+/// Saleor `OrderStatus` enum name → DB status string (stored lowercase).
+fn order_status_db(s: &gen::OrderStatus) -> &'static str {
+    match s {
+        gen::OrderStatus::DRAFT => "draft",
+        gen::OrderStatus::UNCONFIRMED => "unconfirmed",
+        gen::OrderStatus::UNFULFILLED => "unfulfilled",
+        gen::OrderStatus::PARTIALLYFULFILLED => "partially_fulfilled",
+        gen::OrderStatus::PARTIALLYRETURNED => "partially_returned",
+        gen::OrderStatus::RETURNED => "returned",
+        gen::OrderStatus::FULFILLED => "fulfilled",
+        gen::OrderStatus::CANCELED => "canceled",
+        gen::OrderStatus::EXPIRED => "expired",
+    }
+}
+
+/// Deprecated `OrderStatusFilter` pseudo-statuses → closest DB status
+/// (Saleor derives these from payment state; ours is hollow, documented).
+fn order_status_filter_db(s: &gen::OrderStatusFilter) -> &'static str {
+    match s {
+        gen::OrderStatusFilter::READYTOFULFILL => "unfulfilled",
+        gen::OrderStatusFilter::READYTOCAPTURE => "unfulfilled",
+        gen::OrderStatusFilter::UNFULFILLED => "unfulfilled",
+        gen::OrderStatusFilter::UNCONFIRMED => "unconfirmed",
+        gen::OrderStatusFilter::PARTIALLYFULFILLED => "partially_fulfilled",
+        gen::OrderStatusFilter::FULFILLED => "fulfilled",
+        gen::OrderStatusFilter::CANCELED => "canceled",
+    }
+}
+
+/// Parse an order ID: raw UUID or Saleor global ID (`T3JkZXI6...` → `Order:<uuid>`).
+fn parse_order_uuid(s: &str) -> Option<Uuid> {
+    let s = s.trim();
+    if let Ok(u) = s.parse::<Uuid>() {
+        return Some(u);
+    }
+    use base64::Engine as _;
+    let bytes = base64::engine::general_purpose::STANDARD.decode(s).ok()?;
+    let t = String::from_utf8(bytes).ok()?;
+    t.split_once(':')?.1.parse::<Uuid>().ok()
+}
+
+/// `number:<n>` / email substring search shared by `search` + deprecated filter.
+fn search_condition(s: &str) -> sea_orm::Condition {
+    use rustygod_db::entities::order_order::Column as OCol;
+    use sea_orm::{ColumnTrait, Condition};
+    let s = s.trim();
+    let like = format!("%{s}%");
+    let mut any = Condition::any().add(OCol::UserEmail.like(like));
+    if let Ok(n) = s.parse::<i32>() {
+        any = any.add(OCol::Number.eq(n));
+    }
+    any
+}
+
 #[derive(Default)]
 pub struct OrderQuery;
 
@@ -310,20 +364,88 @@ impl OrderQuery {
         Ok(Some(to_gen_order(db, &h, ls).await))
     }
 
+    /// Dashboard `OrderList`/`GlobalSearch` — filter/where/search/sortBy are
+    /// applied server-side with Saleor semantics; payment-state-derived
+    /// pseudo filters stay approximated (see `order_status_filter_db`).
     async fn orders(
         &self, ctx: &Context<'_>,
         first: Option<i32>, after: Option<String>, before: Option<String>, last: Option<i32>,
         #[graphql(name = "sortBy")] sort_by: Option<gen::OrderSortingInput>, filter: Option<gen::OrderFilterInput>, #[graphql(name = "where")] where_input: Option<gen::OrderWhereInput>, search: Option<String>,
     ) -> Result<GqlOrderConnection> {
-        let _ = (before, last, sort_by, filter, where_input, search);
+        let _ = (before, last);
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
         let off = after.and_then(|c| decode_cursor(&c)).unwrap_or(0);
         let lim = first.unwrap_or(20).clamp(1, 100) as usize;
-        use sea_orm::{EntityTrait, QueryOrder, QuerySelect};
-        let ids: Vec<Uuid> = rustygod_db::entities::order_order::Entity::find()
-            .select_only().column(rustygod_db::entities::order_order::Column::Id)
-            .order_by_desc(rustygod_db::entities::order_order::Column::CreatedAt)
-            .into_tuple::<Uuid>().all(db).await.map_err(|e| Error::new(e.to_string()))?;
+        use rustygod_db::entities::order_order::{Column as OCol, Entity as OEnt};
+        use sea_orm::{ColumnTrait, Condition, EntityTrait, QueryFilter, QueryOrder, QuerySelect};
+        let mut cond = Condition::all();
+        // --- where input ---
+        if let Some(w) = where_input.as_ref() {
+            if let Some(st) = w.status.as_ref() {
+                let mut vals = vec![];
+                if let Some(eq) = st.eq.as_ref() { vals.push(order_status_db(eq).to_string()); }
+                vals.extend(st.one_of.clone().unwrap_or_default().into_iter().map(|s| order_status_db(&s).to_string()));
+                if !vals.is_empty() { cond = cond.add(OCol::Status.is_in(vals)); }
+            }
+            let wids: Vec<Uuid> = w.ids.clone().unwrap_or_default().into_iter().filter_map(|i| parse_order_uuid(&i.0)).collect();
+            if !wids.is_empty() { cond = cond.add(OCol::Id.is_in(wids)); }
+            if let Some(num) = w.number.as_ref() {
+                if let Some(eq) = num.eq { cond = cond.add(OCol::Number.eq(eq)); }
+                if let Some(one) = num.one_of.clone() { if !one.is_empty() { cond = cond.add(OCol::Number.is_in(one)); } }
+            }
+            if let Some(em) = w.user_email.as_ref() {
+                let mut any = Condition::any();
+                if let Some(eq) = em.eq.as_ref() { any = any.add(OCol::UserEmail.like(format!("%{eq}%"))); }
+                for v in em.one_of.clone().unwrap_or_default() { any = any.add(OCol::UserEmail.like(format!("%{v}%"))); }
+                cond = cond.add(any);
+            }
+            if let Some(r) = w.created_at.as_ref() {
+                if let Some(gte) = r.gte { cond = cond.add(OCol::CreatedAt.gte(gte)); }
+                if let Some(lte) = r.lte { cond = cond.add(OCol::CreatedAt.lte(lte)); }
+            }
+            // AND/OR nesting on orders: dashboard list pages send flat where;
+            // nested branches stay accepted-ignored (documented).
+        }
+        // --- deprecated filter input (GlobalSearch/Navigator send search) ---
+        if let Some(flt) = filter.as_ref() {
+            if let Some(s) = flt.search.as_ref() {
+                cond = cond.add(search_condition(s));
+            }
+            if let Some(sts) = flt.status.as_ref() {
+                if !sts.is_empty() {
+                    cond = cond.add(OCol::Status.is_in(sts.iter().map(|s| order_status_filter_db(s).to_string()).collect::<Vec<_>>()));
+                }
+            }
+            let fids: Vec<Uuid> = flt.ids.clone().unwrap_or_default().into_iter().filter_map(|i| parse_order_uuid(&i.0)).collect();
+            if !fids.is_empty() { cond = cond.add(OCol::Id.is_in(fids)); }
+            let fnums: Vec<i32> = flt.numbers.clone().unwrap_or_default().into_iter().filter_map(|n| n.parse::<i32>().ok()).collect();
+            if !fnums.is_empty() { cond = cond.add(OCol::Number.is_in(fnums)); }
+            if let Some(c) = flt.customer.as_ref() {
+                cond = cond.add(OCol::UserEmail.like(format!("%{c}%")));
+            }
+            if let Some(chs) = flt.channels.as_ref() {
+                let cids: Vec<i32> = chs.iter().filter_map(|i| rustygod_db::catalog::parse_gid(&i.0)).collect();
+                if !cids.is_empty() { cond = cond.add(OCol::ChannelId.is_in(cids)); }
+            }
+            if let Some(r) = flt.created.as_ref() {
+                if let Some(gte) = r.gte { cond = cond.add(OCol::CreatedAt.gte(gte)); }
+                if let Some(lte) = r.lte { cond = cond.add(OCol::CreatedAt.lte(lte)); }
+            }
+        }
+        if let Some(s) = search.as_ref() {
+            cond = cond.add(search_condition(s));
+        }
+        let mut q = OEnt::find()
+            .select_only().column(OCol::Id)
+            .filter(cond);
+        // Sort (Saleor OrderSortingInput; default = newest first, as before).
+        let asc = sort_by.as_ref().map(|s| matches!(s.direction, gen::OrderDirection::ASC)).unwrap_or(false);
+        q = match sort_by.as_ref().map(|s| &s.field) {
+            Some(gen::OrderSortField::NUMBER) => if asc { q.order_by_asc(OCol::Number) } else { q.order_by_desc(OCol::Number) },
+            Some(gen::OrderSortField::STATUS) => if asc { q.order_by_asc(OCol::Status) } else { q.order_by_desc(OCol::Status) },
+            _ => if asc { q.order_by_asc(OCol::CreatedAt) } else { q.order_by_desc(OCol::CreatedAt) },
+        };
+        let ids: Vec<Uuid> = q.into_tuple::<Uuid>().all(db).await.map_err(|e| Error::new(e.to_string()))?;
         let total = ids.len() as i32;
         let mut out = Vec::new();
         for oid in ids.into_iter().skip(off).take(lim) {

@@ -25,6 +25,7 @@ import sys
 import glob
 import os
 
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 IR = "/tmp/schema_ir.json"
 SCHEMA = "/home/matin/Desktop/dev/saleor/saleor-core/saleor/graphql/schema.graphql"
 DASH_SRC = "/home/matin/Desktop/dev/saleor/dashboard/src"
@@ -557,7 +558,13 @@ def plan(g, reg, ops, emit=False):
                   or b in KEPT_PATHS or b in M["unions"] or b in M["ifaces"])
         if not ok:
             problems.append(f"root {kind} {name}: unresolvable return {info['type']}")
-    our_fields = json.load(open("/tmp/our_fields.json"))
+    try:
+        with open(os.path.join(SCRIPT_DIR, "our_fields.json")) as fh:
+            our_fields = json.load(fh)
+    except (OSError, ValueError):
+        # Regenerate with: python3 scripts/dump_our_fields.py
+        print("WARN: scripts/our_fields.json missing, skipping KEPT-coverage check")
+        our_fields = {}
     for t in KEPT:
         if t in ("Query", "Mutation"):
             continue
@@ -614,6 +621,40 @@ LEGACY_FIELDS = {
         ("availableInGrid", "Option<bool>"),
         ("storefrontSearchPosition", "Option<i32>"),
     ],
+}
+
+# ComplexObject methods with REAL database logic (not stubs). Keyed
+# (struct, field); the value is Rust emitted verbatim with
+# `ctx: &Context<'_>` in scope. Everything else stays a zero-cost stub.
+REAL_METHODS = {
+    # Dashboard customer rows read `orders { totalCount }` unconditionally.
+    ("User", "orders"): """{
+        use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QuerySelect};
+        let uid: i32 = self.id.as_ref().and_then(|i| i.0.parse::<i32>().ok()).unwrap_or(-1);
+        let db = match ctx.data_opt::<crate::context::GqlContext>().and_then(|g| g.db().ok()) {
+            Some(d) => d.clone(),
+            None => return None,
+        };
+        let n = rustygod_db::entities::order_order::Entity::find()
+            .select_only()
+            .column(rustygod_db::entities::order_order::Column::Id)
+            .filter(rustygod_db::entities::order_order::Column::UserId.eq(uid))
+            .into_tuple::<uuid::Uuid>()
+            .all(&db)
+            .await
+            .unwrap_or_default()
+            .len();
+        Some(crate::order::GqlOrderConnection {
+            total_count: Some(n as i32),
+            edges: vec![],
+            page_info: crate::common::PageInfo {
+                has_next_page: false,
+                has_previous_page: false,
+                start_cursor: None,
+                end_cursor: None,
+            },
+        })
+    }""",
 }
 
 
@@ -829,6 +870,12 @@ def emit_all(reg, g, M):
                     f"#[graphql(name = \"{an}\")] {argid(an)}: {in_rust(at)}"
                     for an, at in args)
                 ret = out_field_ty(t, fname)
+                if (t, fname) in REAL_METHODS:
+                    # Real DB logic (not a stub); ctx is in scope.
+                    W(f"\n    #[graphql(name = \"{fname}\")]\n    async fn {rname}(&self, ctx: &Context<'_>{', ' + sig if sig else ''}) -> {ret} {{")
+                    W(f"\n        {REAL_METHODS[(t, fname)]}")
+                    W("\n    }")
+                    continue
                 W(f"\n    #[graphql(name = \"{fname}\")]\n    async fn {rname}(&self{', ' + sig if sig else ''}) -> {ret} {{")
                 W(f"\n        {method_default(ret)}")
                 W("\n    }")

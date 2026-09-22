@@ -1,0 +1,426 @@
+{
+ "AccountError": [
+  "addressType",
+  "attributes",
+  "code",
+  "field",
+  "message"
+ ],
+ "AccountInput": [
+  "firstName",
+  "languageCode",
+  "lastName",
+  "metadata"
+ ],
+ "AccountMutation": [
+  "accountUpdate",
+  "account_update",
+  "tokenCreate",
+  "tokenRefresh",
+  "token_create",
+  "token_refresh"
+ ],
+ "AccountQuery": [
+  "customers",
+  "me"
+ ],
+ "AddLineInput": [
+  "quantity",
+  "variantId",
+  "variant_id"
+ ],
+ "Address": [
+  "city",
+  "cityArea",
+  "companyName",
+  "country",
+  "countryArea",
+  "firstName",
+  "genIfaceId",
+  "genIfaceMetadata",
+  "genIfacePrivateMetadata",
+  "gen_iface_id",
+  "gen_iface_metadata",
+  "gen_iface_private_metadata",
+  "id",
+  "lastName",
+  "metadata",
+  "phone",
+  "postalCode",
+  "privateMetadata",
+  "streetAddress1",
+  "streetAddress2"
+ ],
+ "AnchorQuery": [
+  "_nodeAnchor"
+ ],
+ "Announcement": [
+  "createdAt",
+  "extra",
+  "importance",
+  "messageHtml",
+  "title",
+  "type",
+  "updatedAt"
+ ],
+ "AppBrand": [
+  "logo"
+ ],
+ "AppBrandLogo": [
+  "default"
+ ],
+ "AppCountableConnection": [
+  "edges",
+  "pageInfo",
+  "totalCount"
+ ],
+ "AppExtension": [
+  "accessToken",
+  "app",
+  "id",
+  "identifier",
+  "label",
+  "mountName",
+  "permissions",
+  "settings",
+  "targetName",
+  "url"
+ ],
+ "AppExtensionCountableConnection": [
+  "edges",
+  "pageInfo",
+  "totalCount"
+ ],
+ "AppRow": [],
+ "AppsQuery": [
+  "appExtensions",
+  "app_extensions",
+  "apps"
+ ],
+ "CatalogMutation": [
+  "productCreate",
+  "product_create"
+ ],
+ "CatalogQuery": [
+  "products"
+ ],
+ "CheckoutMutation": [
+  "checkoutAddLines",
+  "checkoutApplyVoucher",
+  "checkoutComplete",
+  "checkout_add_lines",
+  "checkout_apply_voucher",
+  "checkout_complete",
+  "createCheckout",
+  "create_checkout",
+  "refreshOrderPromotion",
+  "refresh_order_promotion"
+ ],
+ "CheckoutQuery": [
+  "checkout"
+ ],
+ "CommerceMutation": [
+  "shopSettingsUpdate",
+  "shop_settings_update"
+ ],
+ "CommerceQuery": [
+  "channels",
+  "menu",
+  "menus",
+  "pages",
+  "promotions",
+  "shippingMethods",
+  "shipping_methods",
+  "shop",
+  "taxClasses",
+  "tax_classes",
+  "warehouses"
+ ],
+ "CountryDisplay": [
+  "code",
+  "country"
+ ],
+ "CreateToken": [
+  "errors",
+  "refreshToken",
+  "token",
+  "user"
+ ],
+ "EventDeliveryAttemptCountableConnection": [
+  "edges",
+  "pageInfo",
+  "totalCount"
+ ],
+ "EventDeliveryCountableConnection": [
+  "edges",
+  "pageInfo",
+  "totalCount"
+ ],
+ "FulfillLineInput": [
+  "orderLineId",
+  "order_line_id",
+  "quantity",
+  "stockId",
+  "stock_id"
+ ],
+ "GqlAppEdge": [
+  "cursor",
+  "node"
+ ],
+ "GqlAppExtensionEdge": [
+  "cursor",
+  "node"
+ ],
+ "GqlCheckout": [
+  "channel",
+  "currency",
+  "email",
+  "id",
+  "lines",
+  "total"
+ ],
+ "GqlCheckoutLine": [
+  "isGift",
+  "is_gift",
+  "quantity",
+  "totalPrice",
+  "total_price",
+  "unitPrice",
+  "unit_price",
+  "variantId",
+  "variant_id"
+ ],
+ "GqlContext": [
+  "bearer",
+  "db"
+ ],
+ "GqlDomain": [
+  "host",
+  "sslEnabled",
+  "url"
+ ],
+ "GqlError": [
+  "code",
+  "field",
+  "message"
+ ],
+ "GqlEventDeliveryAttemptEdge": [
+  "cursor",
+  "node"
+ ],
+ "GqlEventDeliveryEdge": [
+  "cursor",
+  "node"
+ ],
+ "GqlExternalAuth": [
+  "id",
+  "name"
+ ],
+ "GqlMenu": [
+  "id",
+  "name",
+  "slug"
+ ],
+ "GqlMenuConnection": [
+  "edges",
+  "pageInfo",
+  "totalCount"
+ ],
+ "GqlMenuEdge": [
+  "cursor",
+  "node"
+ ],
+ "GqlOrderEdge": [
+  "cursor",
+  "node"
+ ],
+ "GqlPage": [
+  "id",
+  "slug",
+  "title"
+ ],
+ "GqlProductEdge": [
+  "cursor",
+  "node"
+ ],
+ "GqlPromotion": [
+  "id",
+  "name",
+  "type"
+ ],
+ "GqlShippingMethod": [
+  "id",
+  "name",
+  "price"
+ ],
+ "GqlShop": [
+  "allowStorefrontTraffic",
+  "announcements",
+  "availableExternalAuthentications",
+  "companyAddress",
+  "countries",
+  "customerSetPasswordUrl",
+  "defaultCountry",
+  "defaultMailSenderAddress",
+  "defaultMailSenderName",
+  "defaultWeightUnit",
+  "description",
+  "domain",
+  "enableAccountConfirmationByEmail",
+  "fulfillmentAllowUnpaid",
+  "fulfillmentAutoApprove",
+  "headerText",
+  "id",
+  "languages",
+  "limitQuantityPerCheckout",
+  "limits",
+  "metadata",
+  "name",
+  "passwordLoginMode",
+  "permissions",
+  "preserveAllAddressFields",
+  "reserveStockDurationAnonymousUser",
+  "reserveStockDurationAuthenticatedUser",
+  "schemaVersion",
+  "trackInventoryByDefault",
+  "useLegacyShippingZoneStockAvailability",
+  "useLegacyUpdateWebhookEmission",
+  "version"
+ ],
+ "GqlTaxClass": [
+  "id",
+  "name"
+ ],
+ "GqlTransaction": [
+  "authorized",
+  "canceled",
+  "charged",
+  "currency",
+  "id",
+  "refunded"
+ ],
+ "GqlWarehouse": [
+  "id",
+  "name",
+  "slug"
+ ],
+ "GqlWarehouseConnection": [
+  "edges",
+  "pageInfo",
+  "totalCount"
+ ],
+ "GqlWarehouseEdge": [
+  "cursor",
+  "node"
+ ],
+ "Image": [
+  "alt",
+  "url"
+ ],
+ "LanguageDisplay": [
+  "code",
+  "language"
+ ],
+ "LimitInfo": [
+  "allowedUsage",
+  "currentUsage"
+ ],
+ "Limits": [
+  "channels",
+  "orders",
+  "productVariants",
+  "staffUsers",
+  "warehouses"
+ ],
+ "MetadataInput": [
+  "key",
+  "value"
+ ],
+ "MetadataItem": [
+  "key",
+  "value"
+ ],
+ "Money": [
+  "amount",
+  "currency",
+  "fractionDigits"
+ ],
+ "OrderCancel": [
+  "errors",
+  "order"
+ ],
+ "OrderCountableConnection": [
+  "edges",
+  "pageInfo",
+  "totalCount"
+ ],
+ "OrderMutation": [
+  "orderCancel",
+  "orderFulfill",
+  "orderReturnLines",
+  "order_cancel",
+  "order_fulfill",
+  "order_return_lines"
+ ],
+ "OrderQuery": [
+  "order",
+  "orders"
+ ],
+ "PageInfo": [
+  "endCursor",
+  "hasNextPage",
+  "hasPreviousPage",
+  "startCursor"
+ ],
+ "PaymentMutation": [
+  "transactionAuthorize",
+  "transactionCharge",
+  "transaction_authorize",
+  "transaction_charge"
+ ],
+ "PaymentQuery": [
+  "transaction"
+ ],
+ "Permission": [
+  "code",
+  "name"
+ ],
+ "ProductCountableConnection": [
+  "edges",
+  "pageInfo",
+  "totalCount"
+ ],
+ "ProductCreate": [
+  "errors",
+  "product"
+ ],
+ "ReturnLineInput": [
+  "orderLineId",
+  "order_line_id",
+  "quantity",
+  "stockId",
+  "stock_id"
+ ],
+ "ShopSettingsUpdate": [
+  "errors",
+  "shop"
+ ],
+ "StockSettings": [
+  "allocationStrategy"
+ ],
+ "TaxedMoney": [
+  "currency",
+  "gross",
+  "net",
+  "tax"
+ ],
+ "UpdateAccount": [
+  "errors",
+  "user"
+ ],
+ "UserPermission": [
+  "code",
+  "name",
+  "sourcePermissionGroups"
+ ]
+}
