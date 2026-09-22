@@ -161,7 +161,7 @@ async fn async_authorize_then_callback_settles() {
     let t = bare_txn(&db, "async").await;
     let sim = ScriptedPsp::pending("sim");
     let out = payments::execute_via(
-        &db, t.id, PspAction::Authorize, dec("80.00"), "async-1", &sim, None,
+        &db, t.id, PspAction::Authorize, dec("80.00"), "async-1", &sim, None, None,
     )
     .await
     .unwrap();
@@ -194,7 +194,7 @@ async fn callback_replay_and_terminal_conflict() {
     let db = db().await;
     let t = bare_txn(&db, "cb-term").await;
     let sim = ScriptedPsp::pending("sim");
-    payments::execute_via(&db, t.id, PspAction::Authorize, dec("10.00"), "cb-1", &sim, None)
+    payments::execute_via(&db, t.id, PspAction::Authorize, dec("10.00"), "cb-1", &sim, None, None)
         .await
         .unwrap();
     use rustygod_db::entities::payment_transactionevent;
@@ -233,7 +233,7 @@ async fn challenge_flow_3ds_settles_once() {
     let t = bare_txn(&db, "3ds").await;
     let psp = ChallengePsp::new("3ds.test");
     let out = payments::execute_via(
-        &db, t.id, PspAction::Authorize, dec("120.00"), "3ds-1", &psp, Some("https://shop/return"),
+        &db, t.id, PspAction::Authorize, dec("120.00"), "3ds-1", &psp, Some("https://shop/return"), None,
     )
     .await
     .unwrap();
@@ -260,7 +260,7 @@ async fn challenge_flow_3ds_settles_once() {
     assert_eq!(cb.view.authorized, dec("120.00"));
     // A second completed challenge can't double-settle (single success).
     let out2 = payments::execute_via(
-        &db, t.id, PspAction::Authorize, dec("120.00"), "3ds-2", &psp, None,
+        &db, t.id, PspAction::Authorize, dec("120.00"), "3ds-2", &psp, None, None,
     )
     .await
     .unwrap();
@@ -297,7 +297,7 @@ async fn failed_psp_records_and_errors() {
     let sim = ScriptedPsp::pending("sim");
     sim.push(PspOutcome::Failed { error: "insufficient funds".into() });
     // Failed on authorize (no pre-guard beyond positive amount).
-    let err = payments::execute_via(&db, t.id, PspAction::Authorize, dec("10.00"), "fail-1", &sim, None)
+    let err = payments::execute_via(&db, t.id, PspAction::Authorize, dec("10.00"), "fail-1", &sim, None, None)
         .await
         .unwrap_err();
     assert!(err.to_string().contains("insufficient funds"), "{err}");
@@ -317,7 +317,7 @@ async fn refund_challenge_unsupported() {
     payments::authorize(&db, t.id, dec("50.00"), "nr-auth").await.unwrap();
     payments::charge(&db, t.id, dec("50.00"), "nr-chg").await.unwrap();
     let psp = ChallengePsp::new("3ds.test");
-    let err = payments::execute_via(&db, t.id, PspAction::Refund, dec("5.00"), "nr-1", &psp, None)
+    let err = payments::execute_via(&db, t.id, PspAction::Refund, dec("5.00"), "nr-1", &psp, None, None)
         .await
         .unwrap_err();
     assert!(err.to_string().contains("does not support customer challenges"), "{err}");
@@ -346,7 +346,7 @@ async fn r3_second_transaction_blocked_while_inflight() {
         .unwrap();
     // Money in flight on t1 (async authorize, no callback yet).
     let sim = ScriptedPsp::pending("sim");
-    payments::execute_via(&db, t1.id, PspAction::Authorize, dec("25.00"), "r3-auth", &sim, None)
+    payments::execute_via(&db, t1.id, PspAction::Authorize, dec("25.00"), "r3-auth", &sim, None, None)
         .await
         .unwrap();
     // Double-Pay button: second transaction for the same checkout fails fast.

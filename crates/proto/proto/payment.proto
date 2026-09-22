@@ -41,10 +41,16 @@ message GatewayActionRequest {
   string amount = 2;
   string idempotency_key = 3;
   // PSP selector: "manual" (default, sync) | "challenge" (always 3DS) |
-  // "async-sim" (pending, settle via PspCallback). Unknown → REJECTED.
+  // "async-sim" (pending, settle via PspCallback) | "stripe" (real
+  // PaymentIntents HTTP via STRIPE_SECRET_KEY). Unknown → REJECTED.
   string gateway = 4;
   // Where the customer returns after a challenge (3DS return_url).
   string return_url = 5;
+  // Gateway-specific JSON (Stripe: {"payment_method":"pm_..."} for
+  // authorize/charge, {"payment_intent":"pi_..."} for capture/cancel,
+  // {"charge":"ch_..."} or {"payment_intent":"pi_..."} for refunds).
+  // Sims ignore it.
+  string data = 6;
 }
 message GatewayActionResponse {
   TransactionInfo transaction = 1;

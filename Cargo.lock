@@ -3720,6 +3720,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "rustygod-psp"
+version = "0.1.0"
+dependencies = [
+ "reqwest",
+ "rust_decimal",
+ "rustygod-core",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.20",
+ "tokio",
+]
+
+[[package]]
 name = "rustygod-server"
 version = "0.1.0"
 dependencies = [
@@ -3738,6 +3751,7 @@ dependencies = [
  "rustygod-graphql",
  "rustygod-plugins",
  "rustygod-proto",
+ "rustygod-psp",
  "sea-orm",
  "serde_json",
  "tokio",

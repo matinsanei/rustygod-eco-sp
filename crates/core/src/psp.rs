@@ -88,6 +88,11 @@ pub struct PspRequest {
     pub idempotency_key: String,
     /// Where the customer returns after a challenge (3DS `return_url`).
     pub return_url: Option<String>,
+    /// Gateway-specific JSON (Stripe: `{"payment_method":"pm_..."}` for
+    /// authorize/charge, `{"payment_intent":"pi_..."}` for capture of an
+    /// existing intent / cancel, `{"charge":"ch_..."}` for refunds).
+    /// Sims ignore it.
+    pub data: Option<String>,
 }
 
 /// What the PSP says. Mirrors `GatewayResponse` fields that matter:
@@ -211,6 +216,7 @@ mod tests {
             currency: "USD".into(),
             idempotency_key: "k".into(),
             return_url: None,
+            data: None,
         }
     }
 

@@ -1,0 +1,16 @@
+[package]
+name = "rustygod-psp"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+rustygod-core = { path = "../core" }
+reqwest = { workspace = true }
+serde_json = { workspace = true }
+serde = { workspace = true }
+rust_decimal = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true }

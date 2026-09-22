@@ -101,6 +101,7 @@ fn action_req(txn_id: i32, amount: &str, key: &str, gateway: &str) -> GatewayAct
         idempotency_key: key.into(),
         gateway: gateway.into(),
         return_url: String::new(),
+        data: String::new(),
     }
 }
 
@@ -124,7 +125,7 @@ async fn manual_authorize_then_charge_over_rpc() {
         .into_inner();
     assert!(r.errors.is_empty(), "{:?}", r.errors);
     assert_eq!(r.transaction.unwrap().charged_amount, "40.000");
-    // Unknown gateway is rejected, not panicked.
+    // Unconfigured stripe (no STRIPE_SECRET_KEY in test env) is rejected, not panicked.
     let r = svc
         .authorize(staff_req(action_req(id, "1.00", "m-x", "stripe")).await)
         .await

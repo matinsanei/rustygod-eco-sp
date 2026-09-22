@@ -20,6 +20,7 @@ rustygod-db = { path = "../db" }
 rustygod-ai = { path = "../ai" }
 rustygod-plugins = { path = "../plugins" }
 rustygod-graphql = { path = "../graphql" }
+rustygod-psp = { path = "../psp" }
 async-graphql = { version = "7", features = ["chrono", "uuid", "decimal"] }
 async-graphql-axum = "7"
 axum = { version = "0.7", features = ["json"] }

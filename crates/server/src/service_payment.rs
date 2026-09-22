@@ -73,14 +73,31 @@ impl PaymentServiceImpl {
             _ => return Err(Status::invalid_argument("unknown action")),
         };
         // PSP selector. async-sim is pending-by-default: settle via PspCallback.
+        // stripe is real PaymentIntents HTTP (STRIPE_SECRET_KEY); without a
+        // key it rejects cleanly instead of failing mid-flow.
         let domain = std::env::var("RUSTYGOD_DOMAIN").unwrap_or_else(|_| "localhost".into());
         let manual = ManualPsp;
         let challenge = ChallengePsp::new(domain);
         let async_sim = ScriptedPsp::pending("async-sim");
+        let stripe = rustygod_psp::StripePsp::from_env();
         let psp: &dyn Psp = match req.gateway.as_str() {
             "" | "manual" => &manual,
             "challenge" => &challenge,
             "async-sim" => &async_sim,
+            "stripe" => match stripe.as_ref() {
+                Some(s) => s,
+                None => {
+                    return Ok(Response::new(GatewayActionResponse {
+                        transaction: None,
+                        action_required: false,
+                        redirect_url: String::new(),
+                        errors: vec![Self::err(
+                            "REJECTED",
+                            "stripe selected but STRIPE_SECRET_KEY is unset".to_string(),
+                        )],
+                    }))
+                }
+            },
             other => {
                 return Ok(Response::new(GatewayActionResponse {
                     transaction: None,
@@ -88,13 +105,14 @@ impl PaymentServiceImpl {
                     redirect_url: String::new(),
                     errors: vec![Self::err(
                         "REJECTED",
-                        format!("unknown gateway {other:?}: want manual|challenge|async-sim"),
+                        format!("unknown gateway {other:?}: want manual|challenge|async-sim|stripe"),
                     )],
                 }))
             }
         };
         let ret = if req.return_url.is_empty() { None } else { Some(req.return_url.as_str()) };
-        match payments::execute_via(db, id, action, amount, &req.idempotency_key, psp, ret).await {
+        let data = if req.data.is_empty() { None } else { Some(req.data.as_str()) };
+        match payments::execute_via(db, id, action, amount, &req.idempotency_key, psp, ret, data).await {
             Ok(out) => Ok(Response::new(GatewayActionResponse {
                 transaction: Some(Self::view(&out.txn)),
                 action_required: out.action_required,

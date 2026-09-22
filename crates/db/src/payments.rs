@@ -507,6 +507,7 @@ pub async fn execute_via(
     idempotency_key: &str,
     psp: &dyn Psp,
     return_url: Option<&str>,
+    psp_data: Option<&str>,
 ) -> Result<PspOutcomeView> {
     let verb = match action {
         PspAction::Authorize => "authorize",
@@ -559,6 +560,7 @@ pub async fn execute_via(
         currency: cur.currency.clone(),
         idempotency_key: idempotency_key.to_string(),
         return_url: return_url.map(|s| s.to_string()),
+        data: psp_data.map(|s| s.to_string()),
     };
     let mk = |t: &str, k: String, psp_ref: Option<String>| NewEvent {
         event_type: t.to_string(),
@@ -724,7 +726,7 @@ pub async fn authorize(
     idempotency_key: &str,
 ) -> Result<TxnView> {
     use rustygod_core::psp::ManualPsp;
-    Ok(execute_via(db, transaction_id, PspAction::Authorize, amount, idempotency_key, &ManualPsp, None).await?.txn)
+    Ok(execute_via(db, transaction_id, PspAction::Authorize, amount, idempotency_key, &ManualPsp, None, None).await?.txn)
 }
 
 /// Charge previously authorized funds. Guarded: never above the
@@ -736,7 +738,7 @@ pub async fn charge(
     idempotency_key: &str,
 ) -> Result<TxnView> {
     use rustygod_core::psp::ManualPsp;
-    Ok(execute_via(db, transaction_id, PspAction::Charge, amount, idempotency_key, &ManualPsp, None).await?.txn)
+    Ok(execute_via(db, transaction_id, PspAction::Charge, amount, idempotency_key, &ManualPsp, None, None).await?.txn)
 }
 
 /// Refund charged funds. Guarded: never above charged-minus-refunded.
@@ -747,7 +749,7 @@ pub async fn refund(
     idempotency_key: &str,
 ) -> Result<TxnView> {
     use rustygod_core::psp::ManualPsp;
-    Ok(execute_via(db, transaction_id, PspAction::Refund, amount, idempotency_key, &ManualPsp, None).await?.txn)
+    Ok(execute_via(db, transaction_id, PspAction::Refund, amount, idempotency_key, &ManualPsp, None, None).await?.txn)
 }
 
 /// Transactional core of a sync manual refund: same guards as [`refund`],
@@ -833,5 +835,5 @@ pub async fn cancel(
     idempotency_key: &str,
 ) -> Result<TxnView> {
     use rustygod_core::psp::ManualPsp;
-    Ok(execute_via(db, transaction_id, PspAction::Cancel, amount, idempotency_key, &ManualPsp, None).await?.txn)
+    Ok(execute_via(db, transaction_id, PspAction::Cancel, amount, idempotency_key, &ManualPsp, None, None).await?.txn)
 }
