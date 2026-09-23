@@ -35,6 +35,7 @@ pub struct PaymentMutation;
 #[Object]
 impl PaymentMutation {
     async fn transaction_authorize(&self, ctx: &Context<'_>, transaction_id: ID, amount: String, idempotency_key: String) -> Result<GqlTransaction> {
+        let _ = crate::account::require_perm(ctx, "handle_payments").await?;
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
         let tid: i32 = transaction_id.0.parse().map_err(|_| Error::new("transactionId must be int"))?;
         let amt: rust_decimal::Decimal = amount.parse().map_err(|_| Error::new("amount must be decimal"))?;
@@ -42,6 +43,7 @@ impl PaymentMutation {
         Ok(GqlTransaction { id: ID(crate::common::gid("TransactionItem", v.id)), currency: v.currency, authorized: v.authorized.to_string(), charged: v.charged.to_string(), refunded: v.refunded.to_string(), canceled: v.canceled.to_string() })
     }
     async fn transaction_charge(&self, ctx: &Context<'_>, transaction_id: ID, amount: String, idempotency_key: String) -> Result<GqlTransaction> {
+        let _ = crate::account::require_perm(ctx, "handle_payments").await?;
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
         let tid: i32 = transaction_id.0.parse().map_err(|_| Error::new("transactionId must be int"))?;
         let amt: rust_decimal::Decimal = amount.parse().map_err(|_| Error::new("amount must be decimal"))?;

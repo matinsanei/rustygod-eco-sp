@@ -538,11 +538,8 @@ impl OrderMutation {
 }
 
 async fn authorize(ctx: &Context<'_>, perm: &str) -> Result<()> {
-    let bearer = ctx.data_opt::<crate::context::Bearer>().map(|b| b.0.as_str())
-        .or_else(|| ctx.data_opt::<crate::context::GqlContext>().and_then(|g| g.bearer.as_deref()));
-    if bearer.is_none() {
-        return Err(Error::new("authentication required"));
-    }
-    let _ = perm;
+    // Was bearer-presence-only (perm ignored); now a real codename gate
+    // (superusers bypass, so dashboard flows are unaffected).
+    let _ = crate::account::require_perm(ctx, perm).await?;
     Ok(())
 }

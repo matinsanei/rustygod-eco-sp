@@ -152,3 +152,108 @@ pub async fn calculate_lines(
     }
     Ok(out)
 }
+
+/// Per-country override for `update_tax_configuration`.
+#[derive(Debug, Clone)]
+pub struct CountryOverride {
+    pub country_code: String,
+    pub charge_taxes: bool,
+    pub strategy: Option<String>,
+    pub display_gross: bool,
+    pub tax_app_id: Option<String>,
+    pub use_weighted_tax_for_shipping: bool,
+}
+
+#[derive(Debug, Default)]
+pub struct TaxConfigPatch {
+    pub charge_taxes: Option<bool>,
+    pub strategy: Option<String>,
+    pub display_gross: Option<bool>,
+    pub prices_entered_with_tax: Option<bool>,
+    pub use_weighted_tax_for_shipping: Option<bool>,
+    pub tax_app_id: Option<String>,
+    pub upsert_countries: Vec<CountryOverride>,
+    pub remove_countries: Vec<String>,
+}
+
+/// Update a tax configuration + its per-country rows (Django
+/// `TaxConfigurationUpdate`: scalar patch plus country upserts/removals).
+pub async fn update_tax_configuration(
+    db: &impl ConnectionTrait,
+    config_id: i32,
+    patch: &TaxConfigPatch,
+) -> Result<()> {
+    use crate::entities::tax_taxconfigurationpercountry;
+    use sea_orm::{ActiveModelTrait, Set};
+    let Some(m) = tax_taxconfiguration::Entity::find_by_id(config_id).one(db).await? else {
+        return Err(DbError::App("tax configuration not found".into()));
+    };
+    // Per-country rows first (FK-safe: children before parent touch).
+    for c in &patch.upsert_countries {
+        let existing: Option<i32> = tax_taxconfigurationpercountry::Entity::find()
+            .select_only()
+            .column(tax_taxconfigurationpercountry::Column::Id)
+            .filter(tax_taxconfigurationpercountry::Column::TaxConfigurationId.eq(config_id))
+            .filter(tax_taxconfigurationpercountry::Column::Country.eq(&c.country_code))
+            .into_tuple::<i32>()
+            .one(db)
+            .await?;
+        match existing {
+            Some(id) => {
+                let row = tax_taxconfigurationpercountry::Entity::find_by_id(id)
+                    .one(db)
+                    .await?
+                    .ok_or_else(|| DbError::App("country row vanished".into()))?;
+                let mut am: tax_taxconfigurationpercountry::ActiveModel = row.into();
+                am.charge_taxes = Set(c.charge_taxes);
+                am.tax_calculation_strategy = Set(c.strategy.clone());
+                am.display_gross_prices = Set(c.display_gross);
+                am.tax_app_id = Set(c.tax_app_id.clone());
+                am.use_weighted_tax_for_shipping = Set(c.use_weighted_tax_for_shipping);
+                am.update(db).await?;
+            }
+            None => {
+                tax_taxconfigurationpercountry::ActiveModel {
+                    country: Set(c.country_code.clone()),
+                    charge_taxes: Set(c.charge_taxes),
+                    tax_calculation_strategy: Set(c.strategy.clone()),
+                    display_gross_prices: Set(c.display_gross),
+                    tax_configuration_id: Set(config_id),
+                    tax_app_id: Set(c.tax_app_id.clone()),
+                    use_weighted_tax_for_shipping: Set(c.use_weighted_tax_for_shipping),
+                    ..Default::default()
+                }
+                .insert(db)
+                .await?;
+            }
+        }
+    }
+    if !patch.remove_countries.is_empty() {
+        tax_taxconfigurationpercountry::Entity::delete_many()
+            .filter(tax_taxconfigurationpercountry::Column::TaxConfigurationId.eq(config_id))
+            .filter(tax_taxconfigurationpercountry::Column::Country.is_in(patch.remove_countries.clone()))
+            .exec(db)
+            .await?;
+    }
+    let mut am: tax_taxconfiguration::ActiveModel = m.into();
+    if let Some(v) = patch.charge_taxes {
+        am.charge_taxes = Set(v);
+    }
+    if patch.strategy.is_some() {
+        am.tax_calculation_strategy = Set(patch.strategy.clone());
+    }
+    if let Some(v) = patch.display_gross {
+        am.display_gross_prices = Set(v);
+    }
+    if let Some(v) = patch.prices_entered_with_tax {
+        am.prices_entered_with_tax = Set(v);
+    }
+    if let Some(v) = patch.use_weighted_tax_for_shipping {
+        am.use_weighted_tax_for_shipping = Set(v);
+    }
+    if patch.tax_app_id.is_some() {
+        am.tax_app_id = Set(patch.tax_app_id.clone());
+    }
+    am.update(db).await?;
+    Ok(())
+}

@@ -1429,6 +1429,81 @@ pub async fn set_own_email(db: &impl ConnectionTrait, user_id: i32, new_email: &
     Ok(())
 }
 
+// ---------------------------------------------------------------------------
+// Staff notification recipients (Django `staffNotificationRecipient*`)
+// ---------------------------------------------------------------------------
+
+/// Create a recipient: either a staff user or a bare email (Django requires
+/// exactly one; user is OneToOne — a staffer gets at most one row).
+pub async fn create_notification_recipient(
+    db: &impl ConnectionTrait,
+    user_id: Option<i32>,
+    email: Option<String>,
+    active: bool,
+) -> Result<i32> {
+    use crate::entities::account_staffnotificationrecipient;
+    match (user_id, email.as_deref().map(str::trim).filter(|e| !e.is_empty())) {
+        (None, None) => return Err(fail("either a user or an email is required")),
+        (Some(uid), _) => {
+            let u = identity(db, uid).await?.ok_or_else(|| fail("user not found"))?;
+            if !u.is_staff {
+                return Err(fail("only staff users can receive notifications"));
+            }
+            let dup = account_staffnotificationrecipient::Entity::find()
+                .select_only()
+                .column(account_staffnotificationrecipient::Column::Id)
+                .filter(account_staffnotificationrecipient::Column::UserId.eq(uid))
+                .into_tuple::<i32>()
+                .one(db)
+                .await?
+                .is_some();
+            if dup {
+                return Err(fail("this user already has a notification recipient"));
+            }
+            Ok(account_staffnotificationrecipient::ActiveModel {
+                user_id: Set(Some(uid)),
+                staff_email: Set(None),
+                active: Set(active),
+                ..Default::default()
+            }
+            .insert(db)
+            .await?
+            .id)
+        }
+        (None, Some(em)) => {
+            let dup = account_staffnotificationrecipient::Entity::find()
+                .select_only()
+                .column(account_staffnotificationrecipient::Column::Id)
+                .filter(account_staffnotificationrecipient::Column::StaffEmail.eq(em))
+                .into_tuple::<i32>()
+                .one(db)
+                .await?
+                .is_some();
+            if dup {
+                return Err(fail("this email is already registered"));
+            }
+            Ok(account_staffnotificationrecipient::ActiveModel {
+                user_id: Set(None),
+                staff_email: Set(Some(em.to_string())),
+                active: Set(active),
+                ..Default::default()
+            }
+            .insert(db)
+            .await?
+            .id)
+        }
+    }
+}
+
+pub async fn delete_notification_recipient(db: &impl ConnectionTrait, id: i32) -> Result<()> {
+    use crate::entities::account_staffnotificationrecipient;
+    let n = account_staffnotificationrecipient::Entity::delete_by_id(id).exec(db).await?;
+    if n.rows_affected == 0 {
+        return Err(fail("notification recipient not found"));
+    }
+    Ok(())
+}
+
 /// Prune expired one-time tokens + stale throttle rows (cheap daily beat).
 pub async fn prune_security_tables(db: &DatabaseConnection) -> Result<u64> {
     ensure_token_table(db).await?;

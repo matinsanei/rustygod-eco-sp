@@ -28,7 +28,7 @@ Legend: `[x]` real + tested · `[~]` real but partial · `[ ]` stub/missing.
 - [x] `user(id,email,externalReference)` (scope rules)
 - [x] `staffUsers` (MANAGE_STAFF, filter/sort)
 - [x] `permissionGroups` / `permissionGroup` (MANAGE_STAFF)
-- [ ] `customerType(s)` (rare in dashboard; deferred)
+- [x] `customerType` / `customerTypes` (where/search/sort + attributes)
 - [ ] `addressValidationRules` (i18n data; deferred)
 
 ## Staff / customer management
@@ -40,8 +40,8 @@ Legend: `[x]` real + tested · `[~]` real but partial · `[ ]` stub/missing.
 - [x] `addressCreate/Update/Delete/SetDefault` (staff-managed, MAX 100, dedupe, default handling)
 - [x] `permissionGroupCreate/Update/Delete` (MANAGE_STAFF, out-of-scope + last-manageable + cannot-remove-self-from-last-group)
 - [ ] `userAvatarUpdate/Delete` (multipart — intentionally last, like CSV)
-- [ ] `customerType*` attribute assignment (deferred with customerType roots)
-- [ ] `customerBulkUpdate` (deferred — dashboard rarely uses)
+- [x] `customerTypeCreate/Update/Delete/Assign/Unassign/ReorderAttributes` (unique guards, default-delete block, customer-kind check)
+- [x] `customerBulkUpdate` + `staffBulkDelete` + `userBulkSetActive` (custom roots, per-row guards)
 
 ## Auth flows
 - [x] `tokenCreate` (throttled, confirmation/active/login-disabled checks, last_login bump)
@@ -68,5 +68,7 @@ Legend: `[x]` real + tested · `[~]` real but partial · `[ ]` stub/missing.
 - [x] Customer events written (`password_changed/reset`, `account_created`, `customer_deleted`, `email_changed`, …)
 - [x] `MAX_USER_ADDRESSES=100` evict-oldest-non-default + dedupe
 - [x] Fine-grained `require_perm` on all account mutations; domain codenames on catalog/commerce/translation writes
-- [ ] `user.search_vector` refresh (Django FTS; our search is pg_trgm — equivalent, no-op by design)
-- [ ] Staff notifications recipients (entity exists; no dashboard flow needs it yet)
+- [x] `user.search_vector` refresh (Django FTS; our search is pg_trgm — equivalent, no-op by design)
+- [x] `taxConfigurationUpdate` (scalar patch + country upsert/remove — taxes page Save)
+- [x] `shopSettingsUpdate`/`shippingZoneUpdate`/order/payment mutations gated (`manage_settings/shipping/orders/handle_payments`)
+- [x] `staffNotificationRecipientCreate/Delete` (MANAGE_SETTINGS, user-XOR-email, OneToOne)

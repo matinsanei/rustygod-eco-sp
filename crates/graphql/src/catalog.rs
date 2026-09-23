@@ -2331,7 +2331,7 @@ async fn apply_variant_sub(
 
 /// Full attribute assembly (details page): all scalars + reference types.
 /// Choices/assigned-types ride REAL_METHODS (paginated).
-async fn assemble_attribute(
+pub(crate) async fn assemble_attribute(
     db: &sea_orm::DatabaseConnection,
     aid: i32,
 ) -> Result<Option<gen::Attribute>, String> {

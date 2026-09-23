@@ -40,6 +40,107 @@ fn gerr(field: Option<String>, message: String) -> gen::PermissionGroupError {
     gen::PermissionGroupError { field, message: Some(message), code: None }
 }
 
+fn cterr(field: Option<String>, message: String) -> gen::CustomerTypeCreateError {
+    gen::CustomerTypeCreateError { field, message: Some(message), code: None }
+}
+
+trait FromCreate {
+    fn from_create(field: Option<String>, message: String) -> Self;
+}
+
+macro_rules! impl_from_create {
+    ($($ty:ty),*) => {
+        $(impl FromCreate for $ty {
+            fn from_create(field: Option<String>, message: String) -> Self {
+                Self { field, message: Some(message), code: None }
+            }
+        })*
+    };
+}
+
+macro_rules! impl_from_create_attrs {
+    ($($ty:ty),*) => {
+        $(impl FromCreate for $ty {
+            fn from_create(field: Option<String>, message: String) -> Self {
+                Self { field, message: Some(message), code: None, attributes: vec![] }
+            }
+        })*
+    };
+}
+
+impl_from_create!(
+    gen::CustomerTypeUpdateError,
+    gen::CustomerTypeDeleteError,
+    gen::CustomerTypeUnassignAttributesError
+);
+
+impl_from_create_attrs!(
+    gen::CustomerTypeAssignAttributesError,
+    gen::CustomerTypeReorderAttributesError
+);
+
+fn cterr_u(field: Option<String>, message: String) -> gen::CustomerTypeUpdateError {
+    gen::CustomerTypeUpdateError::from_create(field, message)
+}
+fn cterr_d(field: Option<String>, message: String) -> gen::CustomerTypeDeleteError {
+    gen::CustomerTypeDeleteError::from_create(field, message)
+}
+fn cterr_a(field: Option<String>, message: String) -> gen::CustomerTypeAssignAttributesError {
+    gen::CustomerTypeAssignAttributesError::from_create(field, message)
+}
+fn cterr_un(field: Option<String>, message: String) -> gen::CustomerTypeUnassignAttributesError {
+    gen::CustomerTypeUnassignAttributesError::from_create(field, message)
+}
+fn cterr_r(field: Option<String>, message: String) -> gen::CustomerTypeReorderAttributesError {
+    gen::CustomerTypeReorderAttributesError::from_create(field, message)
+}
+
+fn shop_err(message: String) -> gen::ShopError {
+    gen::ShopError { field: None, message: Some(message), code: None }
+}
+
+/// Customer-type assembly with ordered attributes (modeling pages).
+async fn assemble_customer_type(db: &sea_orm::DatabaseConnection, ct: i32) -> Result<Option<gen::CustomerType>, String> {
+    use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QueryOrder, QuerySelect};
+    let Some(m) = rustygod_db::entities::account_customertype::Entity::find_by_id(ct)
+        .one(db).await.map_err(|e| e.to_string())? else { return Ok(None) };
+    let aids: Vec<i32> = rustygod_db::entities::attribute_attributecustomertype::Entity::find()
+        .select_only().column(rustygod_db::entities::attribute_attributecustomertype::Column::AttributeId)
+        .filter(rustygod_db::entities::attribute_attributecustomertype::Column::CustomerTypeId.eq(ct))
+        .order_by_asc(rustygod_db::entities::attribute_attributecustomertype::Column::SortOrder)
+        .into_tuple::<i32>().all(db).await.map_err(|e| e.to_string())?;
+    let mut attributes = vec![];
+    for aid in aids {
+        if let Some(attr) = crate::catalog::assemble_attribute(db, aid).await.map_err(|e| e.to_string())? {
+            attributes.push(attr);
+        }
+    }
+    Ok(Some(gen::CustomerType {
+        id: Some(ID(crate::common::gid("CustomerType", ct))),
+        metadata: crate::common::json_to_metadata_items(&serde_json::to_value(&m.metadata).unwrap_or(serde_json::Value::Null)),
+        name: Some(m.name),
+        slug: Some(m.slug),
+        is_default: Some(m.is_default),
+        attributes,
+    }))
+}
+
+async fn assemble_recipient(db: &sea_orm::DatabaseConnection, rid: i32) -> Result<Option<gen::StaffNotificationRecipient>, String> {
+    let row = rustygod_db::entities::account_staffnotificationrecipient::Entity::find_by_id(rid)
+        .one(db).await.map_err(|e| e.to_string())?;
+    let Some(r) = row else { return Ok(None) };
+    let user = match r.user_id {
+        Some(uid) => slim_user_row(db, uid).await.map_err(|e| e.to_string())?,
+        None => None,
+    };
+    Ok(Some(gen::StaffNotificationRecipient {
+        id: Some(ID(crate::common::gid("StaffNotificationRecipient", rid))),
+        user,
+        email: r.staff_email,
+        active: Some(r.active),
+    }))
+}
+
 fn bearer_token(ctx: &Context<'_>) -> Result<String> {
     ctx.data_opt::<Bearer>().map(|b| b.0.as_str().to_string())
         .or_else(|| ctx.data_opt::<GqlContext>().and_then(|g| g.bearer.clone()))
@@ -522,6 +623,80 @@ impl AccountQuery {
         let Some(gid) = rustygod_db::catalog::parse_gid(&id.0) else { return Ok(None) };
         assemble_group(db, gid, true).await.map_err(Error::new)
     }
+
+    // ------------------------------------------------------------------
+    // Customer types (dashboard modeling section)
+    // ------------------------------------------------------------------
+
+    async fn customer_type(&self, ctx: &Context<'_>, id: ID) -> Result<Option<gen::CustomerType>> {
+        require_any_perm(ctx, &["manage_staff", "manage_users"]).await?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let Some(ct) = rustygod_db::catalog::parse_gid(&id.0) else { return Ok(None) };
+        assemble_customer_type(db, ct).await.map_err(Error::new)
+    }
+
+    async fn customer_types(
+        &self, ctx: &Context<'_>,
+        #[graphql(name = "where")] where_input: Option<gen::CustomerTypeWhereInput>,
+        search: Option<String>,
+        #[graphql(name = "sortBy")] sort_by: Option<gen::CustomerTypeSortingInput>,
+        before: Option<String>, after: Option<String>, first: Option<i32>, last: Option<i32>,
+    ) -> Result<Option<gen::CustomerTypeCountableConnection>> {
+        require_any_perm(ctx, &["manage_staff", "manage_users"]).await?;
+        let _ = (before, last);
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let off = after.and_then(|c| crate::common::decode_cursor(&c)).unwrap_or(0);
+        let lim = first.unwrap_or(20).clamp(1, 100) as usize;
+        use rustygod_db::entities::account_customertype::{Column as CCol, Entity as CEnt};
+        use sea_orm::{ColumnTrait, Condition, EntityTrait, QueryFilter, QueryOrder, QuerySelect};
+        fn apply_where(cond: Condition, w: &gen::CustomerTypeWhereInput) -> Condition {
+            let mut c = cond;
+            let ids = crate::catalog::gid_vec(w.ids.clone());
+            if !ids.is_empty() { c = c.add(CCol::Id.is_in(ids)); }
+            let (eq, one) = crate::catalog::str_filter(w.name.clone());
+            if let Some(e) = eq { c = c.add(CCol::Name.eq(e)); }
+            if !one.is_empty() { c = c.add(CCol::Name.is_in(one)); }
+            let (seq, sone) = crate::catalog::str_filter(w.slug.clone());
+            if let Some(e) = seq { c = c.add(CCol::Slug.eq(e)); }
+            if !sone.is_empty() { c = c.add(CCol::Slug.is_in(sone)); }
+            if let Some(d) = w.is_default { c = c.add(CCol::IsDefault.eq(d)); }
+            for sub in w.and.as_ref().map(|v| v.as_slice()).unwrap_or(&[]) {
+                c = c.add(apply_where(Condition::all(), sub));
+            }
+            if let Some(orw) = w.or.as_ref().filter(|v| !v.is_empty()) {
+                let mut any = Condition::any();
+                for sub in orw { any = any.add(apply_where(Condition::all(), sub)); }
+                c = c.add(any);
+            }
+            c
+        }
+        let mut cond = Condition::all();
+        if let Some(w) = where_input.as_ref() { cond = apply_where(cond, w); }
+        if let Some(s) = search.as_ref().filter(|s| !s.trim().is_empty()) {
+            let like = format!("%{s}%");
+            cond = cond.add(Condition::any().add(CCol::Name.like(like.clone())).add(CCol::Slug.like(like)));
+        }
+        let mut q = CEnt::find().filter(cond);
+        let desc = sort_by.as_ref().map(|s| s.direction == gen::OrderDirection::DESC).unwrap_or(false);
+        q = match sort_by.as_ref().map(|s| &s.field) {
+            Some(gen::CustomerTypeSortField::SLUG) => if desc { q.order_by_desc(CCol::Slug) } else { q.order_by_asc(CCol::Slug) },
+            _ => if desc { q.order_by_desc(CCol::Name) } else { q.order_by_asc(CCol::Name) },
+        };
+        let rows: Vec<i32> = q.select_only().column(CCol::Id)
+            .into_tuple::<i32>().all(db).await.map_err(|e| Error::new(e.to_string()))?;
+        let mut edges = vec![];
+        for (i, ct) in rows.iter().skip(off).take(lim).enumerate() {
+            if let Some(node) = assemble_customer_type(db, *ct).await.map_err(Error::new)? {
+                edges.push(gen::CustomerTypeCountableEdge { node: Some(node) });
+                let _ = i;
+            }
+        }
+        Ok(Some(gen::CustomerTypeCountableConnection {
+            page_info: Some(crate::common::PageInfo { has_next_page: off + lim < rows.len(), has_previous_page: off > 0, start_cursor: None, end_cursor: None }),
+            edges,
+        }))
+    }
+
 }
 
 #[derive(SimpleObject, Clone)]
@@ -1390,6 +1565,182 @@ impl AccountMutation {
                 Ok(GqlEmailChange { errors: vec![] })
             }
             Err(e) => Ok(err(e.to_string())),
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // Customer-type / bulk / notification mutations
+    // ------------------------------------------------------------------
+
+    async fn customer_type_create(&self, ctx: &Context<'_>, input: gen::CustomerTypeCreateInput) -> Result<gen::CustomerTypeCreate> {
+        require_perm(ctx, "manage_customer_types_and_attributes").await?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let err = |m: String| gen::CustomerTypeCreate { customer_type: None, errors: vec![cterr(None, m)] };
+        let c = rustygod_db::customer_types::CustomerTypeCreate {
+            name: input.name.clone(), slug: input.slug.clone(), is_default: input.is_default.unwrap_or(false),
+        };
+        match rustygod_db::customer_types::create_customer_type(db, &c).await {
+            Ok(ct) => Ok(gen::CustomerTypeCreate {
+                customer_type: assemble_customer_type(db, ct).await.map_err(Error::new)?,
+                errors: vec![],
+            }),
+            Err(e) => Ok(err(e.to_string())),
+        }
+    }
+
+    async fn customer_type_update(&self, ctx: &Context<'_>, id: ID, input: gen::CustomerTypeUpdateInput) -> Result<gen::CustomerTypeUpdate> {
+        require_perm(ctx, "manage_customer_types_and_attributes").await?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let err = |m: String| gen::CustomerTypeUpdate { customer_type: None, errors: vec![cterr_u(None, m)] };
+        let Some(ct) = rustygod_db::catalog::parse_gid(&id.0) else {
+            return Ok(err("bad customer type id".into()));
+        };
+        let patch = rustygod_db::customer_types::CustomerTypePatch {
+            name: input.name.clone(), slug: input.slug.clone(), is_default: input.is_default,
+        };
+        match rustygod_db::customer_types::update_customer_type(db, ct, &patch).await {
+            Ok(()) => Ok(gen::CustomerTypeUpdate {
+                customer_type: assemble_customer_type(db, ct).await.map_err(Error::new)?,
+                errors: vec![],
+            }),
+            Err(e) => Ok(err(e.to_string())),
+        }
+    }
+
+    async fn customer_type_delete(&self, ctx: &Context<'_>, id: ID) -> Result<gen::CustomerTypeDelete> {
+        require_perm(ctx, "manage_customer_types_and_attributes").await?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let err = |m: String| gen::CustomerTypeDelete { customer_type: None, errors: vec![cterr_d(None, m)] };
+        let Some(ct) = rustygod_db::catalog::parse_gid(&id.0) else {
+            return Ok(err("bad customer type id".into()));
+        };
+        match rustygod_db::customer_types::delete_customer_type(db, ct).await {
+            Ok(()) => Ok(gen::CustomerTypeDelete { customer_type: None, errors: vec![] }),
+            Err(e) => Ok(err(e.to_string())),
+        }
+    }
+
+    async fn customer_type_assign_attributes(
+        &self, ctx: &Context<'_>,
+        #[graphql(name = "attributeIds")] attribute_ids: Vec<ID>,
+        #[graphql(name = "customerTypeId")] customer_type_id: ID,
+    ) -> Result<gen::CustomerTypeAssignAttributes> {
+        require_perm(ctx, "manage_customer_types_and_attributes").await?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let err = |m: String| gen::CustomerTypeAssignAttributes { customer_type: None, errors: vec![cterr_a(None, m)] };
+        let Some(ct) = rustygod_db::catalog::parse_gid(&customer_type_id.0) else {
+            return Ok(err("bad customer type id".into()));
+        };
+        let aids: Vec<i32> = attribute_ids.iter().filter_map(|i| rustygod_db::catalog::parse_gid(&i.0)).collect();
+        match rustygod_db::customer_types::assign_attributes(db, ct, &aids).await {
+            Ok(()) => Ok(gen::CustomerTypeAssignAttributes {
+                customer_type: assemble_customer_type(db, ct).await.map_err(Error::new)?,
+                errors: vec![],
+            }),
+            Err(e) => Ok(err(e.to_string())),
+        }
+    }
+
+    async fn customer_type_unassign_attributes(
+        &self, ctx: &Context<'_>,
+        #[graphql(name = "attributeIds")] attribute_ids: Vec<ID>,
+        #[graphql(name = "customerTypeId")] customer_type_id: ID,
+    ) -> Result<gen::CustomerTypeUnassignAttributes> {
+        require_perm(ctx, "manage_customer_types_and_attributes").await?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let err = |m: String| gen::CustomerTypeUnassignAttributes { customer_type: None, errors: vec![cterr_un(None, m)] };
+        let Some(ct) = rustygod_db::catalog::parse_gid(&customer_type_id.0) else {
+            return Ok(err("bad customer type id".into()));
+        };
+        let aids: Vec<i32> = attribute_ids.iter().filter_map(|i| rustygod_db::catalog::parse_gid(&i.0)).collect();
+        match rustygod_db::customer_types::unassign_attributes(db, ct, &aids).await {
+            Ok(_) => Ok(gen::CustomerTypeUnassignAttributes {
+                customer_type: assemble_customer_type(db, ct).await.map_err(Error::new)?,
+                errors: vec![],
+            }),
+            Err(e) => Ok(err(e.to_string())),
+        }
+    }
+
+    async fn customer_type_reorder_attributes(
+        &self, ctx: &Context<'_>,
+        #[graphql(name = "customerTypeId")] customer_type_id: ID,
+        moves: Vec<gen::ReorderInput>,
+    ) -> Result<gen::CustomerTypeReorderAttributes> {
+        require_perm(ctx, "manage_customer_types_and_attributes").await?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let err = |m: String| gen::CustomerTypeReorderAttributes { customer_type: None, errors: vec![cterr_r(None, m)] };
+        let Some(ct) = rustygod_db::catalog::parse_gid(&customer_type_id.0) else {
+            return Ok(err("bad customer type id".into()));
+        };
+        let mv: Vec<(i32, i32)> = moves.iter()
+            .filter_map(|m| rustygod_db::catalog::parse_gid(&m.id.0).map(|v| (v, m.sort_order.unwrap_or(0))))
+            .collect();
+        match rustygod_db::customer_types::reorder_attributes(db, ct, &mv).await {
+            Ok(()) => Ok(gen::CustomerTypeReorderAttributes {
+                customer_type: assemble_customer_type(db, ct).await.map_err(Error::new)?,
+                errors: vec![],
+            }),
+            Err(e) => Ok(err(e.to_string())),
+        }
+    }
+
+    async fn customer_bulk_update(&self, ctx: &Context<'_>, ids: Vec<ID>, input: gen::CustomerInput) -> Result<GqlBulkResult> {
+        let req = require_perm(ctx, "manage_users").await?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let patch = rustygod_db::account_writes::UserPatch {
+            email: None,
+            first_name: input.first_name.clone(),
+            last_name: input.last_name.clone(),
+            is_active: input.is_active,
+            note: input.note.clone(),
+            language_code: input.language_code.as_ref().map(|l| crate::gen::language_code_value(l).to_string()),
+            group_ids: None,
+            permissions: None,
+            metadata: input.metadata.as_ref().map(|v| crate::common::merge_metadata(&serde_json::Value::Null, v)),
+            private_metadata: input.private_metadata.as_ref().map(|v| crate::common::merge_metadata(&serde_json::Value::Null, v)),
+            external_reference: input.external_reference.clone(),
+            customer_type_id: input.customer_type.as_ref().and_then(|i| rustygod_db::catalog::parse_gid(&i.0)),
+            is_confirmed: input.is_confirmed,
+        };
+        let mut n = 0;
+        for i in &ids {
+            if let Some(uid) = rustygod_db::catalog::parse_gid(&i.0) {
+                if rustygod_db::account_writes::update_user(db, req, uid, false, &patch).await.is_ok() {
+                    n += 1;
+                }
+            }
+        }
+        Ok(GqlBulkResult { count: Some(n), errors: vec![] })
+    }
+
+    // ------------------------------------------------------------------
+    // Staff notification recipients (MANAGE_SETTINGS)
+    // ------------------------------------------------------------------
+
+    async fn staff_notification_recipient_create(&self, ctx: &Context<'_>, input: gen::StaffNotificationRecipientInput) -> Result<gen::StaffNotificationRecipientCreate> {
+        require_perm(ctx, "manage_settings").await?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let err = |m: String| gen::StaffNotificationRecipientCreate { staff_notification_recipient: None, errors: vec![shop_err(m)] };
+        let uid = input.user.as_ref().and_then(|i| rustygod_db::catalog::parse_gid(&i.0));
+        match rustygod_db::account_writes::create_notification_recipient(db, uid, input.email.clone(), input.active.unwrap_or(true)).await {
+            Ok(rid) => Ok(gen::StaffNotificationRecipientCreate {
+                staff_notification_recipient: assemble_recipient(db, rid).await.map_err(Error::new)?,
+                errors: vec![],
+            }),
+            Err(e) => Ok(err(e.to_string())),
+        }
+    }
+
+    async fn staff_notification_recipient_delete(&self, ctx: &Context<'_>, id: ID) -> Result<gen::StaffNotificationRecipientDelete> {
+        require_perm(ctx, "manage_settings").await?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let Some(rid) = rustygod_db::catalog::parse_gid(&id.0) else {
+            return Ok(gen::StaffNotificationRecipientDelete { errors: vec![shop_err("bad id".into())] });
+        };
+        match rustygod_db::account_writes::delete_notification_recipient(db, rid).await {
+            Ok(()) => Ok(gen::StaffNotificationRecipientDelete { errors: vec![] }),
+            Err(e) => Ok(gen::StaffNotificationRecipientDelete { errors: vec![shop_err(e.to_string())] }),
         }
     }
 }

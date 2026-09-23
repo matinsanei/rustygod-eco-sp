@@ -781,9 +781,7 @@ impl CommerceMutation {
     async fn shipping_zone_update(
         &self, ctx: &Context<'_>, id: ID, input: gen::ShippingZoneUpdateInput,
     ) -> Result<gen::ShippingZoneUpdate> {
-        let bearer = ctx.data_opt::<crate::context::Bearer>().map(|b| b.0.as_str().to_string())
-            .or_else(|| ctx.data_opt::<GqlContext>().and_then(|g| g.bearer.clone()));
-        if bearer.is_none() { return Err(Error::new("authentication required")); }
+        let _ = crate::account::require_perm(ctx, "manage_shipping").await?;
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
         let serr = |m: String| gen::ShippingError { field: None, message: Some(m), code: None, channels: vec![] };
         let Some(zid) = rustygod_db::catalog::parse_gid(&id.0) else {
@@ -842,6 +840,51 @@ impl CommerceMutation {
         }
     }
 
+    /// Dashboard taxes → channels Save button (Django `TaxConfigurationUpdate`):
+    /// scalar patch plus per-country upserts/removals on the channel's row.
+    async fn tax_configuration_update(
+        &self, ctx: &Context<'_>, id: ID, input: gen::TaxConfigurationUpdateInput,
+    ) -> Result<gen::TaxConfigurationUpdate> {
+        let _ = crate::account::require_perm(ctx, "manage_taxes").await?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let terr = |m: String| gen::TaxConfigurationUpdateError { field: None, message: Some(m), code: None };
+        let Some(tid) = rustygod_db::catalog::parse_gid(&id.0) else {
+            return Ok(gen::TaxConfigurationUpdate { errors: vec![terr("bad tax configuration id".into())] });
+        };
+        let strategy = input.tax_calculation_strategy.as_ref().map(|s| match format!("{s:?}").as_str() {
+            "TAXAPP" => "TAX_APP".to_string(),
+            _ => "FLAT_RATES".to_string(),
+        });
+        let mut patch = rustygod_db::taxes::TaxConfigPatch {
+            charge_taxes: input.charge_taxes,
+            strategy,
+            display_gross: input.display_gross_prices,
+            prices_entered_with_tax: input.prices_entered_with_tax,
+            use_weighted_tax_for_shipping: input.use_weighted_tax_for_shipping,
+            tax_app_id: input.tax_app_id.clone(),
+            upsert_countries: vec![],
+            remove_countries: input.remove_countries_configuration.as_ref().map(|v| v.as_slice()).unwrap_or(&[])
+                .iter().map(|c| format!("{c:?}")).collect(),
+        };
+        for c in input.update_countries_configuration.as_ref().map(|v| v.as_slice()).unwrap_or(&[]) {
+            patch.upsert_countries.push(rustygod_db::taxes::CountryOverride {
+                country_code: format!("{:?}", c.country_code),
+                charge_taxes: c.charge_taxes,
+                strategy: c.tax_calculation_strategy.as_ref().map(|s| match format!("{s:?}").as_str() {
+                    "TAXAPP" => "TAX_APP".to_string(),
+                    _ => "FLAT_RATES".to_string(),
+                }),
+                display_gross: c.display_gross_prices,
+                tax_app_id: c.tax_app_id.clone(),
+                use_weighted_tax_for_shipping: c.use_weighted_tax_for_shipping.unwrap_or(false),
+            });
+        }
+        match rustygod_db::taxes::update_tax_configuration(db, tid, &patch).await {
+            Ok(()) => Ok(gen::TaxConfigurationUpdate { errors: vec![] }),
+            Err(e) => Ok(gen::TaxConfigurationUpdate { errors: vec![terr(e.to_string())] }),
+        }
+    }
+
     /// Dashboard shop settings + navigation pins (`ShopSettingsUpdate`,
     /// `UpdateShopNavigationPins`, `OrderSettingsUpdate`,
     /// `UpdateDefaultWeightUnit`): Saleor's `ShopSettingsInput` in,
@@ -854,6 +897,7 @@ impl CommerceMutation {
         ctx: &Context<'_>,
         input: gen::ShopSettingsInput,
     ) -> Result<GqlShopSettingsUpdate> {
+        let _ = crate::account::require_perm(ctx, "manage_settings").await?;
         let g = ctx.data::<GqlContext>()?;
         let db = g.db()?;
         use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, Set};

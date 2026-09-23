@@ -29523,20 +29523,6 @@ impl GenQuery {
 
     }
 
-    #[graphql(name = "customerType")]
-    async fn customer_type(&self, #[graphql(name = "id")] _arg_id: ID) -> Option<CustomerType> {
-
-        None
-
-    }
-
-    #[graphql(name = "customerTypes")]
-    async fn customer_types(&self, #[graphql(name = "where")] _arg_where: Option<CustomerTypeWhereInput>, #[graphql(name = "search")] _arg_search: Option<String>, #[graphql(name = "sortBy")] _arg_sort_by: Option<CustomerTypeSortingInput>, #[graphql(name = "before")] _arg_before: Option<String>, #[graphql(name = "after")] _arg_after: Option<String>, #[graphql(name = "first")] _arg_first: Option<i32>, #[graphql(name = "last")] _arg_last: Option<i32>) -> Option<CustomerTypeCountableConnection> {
-
-        Some(CustomerTypeCountableConnection { edges: vec![], page_info: Some(PageInfo { has_next_page: false, has_previous_page: false, start_cursor: None, end_cursor: None }) })
-
-    }
-
 }
 
 
@@ -29616,13 +29602,6 @@ impl GenMutation {
 
     }
 
-    #[graphql(name = "taxConfigurationUpdate")]
-    async fn tax_configuration_update(&self, #[graphql(name = "id")] _arg_id: ID, #[graphql(name = "input")] _arg_input: TaxConfigurationUpdateInput) -> Option<TaxConfigurationUpdate> {
-
-        Some(TaxConfigurationUpdate { errors: vec![] })
-
-    }
-
     #[graphql(name = "taxCountryConfigurationUpdate")]
     async fn tax_country_configuration_update(&self, #[graphql(name = "countryCode")] _arg_country_code: CountryCode, #[graphql(name = "updateTaxClassRates")] _arg_update_tax_class_rates: Vec<TaxClassRateInput>) -> Option<TaxCountryConfigurationUpdate> {
 
@@ -29634,20 +29613,6 @@ impl GenMutation {
     async fn tax_country_configuration_delete(&self, #[graphql(name = "countryCode")] _arg_country_code: CountryCode) -> Option<TaxCountryConfigurationDelete> {
 
         Some(TaxCountryConfigurationDelete { errors: vec![] })
-
-    }
-
-    #[graphql(name = "staffNotificationRecipientCreate")]
-    async fn staff_notification_recipient_create(&self, #[graphql(name = "input")] _arg_input: StaffNotificationRecipientInput) -> Option<StaffNotificationRecipientCreate> {
-
-        Some(StaffNotificationRecipientCreate { errors: vec![], staff_notification_recipient: None })
-
-    }
-
-    #[graphql(name = "staffNotificationRecipientDelete")]
-    async fn staff_notification_recipient_delete(&self, #[graphql(name = "id")] _arg_id: ID) -> Option<StaffNotificationRecipientDelete> {
-
-        Some(StaffNotificationRecipientDelete { errors: vec![] })
 
     }
 
@@ -30628,48 +30593,6 @@ impl GenMutation {
     async fn external_logout(&self, #[graphql(name = "input")] _arg_input: GenJSONString, #[graphql(name = "pluginId")] _arg_plugin_id: String) -> Option<ExternalLogout> {
 
         Some(ExternalLogout { logout_data: None, errors: vec![] })
-
-    }
-
-    #[graphql(name = "customerTypeCreate")]
-    async fn customer_type_create(&self, #[graphql(name = "input")] _arg_input: CustomerTypeCreateInput) -> Option<CustomerTypeCreate> {
-
-        Some(CustomerTypeCreate { errors: vec![], customer_type: None })
-
-    }
-
-    #[graphql(name = "customerTypeUpdate")]
-    async fn customer_type_update(&self, #[graphql(name = "id")] _arg_id: ID, #[graphql(name = "input")] _arg_input: CustomerTypeUpdateInput) -> Option<CustomerTypeUpdate> {
-
-        Some(CustomerTypeUpdate { errors: vec![], customer_type: None })
-
-    }
-
-    #[graphql(name = "customerTypeDelete")]
-    async fn customer_type_delete(&self, #[graphql(name = "id")] _arg_id: ID) -> Option<CustomerTypeDelete> {
-
-        Some(CustomerTypeDelete { errors: vec![], customer_type: None })
-
-    }
-
-    #[graphql(name = "customerTypeAssignAttributes")]
-    async fn customer_type_assign_attributes(&self, #[graphql(name = "attributeIds")] _arg_attribute_ids: Vec<ID>, #[graphql(name = "customerTypeId")] _arg_customer_type_id: ID) -> Option<CustomerTypeAssignAttributes> {
-
-        Some(CustomerTypeAssignAttributes { customer_type: None, errors: vec![] })
-
-    }
-
-    #[graphql(name = "customerTypeUnassignAttributes")]
-    async fn customer_type_unassign_attributes(&self, #[graphql(name = "attributeIds")] _arg_attribute_ids: Vec<ID>, #[graphql(name = "customerTypeId")] _arg_customer_type_id: ID) -> Option<CustomerTypeUnassignAttributes> {
-
-        Some(CustomerTypeUnassignAttributes { customer_type: None, errors: vec![] })
-
-    }
-
-    #[graphql(name = "customerTypeReorderAttributes")]
-    async fn customer_type_reorder_attributes(&self, #[graphql(name = "customerTypeId")] _arg_customer_type_id: ID, #[graphql(name = "moves")] _arg_moves: Vec<ReorderInput>) -> Option<CustomerTypeReorderAttributes> {
-
-        Some(CustomerTypeReorderAttributes { customer_type: None, errors: vec![] })
 
     }
 
