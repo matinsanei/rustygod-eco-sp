@@ -26,7 +26,7 @@ pub struct GqlCheckout {
     pub lines: Vec<GqlCheckoutLine>,
 }
 
-fn to_gql_checkout(
+pub(crate) fn to_gql_checkout(
     co: &saleor_rustify_db::entities::checkout_checkout::Model,
     lines: &[saleor_rustify_db::entities::checkout_checkoutline::Model],
     channel: &str,

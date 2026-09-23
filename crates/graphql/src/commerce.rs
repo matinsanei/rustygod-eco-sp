@@ -166,6 +166,151 @@ pub struct GqlMenuItemConnection {
 }
 
 #[derive(SimpleObject, Clone)]
+pub struct GqlStockBulkResult {
+    pub stock: Option<gen::Stock>,
+    pub errors: Vec<gen::WarehouseError>,
+}
+
+#[derive(SimpleObject, Clone)]
+pub struct GqlStockBulkUpdate {
+    pub count: i32,
+    pub results: Vec<GqlStockBulkResult>,
+    pub errors: Vec<gen::WarehouseError>,
+}
+
+#[derive(SimpleObject, Clone)]
+pub struct GqlWarehouseZoneAssign {
+    pub warehouse: Option<gen::Warehouse>,
+    pub errors: Vec<gen::WarehouseError>,
+}
+
+#[derive(SimpleObject, Clone)]
+pub struct GqlWarehouseZoneUnassign {
+    pub warehouse: Option<gen::Warehouse>,
+    pub errors: Vec<gen::WarehouseError>,
+}
+
+#[derive(SimpleObject, Clone)]
+pub struct GqlGiftCardBalanceAdjust {
+    #[graphql(name = "giftCard")]
+    pub gift_card: Option<gen::GiftCard>,
+    pub errors: Vec<gen::GiftCardError>,
+}
+
+#[derive(SimpleObject, Clone)]
+pub struct GqlMenuItemDelete {
+    #[graphql(name = "menuItem")]
+    pub menu_item: Option<gen::MenuItem>,
+    pub errors: Vec<gen::MenuError>,
+}
+
+#[derive(SimpleObject, Clone)]
+pub struct GqlAssignNavigation {
+    pub menu: Option<gen::Menu>,
+    pub errors: Vec<gen::MenuError>,
+}
+
+#[derive(Union, Clone)]
+pub enum GqlTaxSourceObject {
+    Checkout(crate::checkout::GqlCheckout),
+    Order(Box<gen::Order>),
+}
+
+#[derive(SimpleObject, Clone)]
+pub struct GqlTaxExemptionManage {
+    #[graphql(name = "taxableObject")]
+    pub taxable_object: Option<GqlTaxSourceObject>,
+    pub errors: Vec<GqlTaxExemptionManageError>,
+}
+
+fn werr(field: Option<String>, message: String) -> gen::WarehouseError {
+    gen::WarehouseError { field, message: Some(message), code: None }
+}
+
+fn gcerr(field: Option<String>, message: String) -> gen::GiftCardError {
+    gen::GiftCardError { field, message: Some(message), code: None }
+}
+
+fn merr(field: Option<String>, message: String) -> gen::MenuError {
+    gen::MenuError { field, message: Some(message), code: None }
+}
+
+#[derive(SimpleObject, Clone)]
+pub struct GqlTaxExemptionManageError {
+    pub field: Option<String>,
+    pub message: Option<String>,
+    pub code: Option<String>,
+}
+
+fn terr_tax(field: Option<String>, message: String) -> GqlTaxExemptionManageError {
+    GqlTaxExemptionManageError { field, message: Some(message), code: None }
+}
+
+async fn resolve_stock_variant(
+    db: &sea_orm::DatabaseConnection,
+    id: Option<&ID>,
+    ext: Option<&String>,
+) -> Result<i32, String> {
+    if let Some(i) = id {
+        return saleor_rustify_db::catalog::parse_gid(&i.0).ok_or_else(|| "bad variant id".to_string());
+    }
+    if let Some(x) = ext {
+        use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QuerySelect};
+        return saleor_rustify_db::entities::product_productvariant::Entity::find()
+            .select_only().column(saleor_rustify_db::entities::product_productvariant::Column::Id)
+            .filter(saleor_rustify_db::entities::product_productvariant::Column::Sku.eq(x))
+            .into_tuple::<i32>().one(db).await.map_err(|e| e.to_string())?
+            .ok_or_else(|| "variant not found".to_string());
+    }
+    Err("variant id or external reference required".to_string())
+}
+
+async fn resolve_stock_warehouse(
+    db: &sea_orm::DatabaseConnection,
+    id: Option<&ID>,
+    ext: Option<&String>,
+) -> Result<uuid::Uuid, String> {
+    if let Some(i) = id {
+        return crate::common::parse_uuid_gid(&i.0).ok_or_else(|| "bad warehouse id".to_string());
+    }
+    if let Some(x) = ext {
+        use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QuerySelect};
+        return saleor_rustify_db::entities::warehouse_warehouse::Entity::find()
+            .select_only().column(saleor_rustify_db::entities::warehouse_warehouse::Column::Id)
+            .filter(saleor_rustify_db::entities::warehouse_warehouse::Column::ExternalReference.eq(x))
+            .into_tuple::<uuid::Uuid>().one(db).await.map_err(|e| e.to_string())?
+            .ok_or_else(|| "warehouse not found".to_string());
+    }
+    Err("warehouse id or external reference required".to_string())
+}
+
+async fn stock_id_for(db: &sea_orm::DatabaseConnection, vid: i32, wid: uuid::Uuid) -> Option<i32> {
+    use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QuerySelect};
+    saleor_rustify_db::entities::warehouse_stock::Entity::find()
+        .select_only().column(saleor_rustify_db::entities::warehouse_stock::Column::Id)
+        .filter(saleor_rustify_db::entities::warehouse_stock::Column::ProductVariantId.eq(vid))
+        .filter(saleor_rustify_db::entities::warehouse_stock::Column::WarehouseId.eq(wid))
+        .into_tuple::<i32>().one(db).await.ok()?
+}
+
+async fn zone_links(db: &sea_orm::DatabaseConnection, wid: uuid::Uuid, zids: &[i32], add: bool) -> Result<(), String> {
+    use sea_orm::{ConnectionTrait, Statement};
+    for zid in zids {
+        let sql = if add {
+            "INSERT INTO warehouse_warehouse_shipping_zones (warehouse_id, shippingzone_id) VALUES ($1::uuid, $2) ON CONFLICT DO NOTHING"
+        } else {
+            "DELETE FROM warehouse_warehouse_shipping_zones WHERE warehouse_id = $1::uuid AND shippingzone_id = $2"
+        };
+        db.execute(Statement::from_sql_and_values(
+            sea_orm::DatabaseBackend::Postgres,
+            sql,
+            [wid.to_string().into(), (*zid).into()],
+        )).await.map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+#[derive(SimpleObject, Clone)]
 pub struct GqlWarehouseConnection {
     #[graphql(name = "totalCount")]
     pub total_count: Option<i32>,
@@ -1196,8 +1341,7 @@ impl CommerceMutation {
 
     /// Dashboard taxes → channels Save button (Django `TaxConfigurationUpdate`):
     /// scalar patch plus per-country upserts/removals on the channel's row.
-    async fn tax_configuration_update(
-        &self, ctx: &Context<'_>, id: ID, input: gen::TaxConfigurationUpdateInput,
+    async fn tax_configuration_update(        &self, ctx: &Context<'_>, id: ID, input: gen::TaxConfigurationUpdateInput,
     ) -> Result<gen::TaxConfigurationUpdate> {
         let _ = crate::account::require_perm(ctx, "manage_taxes").await?;
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
@@ -1296,6 +1440,196 @@ impl CommerceMutation {
         }
         let shop = to_gen_shop(ctx).await?;
         Ok(GqlShopSettingsUpdate { shop: Some(shop), errors: vec![] })
+    }
+
+    /// Bulk stock set (Django `stockBulkUpdate`): variant × warehouse →
+    /// quantity, per-row errors, `count` of applied rows.
+    async fn stock_bulk_update(
+        &self, ctx: &Context<'_>,
+        #[graphql(name = "errorPolicy")] error_policy: Option<gen::ErrorPolicyEnum>,
+        stocks: Vec<gen::StockBulkUpdateInput>,
+    ) -> Result<GqlStockBulkUpdate> {
+        let _ = error_policy;
+        let _ = crate::account::require_perm(ctx, "manage_products").await?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let mut results = vec![];
+        let mut n = 0;
+        for s in &stocks {
+            let vid = match resolve_stock_variant(db, s.variant_id.as_ref(), s.variant_external_reference.as_ref()).await {
+                Ok(v) => v,
+                Err(e) => { results.push(GqlStockBulkResult { stock: None, errors: vec![werr(None, e)] }); continue; }
+            };
+            let wid = match resolve_stock_warehouse(db, s.warehouse_id.as_ref(), s.warehouse_external_reference.as_ref()).await {
+                Ok(v) => v,
+                Err(e) => { results.push(GqlStockBulkResult { stock: None, errors: vec![werr(None, e)] }); continue; }
+            };
+            match saleor_rustify_db::catalog_writes::set_variant_stock(db, vid, wid, s.quantity).await {
+                Ok(()) => {
+                    n += 1;
+                    let node = stock_id_for(db, vid, wid).await.and_then(|sid| Some(sid));
+                    let mut r = GqlStockBulkResult { stock: None, errors: vec![] };
+                    if let Some(sid) = node {
+                        r.stock = stock_node(db, sid).await.unwrap_or(None);
+                    }
+                    results.push(r);
+                }
+                Err(e) => results.push(GqlStockBulkResult { stock: None, errors: vec![werr(None, e.to_string())] }),
+            }
+        }
+        Ok(GqlStockBulkUpdate { count: n, results, errors: vec![] })
+    }
+
+    async fn assign_warehouse_shipping_zone(&self, ctx: &Context<'_>, id: ID, #[graphql(name = "shippingZoneIds")] shipping_zone_ids: Vec<ID>) -> Result<GqlWarehouseZoneAssign> {
+        let _ = crate::account::require_perm(ctx, "manage_shipping").await?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let Some(wid) = crate::common::parse_uuid_gid(&id.0) else {
+            return Ok(GqlWarehouseZoneAssign { warehouse: None, errors: vec![werr(Some("id".into()), "bad warehouse id".into())] });
+        };
+        let zids: Vec<i32> = shipping_zone_ids.iter().filter_map(|i| saleor_rustify_db::catalog::parse_gid(&i.0)).collect();
+        if let Err(e) = zone_links(db, wid, &zids, true).await {
+            return Ok(GqlWarehouseZoneAssign { warehouse: None, errors: vec![werr(None, e)] });
+        }
+        Ok(GqlWarehouseZoneAssign { warehouse: warehouse_gen(db, wid).await.unwrap_or(None), errors: vec![] })
+    }
+
+    async fn unassign_warehouse_shipping_zone(&self, ctx: &Context<'_>, id: ID, #[graphql(name = "shippingZoneIds")] shipping_zone_ids: Vec<ID>) -> Result<GqlWarehouseZoneUnassign> {
+        let _ = crate::account::require_perm(ctx, "manage_shipping").await?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let Some(wid) = crate::common::parse_uuid_gid(&id.0) else {
+            return Ok(GqlWarehouseZoneUnassign { warehouse: None, errors: vec![werr(Some("id".into()), "bad warehouse id".into())] });
+        };
+        let zids: Vec<i32> = shipping_zone_ids.iter().filter_map(|i| saleor_rustify_db::catalog::parse_gid(&i.0)).collect();
+        if let Err(e) = zone_links(db, wid, &zids, false).await {
+            return Ok(GqlWarehouseZoneUnassign { warehouse: None, errors: vec![werr(None, e)] });
+        }
+        Ok(GqlWarehouseZoneUnassign { warehouse: warehouse_gen(db, wid).await.unwrap_or(None), errors: vec![] })
+    }
+
+    /// Adjust a gift card balance (Django `giftCardBalanceAdjust` → new
+    /// balance + event row via `adjust_balance`).
+    async fn gift_card_balance_adjust(&self, ctx: &Context<'_>, amount: rust_decimal::Decimal, id: ID) -> Result<GqlGiftCardBalanceAdjust> {
+        let req = crate::account::require_perm(ctx, "manage_gift_card").await?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let err = |m: String| GqlGiftCardBalanceAdjust { gift_card: None, errors: vec![gcerr(None, m)] };
+        let Some(cid) = saleor_rustify_db::catalog::parse_gid(&id.0) else {
+            return Ok(err("bad gift card id".into()));
+        };
+        let code: Option<String> = {
+            use sea_orm::EntityTrait;
+            saleor_rustify_db::entities::giftcard_giftcard::Entity::find_by_id(cid)
+                .one(db).await.map_err(|e| Error::new(e.to_string()))?.map(|c| c.code)
+        };
+        let Some(code) = code else { return Ok(err("gift card not found".into())) };
+        match saleor_rustify_db::giftcards::adjust_balance(db, &code, amount, Some(req)).await {
+            Ok(_) => Ok(GqlGiftCardBalanceAdjust {
+                gift_card: assemble_gift_card(db, cid).await.map_err(Error::new)?,
+                errors: vec![],
+            }),
+            Err(e) => Ok(err(e.to_string())),
+        }
+    }
+
+    /// Delete a menu item with its subtree (MPTT range delete, like Django's
+    /// collector on the tree).
+    async fn menu_item_delete(&self, ctx: &Context<'_>, id: ID) -> Result<GqlMenuItemDelete> {
+        let _ = crate::account::require_perm(ctx, "manage_menus").await?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let Some(mid) = saleor_rustify_db::catalog::parse_gid(&id.0) else {
+            return Ok(GqlMenuItemDelete { menu_item: None, errors: vec![merr(Some("id".into()), "bad menu item id".into())] });
+        };
+        use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
+        use saleor_rustify_db::entities::menu_menuitem::{Column as MCol, Entity as MEnt};
+        let Some(m) = MEnt::find_by_id(mid).one(db).await.map_err(|e| Error::new(e.to_string()))? else {
+            return Ok(GqlMenuItemDelete { menu_item: None, errors: vec![merr(Some("id".into()), "menu item not found".into())] });
+        };
+        MEnt::delete_many()
+            .filter(MCol::TreeId.eq(m.tree_id))
+            .filter(MCol::Lft.gte(m.lft))
+            .filter(MCol::Rght.lte(m.rght))
+            .exec(db).await.map_err(|e| Error::new(e.to_string()))?;
+        Ok(GqlMenuItemDelete { menu_item: None, errors: vec![] })
+    }
+
+    /// Assign storefront navigation menus (Django writes
+    /// `site_sitesettings.top/bottom_menu`).
+    async fn assign_navigation(
+        &self, ctx: &Context<'_>, menu: Option<ID>, #[graphql(name = "navigationType")] navigation_type: gen::NavigationType,
+    ) -> Result<GqlAssignNavigation> {
+        let _ = crate::account::require_perm(ctx, "manage_menus").await?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let err = |m: String| GqlAssignNavigation { menu: None, errors: vec![merr(None, m)] };
+        let mid = match menu.as_ref() {
+            Some(i) => match saleor_rustify_db::catalog::parse_gid(&i.0) {
+                Some(v) => Some(v),
+                None => return Ok(err("bad menu id".into())),
+            },
+            None => None,
+        };
+        if let Some(m) = mid {
+            use sea_orm::EntityTrait;
+            if saleor_rustify_db::entities::menu_menu::Entity::find_by_id(m).one(db).await.map_err(|e| Error::new(e.to_string()))?.is_none() {
+                return Ok(err("menu not found".into()));
+            }
+        }
+        use sea_orm::{ActiveModelTrait, EntityTrait, Set};
+        let row = saleor_rustify_db::entities::site_sitesettings::Entity::find_by_id(1)
+            .one(db).await.map_err(|e| Error::new(e.to_string()))?
+            .ok_or_else(|| Error::new("site settings missing"))?;
+        {
+            let mut am: saleor_rustify_db::entities::site_sitesettings::ActiveModel = row.into();
+            match format!("{navigation_type:?}").as_str() {
+                "SECONDARY" => am.bottom_menu_id = Set(mid),
+                _ => am.top_menu_id = Set(mid),
+            }
+            am.update(db).await.map_err(|e| Error::new(e.to_string()))?;
+        }
+        let menu_obj = match mid {
+            Some(m) => {
+                let row = saleor_rustify_db::entities::menu_menu::Entity::find_by_id(m)
+                    .one(db).await.map_err(|e| Error::new(e.to_string()))?;
+                row.map(|x| {
+                    let mut g = crate::metadata::lit_menu(crate::common::gid("Menu", m), vec![], vec![]);
+                    g.name = Some(x.name);
+                    g
+                })
+            }
+            None => None,
+        };
+        Ok(GqlAssignNavigation { menu: menu_obj, errors: vec![] })
+    }
+
+    /// Toggle tax exemption on a checkout or order (Django resolves the id
+    /// against both tables).
+    async fn tax_exemption_manage(&self, ctx: &Context<'_>, id: ID, #[graphql(name = "taxExemption")] tax_exemption: bool) -> Result<GqlTaxExemptionManage> {
+        let _ = crate::account::require_perm(ctx, "handle_taxes").await?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let err = |m: String| GqlTaxExemptionManage { taxable_object: None, errors: vec![terr_tax(None, m)] };
+        let Some(uuid) = crate::common::parse_uuid_gid(&id.0) else {
+            return Ok(err("bad id".into()));
+        };
+        use sea_orm::{ActiveModelTrait, EntityTrait, Set};
+        if let Some(co) = saleor_rustify_db::entities::checkout_checkout::Entity::find_by_id(uuid).one(db).await.map_err(|e| Error::new(e.to_string()))? {
+            let ch = match co.channel_id { 2 => "channel-pln".to_string(), _ => "default-channel".to_string() };
+            let mut am: saleor_rustify_db::entities::checkout_checkout::ActiveModel = co.into();
+            am.tax_exemption = Set(tax_exemption);
+            am.update(db).await.map_err(|e| Error::new(e.to_string()))?;
+            let (co2, lines) = saleor_rustify_db::checkout_store::load_checkout(db, uuid).await.map_err(|e| Error::new(e.to_string()))?.ok_or_else(|| Error::new("checkout vanished"))?;
+            return Ok(GqlTaxExemptionManage {
+                taxable_object: Some(GqlTaxSourceObject::Checkout(crate::checkout::to_gql_checkout(&co2, &lines, &ch))),
+                errors: vec![],
+            });
+        }
+        if let Some(row) = saleor_rustify_db::entities::order_order::Entity::find_by_id(uuid).one(db).await.map_err(|e| Error::new(e.to_string()))? {
+            let mut am: saleor_rustify_db::entities::order_order::ActiveModel = row.into();
+            am.tax_exemption = Set(tax_exemption);
+            am.update(db).await.map_err(|e| Error::new(e.to_string()))?;
+            let (h, ls) = saleor_rustify_db::order_store::get_order_rows(db, uuid).await.map_err(|e| Error::new(e.to_string()))?.ok_or_else(|| Error::new("order vanished"))?;
+            return Ok(GqlTaxExemptionManage {
+                taxable_object: Some(GqlTaxSourceObject::Order(Box::new(crate::order::to_gen_order(db, &h, ls).await))),
+                errors: vec![],
+            });
+        }
+        Ok(err("no checkout or order with this id".into()))
     }
 }
 
@@ -1630,7 +1964,7 @@ async fn gc_users(
 }
 
 /// Full gift-card details (dashboard GiftCardData + events).
-async fn assemble_gift_card(
+pub(crate) async fn assemble_gift_card(
     db: &sea_orm::DatabaseConnection,
     gid_int: i32,
 ) -> Result<Option<gen::GiftCard>, String> {

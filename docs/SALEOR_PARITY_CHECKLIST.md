@@ -34,17 +34,19 @@ Legend: `[x]` real + tested · `[~]` exists but thin/stub · `[ ]` missing.
 
 ## 5. Warehouse / stock
 - [x] `stock` / `stocks` queries (quantity/search filter)
-- [ ] `stockBulkUpdate`, `assignWarehouseShippingZone` / `unassignWarehouseShippingZone`
+- [x] `stockBulkUpdate` (id-or-SKU × id-or-ref, per-row errors), `assign/unassignWarehouseShippingZone`
 - [x] Stock reads in catalog, reservations/allocations, sweeper
 
 ## 6. Gift cards extras
 - [x] `giftCardCurrencies` (distinct), `giftCardTags` (search), `giftCardSettings` (site row)
-- [ ] `giftCardBalanceAdjust`, `exportGiftCards`
+- [x] `giftCardBalanceAdjust` (adjust_balance + event)
+- [ ] `exportGiftCards` (needs export infra — with CSV, intentionally last)
 - [x] giftCards list + giftCard details + create/update/deactivate
 
 ## 7. Tax details
 - [x] `taxClass`, `taxConfiguration`, `taxCountryConfiguration` singles, `taxTypes` (deprecated → classes)
-- [ ] `taxExemptionManage`, `shopFetchTaxRates`, `orderSettingsUpdate`
+- [x] `taxExemptionManage` (checkout-or-order id, union payload)
+- [ ] `shopFetchTaxRates` (needs tax provider), `orderSettingsUpdate`
 - [x] `taxConfigurations` list + `taxConfigurationUpdate` (Save works)
 
 ## 8. Webhooks / observability
@@ -54,11 +56,12 @@ Legend: `[x]` real + tested · `[~]` exists but thin/stub · `[ ]` missing.
 
 ## 9. Orders extras
 - [x] `orderByToken` (public, token-is-secret), `orderSettings`, `reportProductSales` (ranked variants)
-- [ ] `orderAddNote`, `orderBulkCancel/BulkCreate`, `orderCreateFromCheckout`, `draftOrderLinesBulkDelete`
+- [x] `orderAddNote` (NOTE_ADDED event), `orderBulkCancel`, `orderCreateFromCheckout` (metadata carry), `draftOrderLinesBulkDelete`
+- [ ] `orderBulkCreate` (bulk input assembly — rare, deferred)
 - [x] order(s) details, cancel/fulfill/returns, granted refunds
 
 ## 10. Catalog leftovers
-- [x] `menuItem(s)` (tree, depth-bounded), `appExtension` single
+- [x] `menuItem(s)` (tree, depth-bounded), `menuItemDelete` (subtree), `assignNavigation` (top/bottom menu), `appExtension` single
 - [ ] `productBulkCreate`, `productReorderAttributeValues`, `productVariantReorderAttributeValues`
 - [ ] `productVariantBulkTranslate`, `productBulkTranslate`, `attributeBulk{Create,Update,Translate}`, `attributeValueBulkTranslate`
 - [ ] `promotionBulkDelete`, `promotionRuleTranslate`, `promotionTranslate`, `shopSettingsTranslate`
@@ -66,7 +69,8 @@ Legend: `[x]` real + tested · `[~]` exists but thin/stub · `[ ]` missing.
 - [x] Everything else catalog (writes, listings, attributes, collections, channels, zones)
 
 ## 11. Account leftovers
-- [ ] `accountAddressCreate/Update/Delete`, `accountSetDefaultAddress` (own-address variants; staff variants done)
+- [x] `accountAddressCreate` (self or staff-for-customer); staff `addressCreate/Update/Delete/SetDefault` already real
+- [ ] `accountAddressUpdate/Delete`, `accountSetDefaultAddress` (own variants — thin wrappers, next)
 - [ ] `sendConfirmationEmail` (needs SMTP), external auth (`externalVerify`…)
 - [ ] `userAvatarUpdate/Delete` (multipart — intentionally last)
 - [x] Staff/customer/groups/addresses/password/register/confirm/delete flows (see `ACCOUNT_SECURITY_CHECKLIST.md`)

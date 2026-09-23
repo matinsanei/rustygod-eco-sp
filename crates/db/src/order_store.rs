@@ -27,7 +27,7 @@ use serde_json::json;
 use uuid::Uuid;
 
 use crate::{
-    entities::{order_order, order_orderline, product_product, product_producttype, product_productvariant},
+    entities::{order_order, order_orderevent, order_orderline, product_product, product_producttype, product_productvariant},
     DbError, Result,
 };
 
@@ -427,4 +427,29 @@ pub async fn mint_from_checkout(
         currency,
         created_at: Utc::now(),
     })
+}
+
+/// Append a staff note event (Django `orderAddNote` → `NOTE_ADDED` event).
+pub async fn add_order_note(
+    db: &impl sea_orm::ConnectionTrait,
+    order_id: uuid::Uuid,
+    user_id: Option<i32>,
+    message: &str,
+) -> Result<()> {
+    use chrono::Utc;
+    use sea_orm::{ActiveModelTrait, EntityTrait, Set};
+    if order_order::Entity::find_by_id(order_id).one(db).await?.is_none() {
+        return Err(DbError::App("order not found".into()));
+    }
+    order_orderevent::ActiveModel {
+        date: Set(Utc::now().into()),
+        r#type: Set("note_added".to_string()),
+        user_id: Set(user_id),
+        parameters: Set(serde_json::json!({"message": message})),
+        order_id: Set(order_id),
+        ..Default::default()
+    }
+    .insert(db)
+    .await?;
+    Ok(())
 }

@@ -103,7 +103,7 @@ fn parse_id(s: &str) -> Uuid {
 
 /// Shared order assembly: real rows where we have them (id/number/status/
  /// totals/lines/channel/variant+product/totals), `None`/`[]` elsewhere.
-async fn to_gen_order(
+pub(crate) async fn to_gen_order(
     db: &sea_orm::DatabaseConnection,
     h: &saleor_rustify_db::order_store::OrderHeader,
     ls: Vec<saleor_rustify_db::entities::order_orderline::Model>,
@@ -392,7 +392,7 @@ impl OrderQuery {
             .filter(CCol::Slug.eq("default-channel"))
             .into_tuple()
             .one(db).await.map_err(|e| Error::new(e.to_string()))?;
-        let Some((confirm, fulfill, expire, strategy, unpaid, freeze)) = row else {
+        let Some((confirm, fulfill, expire, strategy, unpaid, _freeze)) = row else {
             return Err(Error::new("default channel missing"));
         };
         // INTERVAL → days via EXTRACT (never decode it into Rust).
@@ -563,14 +563,47 @@ pub struct GqlOrderCancel {
     pub errors: Vec<gen::OrderError>,
 }
 
+#[derive(SimpleObject, Clone)]
+pub struct GqlOrderAddNote {
+    pub order: Option<gen::Order>,
+    pub event: Option<gen::OrderEvent>,
+    pub errors: Vec<gen::OrderError>,
+}
+
+#[derive(SimpleObject, Clone)]
+pub struct GqlOrderBulkCancel {
+    pub count: i32,
+    pub errors: Vec<gen::OrderError>,
+}
+
+#[derive(SimpleObject, Clone)]
+pub struct GqlDraftLinesBulkDelete {
+    pub count: i32,
+    pub errors: Vec<gen::OrderError>,
+}
+
+#[derive(SimpleObject, Clone)]
+pub struct GqlOrderCreateFromCheckout {
+    pub order: Option<gen::Order>,
+    pub errors: Vec<gen::OrderError>,
+}
+
+#[derive(InputObject)]
+pub struct OrderAddNoteInput {
+    pub message: String,
+}
+
+fn oerr(message: String) -> gen::OrderError {
+    gen::OrderError { field: None, message: Some(message), code: None, warehouse: None, order_lines: vec![], address_type: None }
+}
+
 #[derive(Default)]
 pub struct OrderMutation;
 
 #[Object]
 impl OrderMutation {
     /// Dashboard `OrderCancel` shape (`{ order { ...OrderDetails } errors }`).
-    async fn order_cancel(&self, ctx: &Context<'_>, id: ID) -> Result<GqlOrderCancel> {
-        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+    async fn order_cancel(&self, ctx: &Context<'_>, id: ID) -> Result<GqlOrderCancel> {        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
         authorize(ctx, crate::context::MANAGE_ORDERS).await?;
         let oid = parse_id(&id.0);
         saleor_rustify_db::cancel::cancel_order(db, oid).await.map_err(|e| Error::new(e.to_string()))?;
@@ -631,6 +664,91 @@ impl OrderMutation {
         }).collect();
         let out = saleor_rustify_db::fulfillment::return_and_refund(db, oid, &items, &reason, restock.unwrap_or(true), None).await.map_err(|e| Error::new(e.to_string()))?;
         Ok(format!("fulfillment:{} grant:{}", out.fulfillment_id, out.granted_refund_id))
+    }
+
+    /// Staff order note (Django `orderAddNote` → `NOTE_ADDED` event row).
+    async fn order_add_note(&self, ctx: &Context<'_>, order: ID, input: OrderAddNoteInput) -> Result<GqlOrderAddNote> {
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        authorize(ctx, crate::context::MANAGE_ORDERS).await?;
+        let (uid, _) = crate::account::requester(ctx, db).await?;
+        let oid = parse_id(&order.0);
+        if input.message.trim().is_empty() {
+            return Ok(GqlOrderAddNote { order: None, event: None, errors: vec![oerr("message is required".into())] });
+        }
+        if let Err(e) = saleor_rustify_db::order_store::add_order_note(db, oid, Some(uid), input.message.trim()).await {
+            return Ok(GqlOrderAddNote { order: None, event: None, errors: vec![oerr(e.to_string())] });
+        }
+        let (h, ls) = saleor_rustify_db::order_store::get_order_rows(db, oid).await.map_err(|e| Error::new(e.to_string()))?.ok_or_else(|| Error::new("order vanished"))?;
+        Ok(GqlOrderAddNote { order: Some(to_gen_order(db, &h, ls).await), event: None, errors: vec![] })
+    }
+
+    /// Bulk cancel (per-order guards; survivors always commit).
+    async fn order_bulk_cancel(&self, ctx: &Context<'_>, ids: Vec<ID>) -> Result<GqlOrderBulkCancel> {
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        authorize(ctx, crate::context::MANAGE_ORDERS).await?;
+        let mut n = 0;
+        for i in &ids {
+            if saleor_rustify_db::cancel::cancel_order(db, parse_id(&i.0)).await.is_ok() {
+                n += 1;
+            }
+        }
+        Ok(GqlOrderBulkCancel { count: n, errors: vec![] })
+    }
+
+    /// Bulk-delete draft order lines (line ids; order resolved per row).
+    async fn draft_order_lines_bulk_delete(&self, ctx: &Context<'_>, ids: Vec<ID>) -> Result<GqlDraftLinesBulkDelete> {
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        authorize(ctx, crate::context::MANAGE_ORDERS).await?;
+        let (uid, _) = crate::account::requester(ctx, db).await?;
+        let mut n = 0;
+        for i in &ids {
+            let lid = parse_id(&i.0);
+            use sea_orm::EntityTrait;
+            let oid: Option<Uuid> = saleor_rustify_db::entities::order_orderline::Entity::find_by_id(lid)
+                .one(db).await.map_err(|e| Error::new(e.to_string()))?.map(|l| l.order_id);
+            if let Some(oid) = oid {
+                if saleor_rustify_db::drafts::remove_line(db, oid, lid, Some(uid)).await.is_ok() {
+                    n += 1;
+                }
+            }
+        }
+        Ok(GqlDraftLinesBulkDelete { count: n, errors: vec![] })
+    }
+
+    /// Create an order from a checkout (Django `orderCreateFromCheckout`:
+    /// same atomic path as `checkoutComplete`, optional metadata carry).
+    async fn order_create_from_checkout(
+        &self, ctx: &Context<'_>, id: ID,
+        metadata: Option<Vec<crate::common::MetadataInput>>,
+        #[graphql(name = "privateMetadata")] private_metadata: Option<Vec<crate::common::MetadataInput>>,
+        #[graphql(name = "removeCheckout")] remove_checkout: Option<bool>,
+    ) -> Result<GqlOrderCreateFromCheckout> {
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        authorize(ctx, crate::context::MANAGE_ORDERS).await?;
+        if remove_checkout == Some(false) {
+            // Our completion always consumes the checkout (same end state as
+            // the default); keeping it usable is not supported honestly.
+            return Ok(GqlOrderCreateFromCheckout { order: None, errors: vec![oerr("removeCheckout=false is not supported".into())] });
+        }
+        let token = crate::common::parse_uuid_gid(&id.0).ok_or_else(|| Error::new("bad checkout id"))?;
+        let out = saleor_rustify_db::complete::complete_checkout(db, token).await.map_err(|e| Error::new(e.to_string()))?;
+        if metadata.is_some() || private_metadata.is_some() {
+            use sea_orm::{ActiveModelTrait, EntityTrait, Set};
+            if let Some(row) = saleor_rustify_db::entities::order_order::Entity::find_by_id(out.order_id).one(db).await.map_err(|e| Error::new(e.to_string()))? {
+                let cur_md = serde_json::to_value(&row.metadata).unwrap_or(serde_json::Value::Null);
+                let cur_pmd = serde_json::to_value(&row.private_metadata).unwrap_or(serde_json::Value::Null);
+                let mut am: saleor_rustify_db::entities::order_order::ActiveModel = row.into();
+                if let Some(m) = metadata.as_ref() {
+                    am.metadata = Set(crate::common::merge_metadata(&cur_md, m));
+                }
+                if let Some(m) = private_metadata.as_ref() {
+                    am.private_metadata = Set(crate::common::merge_metadata(&cur_pmd, m));
+                }
+                am.update(db).await.map_err(|e| Error::new(e.to_string()))?;
+            }
+        }
+        let (h, ls) = saleor_rustify_db::order_store::get_order_rows(db, out.order_id).await.map_err(|e| Error::new(e.to_string()))?.ok_or_else(|| Error::new("order vanished"))?;
+        Ok(GqlOrderCreateFromCheckout { order: Some(to_gen_order(db, &h, ls).await), errors: vec![] })
     }
 }
 

@@ -798,6 +798,13 @@ pub struct GqlEmailChange {
     pub errors: Vec<GqlAccountError>,
 }
 
+#[derive(SimpleObject, Clone)]
+pub struct GqlAccountAddressCreate {
+    pub user: Option<gen::User>,
+    pub address: Option<crate::order::GqlAddress>,
+    pub errors: Vec<GqlAccountError>,
+}
+
 async fn resolve_user_id(db: &sea_orm::DatabaseConnection, id: Option<ID>, ext: Option<String>) -> Result<Option<i32>> {
     use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QuerySelect};
     use saleor_rustify_db::entities::account_user::{Column as UCol, Entity as UEnt};
@@ -1268,6 +1275,52 @@ impl AccountMutation {
                 user: Some(assemble_user(db, uid, &uid.to_string()).await.map_err(Error::new)?),
                 errors: vec![],
             }),
+            Err(e) => Ok(err(e.to_string())),
+        }
+    }
+
+    /// Own-address creation (Django `accountAddressCreate`: no customerId =
+    /// self; with customerId needs MANAGE_USERS, same as staff `addressCreate`).
+    async fn account_address_create(
+        &self, ctx: &Context<'_>,
+        #[graphql(name = "customerId")] customer_id: Option<ID>,
+        input: gen::AddressInput,
+        #[graphql(name = "type")] address_type: Option<gen::AddressTypeEnum>,
+    ) -> Result<GqlAccountAddressCreate> {
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let err = |m: String| GqlAccountAddressCreate { user: None, address: None, errors: vec![aerr("INVALID", None, m)] };
+        let uid = match customer_id.as_ref() {
+            Some(cid) => {
+                require_perm(ctx, "manage_users").await?;
+                match saleor_rustify_db::catalog::parse_gid(&cid.0) {
+                    Some(u) => u,
+                    None => return Ok(err("bad customer id".into())),
+                }
+            }
+            None => match requester(ctx, db).await {
+                Ok((u, _)) => u,
+                Err(_) => return Ok(err("authentication required".into())),
+            },
+        };
+        let ai = address_input_of(&input);
+        match saleor_rustify_db::account_writes::create_address(db, uid, &ai).await {
+            Ok(aid) => {
+                if let Some(t) = address_type.as_ref() {
+                    let kind = match format!("{t:?}").as_str() {
+                        "BILLING" => saleor_rustify_db::account_writes::DefaultKind::Billing,
+                        _ => saleor_rustify_db::account_writes::DefaultKind::Shipping,
+                    };
+                    let _ = saleor_rustify_db::account_writes::set_default_address(db, uid, kind, aid).await;
+                }
+                let addr = saleor_rustify_db::entities::account_address::Entity::find_by_id(aid)
+                    .one(db).await.map_err(|e| Error::new(e.to_string()))?
+                    .ok_or_else(|| Error::new("address vanished"))?;
+                Ok(GqlAccountAddressCreate {
+                    user: Some(assemble_user(db, uid, &uid.to_string()).await.map_err(Error::new)?),
+                    address: Some(to_gql_address(&addr)),
+                    errors: vec![],
+                })
+            }
             Err(e) => Ok(err(e.to_string())),
         }
     }
