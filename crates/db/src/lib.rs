@@ -32,6 +32,7 @@ pub mod plugin_store;
 pub mod taxes;
 pub mod warehouses;
 pub mod promotions;
+pub mod promo_writes;
 pub mod reconcile;
 pub mod relations;
 pub mod webhooks;

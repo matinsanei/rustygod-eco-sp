@@ -231,6 +231,292 @@ fn gcerr(field: Option<String>, message: String) -> gen::GiftCardError {
     gen::GiftCardError { field, message: Some(message), code: None }
 }
 
+#[derive(SimpleObject, Clone)]
+#[graphql(name = "PromotionBulkDelete")]
+pub struct GqlPromotionBulkDelete {
+    pub count: Option<i32>,
+    pub errors: Vec<gen::DiscountError>,
+}
+
+fn discount_err(field: Option<String>, message: String) -> gen::DiscountError {
+    gen::DiscountError { field, message: Some(message), code: None, channels: vec![], voucher_codes: vec![] }
+}
+
+fn reward_value_type_str(v: &gen::RewardValueTypeEnum) -> String {
+    match v {
+        gen::RewardValueTypeEnum::FIXED => "fixed".to_string(),
+        gen::RewardValueTypeEnum::PERCENTAGE => "percentage".to_string(),
+    }
+}
+
+fn reward_type_str(v: &gen::RewardTypeEnum) -> String {
+    match v {
+        gen::RewardTypeEnum::SUBTOTALDISCOUNT => "subtotal_discount".to_string(),
+        gen::RewardTypeEnum::GIFT => "gift".to_string(),
+    }
+}
+
+fn discount_value_type_str(v: &gen::DiscountValueTypeEnum) -> String {
+    match v {
+        gen::DiscountValueTypeEnum::FIXED => "fixed".to_string(),
+        gen::DiscountValueTypeEnum::PERCENTAGE => "percentage".to_string(),
+    }
+}
+
+/// Catalogue predicate → engine condition-dict JSON. Id-list leaves convert
+/// exactly; other where-clauses narrow to their id lists (documented —
+/// the engine only reads ids, so nothing it understands is lost).
+fn catalogue_predicate_json(p: &gen::CataloguePredicateInput) -> serde_json::Value {
+    use serde_json::{Map, Value};
+    let mut o = Map::new();
+    if let Some(a) = p.and.as_ref() {
+        o.insert("AND".to_string(), Value::Array(a.iter().map(catalogue_predicate_json).collect()));
+    }
+    if let Some(r) = p.or.as_ref() {
+        o.insert("OR".to_string(), Value::Array(r.iter().map(catalogue_predicate_json).collect()));
+    }
+    if let Some(ids) = p.variant_predicate.as_ref().and_then(|w| w.ids.clone()) {
+        if !ids.is_empty() {
+            o.insert("variantPredicate".to_string(), serde_json::json!({"ids": ids.iter().map(|i| i.0.clone()).collect::<Vec<_>>()}));
+        }
+    }
+    if let Some(ids) = p.product_predicate.as_ref().and_then(|w| w.ids.clone()) {
+        if !ids.is_empty() {
+            o.insert("productPredicate".to_string(), serde_json::json!({"ids": ids.iter().map(|i| i.0.clone()).collect::<Vec<_>>()}));
+        }
+    }
+    if let Some(ids) = p.category_predicate.as_ref().and_then(|w| w.ids.clone()) {
+        if !ids.is_empty() {
+            o.insert("categoryPredicate".to_string(), serde_json::json!({"ids": ids.iter().map(|i| i.0.clone()).collect::<Vec<_>>()}));
+        }
+    }
+    if let Some(ids) = p.collection_predicate.as_ref().and_then(|w| w.ids.clone()) {
+        if !ids.is_empty() {
+            o.insert("collectionPredicate".to_string(), serde_json::json!({"ids": ids.iter().map(|i| i.0.clone()).collect::<Vec<_>>()}));
+        }
+    }
+    Value::Object(o)
+}
+
+fn decimal_filter_json(f: &gen::DecimalFilterInput) -> serde_json::Value {
+    use serde_json::{Map, Value};
+    let mut o = Map::new();
+    if let Some(e) = f.eq.as_ref() {
+        o.insert("eq".to_string(), Value::String(e.0.clone()));
+    }
+    if let Some(one) = f.one_of.as_ref() {
+        o.insert("oneOf".to_string(), Value::Array(one.iter().map(|v| Value::String(v.0.clone())).collect()));
+    }
+    if let Some(r) = f.range.as_ref() {
+        let mut range = Map::new();
+        if let Some(g) = r.gte.as_ref() {
+            range.insert("gte".to_string(), Value::String(g.0.clone()));
+        }
+        if let Some(l) = r.lte.as_ref() {
+            range.insert("lte".to_string(), Value::String(l.0.clone()));
+        }
+        o.insert("range".to_string(), Value::Object(range));
+    }
+    Value::Object(o)
+}
+
+fn discounted_object_json(w: &gen::DiscountedObjectWhereInput) -> serde_json::Value {
+    use serde_json::{Map, Value};
+    let mut o = Map::new();
+    if let Some(a) = w.and.as_ref() {
+        o.insert("AND".to_string(), Value::Array(a.iter().map(discounted_object_json).collect()));
+    }
+    if let Some(r) = w.or.as_ref() {
+        o.insert("OR".to_string(), Value::Array(r.iter().map(discounted_object_json).collect()));
+    }
+    if let Some(b) = w.base_subtotal_price.as_ref() {
+        o.insert("baseSubtotalPrice".to_string(), decimal_filter_json(b));
+    }
+    if let Some(b) = w.base_total_price.as_ref() {
+        o.insert("baseTotalPrice".to_string(), decimal_filter_json(b));
+    }
+    Value::Object(o)
+}
+
+/// Order predicate → engine money-gate JSON (same keys the evaluator reads).
+fn order_predicate_json(p: &gen::OrderPredicateInput) -> serde_json::Value {
+    use serde_json::{Map, Value};
+    let mut o = Map::new();
+    if let Some(a) = p.and.as_ref() {
+        o.insert("AND".to_string(), Value::Array(a.iter().map(order_predicate_json).collect()));
+    }
+    if let Some(r) = p.or.as_ref() {
+        o.insert("OR".to_string(), Value::Array(r.iter().map(order_predicate_json).collect()));
+    }
+    if let Some(d) = p.discounted_object_predicate.as_ref() {
+        o.insert("discountedObjectPredicate".to_string(), discounted_object_json(d));
+    }
+    Value::Object(o)
+}
+
+/// PromotionRuleInput (nested or top-level create shape) → db NewRule.
+fn promo_rule_from(r: gen::PromotionRuleInput) -> Result<saleor_rustify_db::promo_writes::NewRule, Error> {
+    Ok(saleor_rustify_db::promo_writes::NewRule {
+        name: r.name.clone(),
+        description: r.description.clone().unwrap_or(serde_json::Value::Null),
+        catalogue_predicate: r.catalogue_predicate.as_ref().map(catalogue_predicate_json).unwrap_or(serde_json::Value::Object(Default::default())),
+        order_predicate: r.order_predicate.as_ref().map(order_predicate_json).unwrap_or(serde_json::Value::Object(Default::default())),
+        reward_value_type: r.reward_value_type.clone().map(|v| reward_value_type_str(&v)),
+        reward_value: r.reward_value.clone().map(|v| v.0.parse::<rust_decimal::Decimal>()).transpose().map_err(|_| Error::new("bad reward value"))?,
+        reward_type: r.reward_type.clone().map(|v| reward_type_str(&v)),
+        channel_ids: r.channels.clone().unwrap_or_default().iter().filter_map(|c| saleor_rustify_db::catalog::parse_gid(&c.0)).collect(),
+        gift_variant_ids: r.gifts.clone().unwrap_or_default().iter().filter_map(|c| saleor_rustify_db::catalog::parse_gid(&c.0)).collect(),
+    })
+}
+
+/// Rule's promotion id (for update/delete payloads).
+async fn rule_promotion(db: &sea_orm::DatabaseConnection, rid: uuid::Uuid) -> Result<uuid::Uuid, Error> {
+    use sea_orm::{EntityTrait, QuerySelect};
+    saleor_rustify_db::entities::discount_promotionrule::Entity::find_by_id(rid)
+        .select_only()
+        .column(saleor_rustify_db::entities::discount_promotionrule::Column::PromotionId)
+        .into_tuple::<uuid::Uuid>()
+        .one(db)
+        .await
+        .map_err(|e| Error::new(e.to_string()))?
+        .ok_or_else(|| Error::new("promotion rule not found"))
+}
+
+/// One rule view out of a freshly assembled promotion.
+async fn promotion_rule_view(
+    db: &sea_orm::DatabaseConnection,
+    pid: uuid::Uuid,
+    rid: uuid::Uuid,
+) -> Result<Option<gen::PromotionRule>, Error> {
+    let promo = assemble_promotion(db, pid).await.map_err(Error::new)?;
+    let want = crate::common::gid("PromotionRule", rid);
+    Ok(promo.and_then(|p| p.rules.into_iter().find(|r| r.id.as_ref().map(|i| i.0 == want).unwrap_or(false))))
+}
+
+/// CatalogueInput → four id lists.
+fn catalogue_ids(input: &gen::CatalogueInput) -> (Vec<i32>, Vec<i32>, Vec<i32>, Vec<i32>) {
+    let ids = |v: &Option<Vec<ID>>| v.clone().unwrap_or_default().iter().filter_map(|i| saleor_rustify_db::catalog::parse_gid(&i.0)).collect::<Vec<_>>();
+    (
+        ids(&input.products),
+        ids(&input.variants),
+        ids(&input.categories),
+        ids(&input.collections),
+    )
+}
+
+/// VoucherInput → db NewVoucher (type inferred from catalogue assignment).
+async fn voucher_from(input: gen::VoucherInput) -> std::result::Result<saleor_rustify_db::promo_writes::NewVoucher, String> {
+    let products: Vec<i32> = input.products.clone().unwrap_or_default().iter().filter_map(|i| saleor_rustify_db::catalog::parse_gid(&i.0)).collect();
+    let variants: Vec<i32> = input.variants.clone().unwrap_or_default().iter().filter_map(|i| saleor_rustify_db::catalog::parse_gid(&i.0)).collect();
+    let categories: Vec<i32> = input.categories.clone().unwrap_or_default().iter().filter_map(|i| saleor_rustify_db::catalog::parse_gid(&i.0)).collect();
+    let collections: Vec<i32> = input.collections.clone().unwrap_or_default().iter().filter_map(|i| saleor_rustify_db::catalog::parse_gid(&i.0)).collect();
+    let mut codes: Vec<String> = input.add_codes.clone().unwrap_or_default();
+    if let Some(c) = input.code.clone() {
+        codes.push(c);
+    }
+    Ok(saleor_rustify_db::promo_writes::NewVoucher {
+        name: input.name.clone(),
+        voucher_type: saleor_rustify_db::promo_writes::infer_voucher_type(products.len(), variants.len(), categories.len(), collections.len()),
+        discount_value_type: input.discount_value_type.clone().map(|v| discount_value_type_str(&v)).unwrap_or_else(|| "fixed".to_string()),
+        products,
+        variants,
+        categories,
+        collections,
+        min_items: input.min_checkout_items_quantity,
+        countries: input.countries.clone().unwrap_or_default(),
+        apply_once_per_order: input.apply_once_per_order.unwrap_or(false),
+        apply_once_per_customer: input.apply_once_per_customer.unwrap_or(false),
+        only_for_staff: input.only_for_staff.unwrap_or(false),
+        single_use: input.single_use.unwrap_or(false),
+        usage_limit: input.usage_limit,
+        start: input.start_date.map(|d| d.with_timezone(&chrono::Utc)).unwrap_or_else(chrono::Utc::now),
+        end: input.end_date.map(|d| d.with_timezone(&chrono::Utc)),
+        codes,
+        listings: vec![],
+    })
+}
+
+/// Currency for voucher listings: first channel's, else USD.
+async fn listing_currency(db: &sea_orm::DatabaseConnection, listings: &[saleor_rustify_db::promo_writes::ChannelListingInput]) -> String {
+    if let Some(l) = listings.first() {
+        use sea_orm::{EntityTrait, QuerySelect};
+        if let Ok(Some(cur)) = saleor_rustify_db::entities::channel_channel::Entity::find_by_id(l.channel_id)
+            .select_only()
+            .column(saleor_rustify_db::entities::channel_channel::Column::CurrencyCode)
+            .into_tuple::<String>()
+            .one(db)
+            .await
+        {
+            return cur;
+        }
+    }
+    "USD".to_string()
+}
+
+/// Voucher assembly (scalars + channel listings; catalogue connections stay
+/// stubs — the mutations' payloads select header data, tabs refetch).
+async fn assemble_voucher(db: &sea_orm::DatabaseConnection, vid: i32) -> Result<gen::Voucher, Error> {
+    use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QuerySelect};
+    let v = saleor_rustify_db::entities::discount_voucher::Entity::find_by_id(vid)
+        .one(db)
+        .await
+        .map_err(|e| Error::new(e.to_string()))?
+        .ok_or_else(|| Error::new("voucher not found"))?;
+    let used: i64 = saleor_rustify_db::entities::discount_vouchercode::Entity::find()
+        .select_only()
+        .column(saleor_rustify_db::entities::discount_vouchercode::Column::Used)
+        .filter(saleor_rustify_db::entities::discount_vouchercode::Column::VoucherId.eq(vid))
+        .into_tuple::<i32>()
+        .all(db)
+        .await
+        .map_err(|e| Error::new(e.to_string()))?
+        .into_iter()
+        .map(i64::from)
+        .sum();
+    let listings = saleor_rustify_db::entities::discount_voucherchannellisting::Entity::find()
+        .filter(saleor_rustify_db::entities::discount_voucherchannellisting::Column::VoucherId.eq(vid))
+        .all(db)
+        .await
+        .map_err(|e| Error::new(e.to_string()))?;
+    let mut channel_listings = vec![];
+    for l in listings {
+        channel_listings.push(gen::VoucherChannelListing {
+            id: Some(ID(crate::common::gid("VoucherChannelListing", l.id))),
+            channel: None,
+            discount_value: Some(l.discount_value.to_string().parse::<f64>().unwrap_or(0.0)),
+            currency: Some(l.currency.clone()),
+            min_spent: l.min_spent_amount.map(|a| crate::common::Money { amount: a.to_string(), currency: l.currency.clone(), fraction_digits: None }),
+        });
+    }
+    let countries: Vec<crate::common::GqlCountryDisplay> = v
+        .countries
+        .split(',')
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+        .map(|s| crate::common::GqlCountryDisplay { code: s.to_string(), country: s.to_string() })
+        .collect();
+    Ok(gen::Voucher {
+        id: Some(ID(crate::common::gid("Voucher", vid))),
+        private_metadata: vec![],
+        metadata: vec![],
+        name: v.name.clone(),
+        code: None,
+        usage_limit: v.usage_limit,
+        used: Some(used as i32),
+        start_date: Some(v.start_date.into()),
+        end_date: v.end_date.map(|d| d.into()),
+        apply_once_per_order: Some(v.apply_once_per_order),
+        apply_once_per_customer: Some(v.apply_once_per_customer),
+        single_use: Some(v.single_use),
+        only_for_staff: Some(v.only_for_staff),
+        min_checkout_items_quantity: v.min_checkout_items_quantity,
+        countries,
+        discount_value_type: Some(v.discount_value_type.to_uppercase()),
+        r#type: Some(v.r#type.to_uppercase()),
+        channel_listings,
+    })
+}
+
 /// Gift-card id gid → code lookup (mutations address cards by id; the
 /// ledger addresses them by code).
 async fn gift_card_code(db: &sea_orm::DatabaseConnection, gid: &str) -> std::result::Result<String, String> {
@@ -1930,6 +2216,333 @@ impl CommerceMutation {
                 Err(e) => Ok(err(e.to_string())),
             },
             Err(e) => Ok(err(e)),
+        }
+    }
+
+    /// Create a promotion with rules (Django `promotionCreate`). Predicates
+    /// persist in the engine's condition-dict shape (id-list leaves; exotic
+    /// where-clauses narrow to their id lists, documented).
+    async fn promotion_create(&self, ctx: &Context<'_>, input: gen::PromotionCreateInput) -> Result<gen::PromotionCreate> {
+        let _ = crate::account::require_perm(ctx, "manage_discounts").await?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let err = |m: String| gen::PromotionCreate {
+            errors: vec![gen::PromotionCreateError { field: None, message: Some(m), code: None, index: None }],
+            promotion: None,
+        };
+        let mut rules = vec![];
+        for r in input.rules.clone().unwrap_or_default() {
+            rules.push(promo_rule_from(r)?);
+        }
+        let ptype = match input.r#type {
+            gen::PromotionTypeEnum::CATALOGUE => "catalogue",
+            gen::PromotionTypeEnum::ORDER => "order",
+        };
+        let pid = match saleor_rustify_db::promo_writes::create_promotion(
+            db, &input.name, ptype,
+            input.description.clone().unwrap_or(serde_json::Value::Null),
+            input.start_date.map(|d| d.with_timezone(&chrono::Utc)),
+            input.end_date.map(|d| d.with_timezone(&chrono::Utc)),
+            rules,
+        ).await {
+            Ok(id) => id,
+            Err(e) => return Ok(err(e.to_string())),
+        };
+        Ok(gen::PromotionCreate {
+            errors: vec![],
+            promotion: assemble_promotion(db, pid).await.map_err(Error::new)?,
+        })
+    }
+
+    /// Update a promotion header (Django `promotionUpdate`).
+    async fn promotion_update(&self, ctx: &Context<'_>, id: ID, input: gen::PromotionUpdateInput) -> Result<gen::PromotionUpdate> {
+        let _ = crate::account::require_perm(ctx, "manage_discounts").await?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let err = |m: String| gen::PromotionUpdate {
+            errors: vec![gen::PromotionUpdateError { field: None, message: Some(m), code: None }],
+            promotion: None,
+        };
+        let pid = crate::common::parse_uuid_gid(&id.0).ok_or_else(|| Error::new("bad promotion id"))?;
+        if let Err(e) = saleor_rustify_db::promo_writes::update_promotion(
+            db, pid,
+            input.name.clone(),
+            input.description.clone(),
+            input.start_date.map(|d| d.with_timezone(&chrono::Utc)),
+            input.end_date.map(|d| Some(d.with_timezone(&chrono::Utc))),
+        ).await {
+            // end_date None = unchanged (clearing needs explicit null; the
+            // dashboard sends new ranges, never clears — documented).
+            return Ok(err(e.to_string()));
+        }
+        Ok(gen::PromotionUpdate {
+            errors: vec![],
+            promotion: assemble_promotion(db, pid).await.map_err(Error::new)?,
+        })
+    }
+
+    /// Delete a promotion with rules (Django `promotionDelete`).
+    async fn promotion_delete(&self, ctx: &Context<'_>, id: ID) -> Result<gen::PromotionDelete> {
+        let _ = crate::account::require_perm(ctx, "manage_discounts").await?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let pid = crate::common::parse_uuid_gid(&id.0).ok_or_else(|| Error::new("bad promotion id"))?;
+        match saleor_rustify_db::promo_writes::delete_promotion(db, pid).await {
+            Ok(()) => Ok(gen::PromotionDelete { errors: vec![] }),
+            Err(e) => Ok(gen::PromotionDelete {
+                errors: vec![gen::PromotionDeleteError { field: None, message: Some(e.to_string()), code: None }],
+            }),
+        }
+    }
+
+    /// Bulk promotion delete (survivors commit).
+    async fn promotion_bulk_delete(&self, ctx: &Context<'_>, ids: Vec<ID>) -> Result<GqlPromotionBulkDelete> {
+        let _ = crate::account::require_perm(ctx, "manage_discounts").await?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let uuids: Vec<uuid::Uuid> = ids.iter().filter_map(|i| crate::common::parse_uuid_gid(&i.0)).collect();
+        match saleor_rustify_db::promo_writes::bulk_delete_promotions(db, &uuids).await {
+            Ok(n) => Ok(GqlPromotionBulkDelete { count: Some(n), errors: vec![] }),
+            Err(e) => Ok(GqlPromotionBulkDelete {
+                count: Some(0),
+                errors: vec![discount_err(None, e.to_string())],
+            }),
+        }
+    }
+
+    /// Create a rule on a promotion (Django `promotionRuleCreate`).
+    async fn promotion_rule_create(&self, ctx: &Context<'_>, input: gen::PromotionRuleCreateInput) -> Result<gen::PromotionRuleCreate> {
+        let _ = crate::account::require_perm(ctx, "manage_discounts").await?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let err = |m: String| gen::PromotionRuleCreate {
+            errors: vec![gen::PromotionRuleCreateError { field: None, message: Some(m), code: None }],
+            promotion_rule: None,
+        };
+        let pid = crate::common::parse_uuid_gid(&input.promotion.0).ok_or_else(|| Error::new("bad promotion id"))?;
+        let rule = promo_rule_from(gen::PromotionRuleInput {
+            name: input.name.clone(),
+            description: input.description.clone(),
+            catalogue_predicate: input.catalogue_predicate.clone(),
+            order_predicate: input.order_predicate.clone(),
+            reward_value_type: input.reward_value_type.clone(),
+            reward_value: input.reward_value.clone(),
+            reward_type: input.reward_type.clone(),
+            channels: input.channels.clone(),
+            gifts: input.gifts.clone(),
+        })?;
+        let rid = match saleor_rustify_db::promo_writes::create_rule(db, pid, &rule).await {
+            Ok(id) => id,
+            Err(e) => return Ok(err(e.to_string())),
+        };
+        Ok(gen::PromotionRuleCreate {
+            errors: vec![],
+            promotion_rule: promotion_rule_view(db, pid, rid).await?,
+        })
+    }
+
+    /// Update a rule (Django `promotionRuleUpdate`).
+    async fn promotion_rule_update(&self, ctx: &Context<'_>, id: ID, input: gen::PromotionRuleUpdateInput) -> Result<gen::PromotionRuleUpdate> {
+        let _ = crate::account::require_perm(ctx, "manage_discounts").await?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let err = |m: String| gen::PromotionRuleUpdate {
+            errors: vec![gen::PromotionRuleUpdateError { field: None, message: Some(m), code: None, channels: vec![] }],
+            promotion_rule: None,
+        };
+        let rid = crate::common::parse_uuid_gid(&id.0).ok_or_else(|| Error::new("bad rule id"))?;
+        let upd = saleor_rustify_db::promo_writes::UpdateRule {
+            name: input.name.clone(),
+            description: input.description.clone(),
+            catalogue_predicate: input.catalogue_predicate.as_ref().map(catalogue_predicate_json),
+            order_predicate: input.order_predicate.as_ref().map(order_predicate_json),
+            reward_value_type: input.reward_value_type.clone().map(|v| Some(reward_value_type_str(&v))),
+            reward_value: input.reward_value.clone().map(|v| Some(v.0.parse::<rust_decimal::Decimal>().unwrap_or(rust_decimal::Decimal::ZERO))),
+            reward_type: input.reward_type.clone().map(|v| Some(reward_type_str(&v))),
+            add_channels: input.add_channels.clone().unwrap_or_default().iter().filter_map(|c| saleor_rustify_db::catalog::parse_gid(&c.0)).collect(),
+            remove_channels: input.remove_channels.clone().unwrap_or_default().iter().filter_map(|c| saleor_rustify_db::catalog::parse_gid(&c.0)).collect(),
+            add_gifts: input.add_gifts.clone().unwrap_or_default().iter().filter_map(|c| saleor_rustify_db::catalog::parse_gid(&c.0)).collect(),
+            remove_gifts: input.remove_gifts.clone().unwrap_or_default().iter().filter_map(|c| saleor_rustify_db::catalog::parse_gid(&c.0)).collect(),
+        };
+        if let Err(e) = saleor_rustify_db::promo_writes::update_rule(db, rid, &upd).await {
+            return Ok(err(e.to_string()));
+        }
+        let pid = rule_promotion(db, rid).await?;
+        Ok(gen::PromotionRuleUpdate {
+            errors: vec![],
+            promotion_rule: promotion_rule_view(db, pid, rid).await?,
+        })
+    }
+
+    /// Delete a rule (Django `promotionRuleDelete`).
+    async fn promotion_rule_delete(&self, ctx: &Context<'_>, id: ID) -> Result<gen::PromotionRuleDelete> {
+        let _ = crate::account::require_perm(ctx, "manage_discounts").await?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let rid = crate::common::parse_uuid_gid(&id.0).ok_or_else(|| Error::new("bad rule id"))?;
+        let pid = rule_promotion(db, rid).await.unwrap_or(rid);
+        match saleor_rustify_db::promo_writes::delete_rule(db, rid).await {
+            Ok(()) => Ok(gen::PromotionRuleDelete {
+                errors: vec![],
+                promotion_rule: None,
+            }),
+            Err(e) => Ok(gen::PromotionRuleDelete {
+                errors: vec![gen::PromotionRuleDeleteError { field: None, message: Some(e.to_string()), code: None }],
+                promotion_rule: None,
+            }),
+        }
+    }
+
+    /// Create a voucher (Django `voucherCreate`): header, codes, catalogue,
+    /// channel listings in one transaction.
+    async fn voucher_create(&self, ctx: &Context<'_>, input: gen::VoucherInput) -> Result<gen::VoucherCreate> {
+        let _ = crate::account::require_perm(ctx, "manage_discounts").await?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let err = |m: String| gen::VoucherCreate {
+            errors: vec![discount_err(None, m)],
+            voucher: None,
+        };
+        let nv = match voucher_from(input).await {
+            Ok(v) => v,
+            Err(e) => return Ok(err(e)),
+        };
+        // Listings need a currency: first channel's, else USD.
+        let currency = listing_currency(db, &nv.listings).await;
+        let vid = match saleor_rustify_db::promo_writes::create_voucher(db, &nv, &currency).await {
+            Ok(id) => id,
+            Err(e) => return Ok(err(e.to_string())),
+        };
+        Ok(gen::VoucherCreate {
+            errors: vec![],
+            voucher: Some(assemble_voucher(db, vid).await?),
+        })
+    }
+
+    /// Update a voucher (Django `voucherUpdate`).
+    async fn voucher_update(&self, ctx: &Context<'_>, id: ID, input: gen::VoucherInput) -> Result<gen::VoucherUpdate> {
+        let _ = crate::account::require_perm(ctx, "manage_discounts").await?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let err = |m: String| gen::VoucherUpdate {
+            errors: vec![discount_err(None, m)],
+            voucher: None,
+        };
+        let vid = saleor_rustify_db::catalog::parse_gid(&id.0).unwrap_or(-1);
+        let upd = saleor_rustify_db::promo_writes::UpdateVoucher {
+            name: Some(input.name.clone()),
+            discount_value_type: input.discount_value_type.clone().map(|v| discount_value_type_str(&v)),
+            usage_limit: Some(input.usage_limit),
+            start: input.start_date.map(|d| d.with_timezone(&chrono::Utc)),
+            end: input.end_date.map(|d| Some(d.with_timezone(&chrono::Utc))),
+            min_items: Some(input.min_checkout_items_quantity),
+            countries: input.countries.clone(),
+            apply_once_per_order: input.apply_once_per_order,
+            apply_once_per_customer: input.apply_once_per_customer,
+            only_for_staff: input.only_for_staff,
+            single_use: input.single_use,
+            add_codes: {
+                let mut c = input.add_codes.clone().unwrap_or_default();
+                if let Some(s) = input.code.clone() {
+                    c.push(s);
+                }
+                c
+            },
+        };
+        // update end=None means "unchanged" here (dashboard always sends full
+        // ranges; explicit clearing is a documented gap).
+        let mut upd = upd;
+        if input.end_date.is_none() {
+            upd.end = None;
+        }
+        if let Err(e) = saleor_rustify_db::promo_writes::update_voucher(db, vid, &upd, "USD").await {
+            return Ok(err(e.to_string()));
+        }
+        Ok(gen::VoucherUpdate {
+            errors: vec![],
+            voucher: Some(assemble_voucher(db, vid).await?),
+        })
+    }
+
+    /// Delete a voucher with all links (Django `voucherDelete`).
+    async fn voucher_delete(&self, ctx: &Context<'_>, id: ID) -> Result<gen::VoucherDelete> {
+        let _ = crate::account::require_perm(ctx, "manage_discounts").await?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let vid = saleor_rustify_db::catalog::parse_gid(&id.0).unwrap_or(-1);
+        match saleor_rustify_db::promo_writes::delete_voucher(db, vid).await {
+            Ok(()) => Ok(gen::VoucherDelete { errors: vec![] }),
+            Err(e) => Ok(gen::VoucherDelete { errors: vec![discount_err(None, e.to_string())] }),
+        }
+    }
+
+    /// Bulk voucher delete (survivors commit).
+    async fn voucher_bulk_delete(&self, ctx: &Context<'_>, ids: Vec<ID>) -> Result<gen::VoucherBulkDelete> {
+        let _ = crate::account::require_perm(ctx, "manage_discounts").await?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let vids: Vec<i32> = ids.iter().filter_map(|i| saleor_rustify_db::catalog::parse_gid(&i.0)).collect();
+        let mut errors = vec![];
+        let mut n = 0;
+        for vid in vids {
+            match saleor_rustify_db::promo_writes::delete_voucher(db, vid).await {
+                Ok(()) => n += 1,
+                Err(e) => errors.push(discount_err(None, e.to_string())),
+            }
+        }
+        let _ = n;
+        Ok(gen::VoucherBulkDelete { errors })
+    }
+
+    /// Add catalogue rows (Django `voucherCataloguesAdd`).
+    async fn voucher_catalogues_add(&self, ctx: &Context<'_>, id: ID, input: gen::CatalogueInput) -> Result<gen::VoucherAddCatalogues> {
+        let _ = crate::account::require_perm(ctx, "manage_discounts").await?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let vid = saleor_rustify_db::catalog::parse_gid(&id.0).unwrap_or(-1);
+        let (p, v, c, co) = catalogue_ids(&input);
+        match saleor_rustify_db::promo_writes::voucher_catalogues(db, vid, true, &p, &v, &c, &co).await {
+            Ok(()) => Ok(gen::VoucherAddCatalogues { voucher: Some(assemble_voucher(db, vid).await?), errors: vec![] }),
+            Err(e) => Ok(gen::VoucherAddCatalogues { voucher: None, errors: vec![discount_err(None, e.to_string())] }),
+        }
+    }
+
+    /// Remove catalogue rows (Django `voucherCataloguesRemove`).
+    async fn voucher_catalogues_remove(&self, ctx: &Context<'_>, id: ID, input: gen::CatalogueInput) -> Result<gen::VoucherRemoveCatalogues> {
+        let _ = crate::account::require_perm(ctx, "manage_discounts").await?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let vid = saleor_rustify_db::catalog::parse_gid(&id.0).unwrap_or(-1);
+        let (p, v, c, co) = catalogue_ids(&input);
+        match saleor_rustify_db::promo_writes::voucher_catalogues(db, vid, false, &p, &v, &c, &co).await {
+            Ok(()) => Ok(gen::VoucherRemoveCatalogues { voucher: Some(assemble_voucher(db, vid).await?), errors: vec![] }),
+            Err(e) => Ok(gen::VoucherRemoveCatalogues { voucher: None, errors: vec![discount_err(None, e.to_string())] }),
+        }
+    }
+
+    /// Channel listings add/remove (Django `voucherChannelListingUpdate`).
+    async fn voucher_channel_listing_update(&self, ctx: &Context<'_>, id: ID, input: gen::VoucherChannelListingInput) -> Result<gen::VoucherChannelListingUpdate> {
+        let _ = crate::account::require_perm(ctx, "manage_discounts").await?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let vid = saleor_rustify_db::catalog::parse_gid(&id.0).unwrap_or(-1);
+        let mut add = vec![];
+        for l in input.add_channels.clone().unwrap_or_default() {
+            let ch = saleor_rustify_db::catalog::parse_gid(&l.channel_id.0).unwrap_or(-1);
+            if ch < 0 {
+                continue;
+            }
+            add.push(saleor_rustify_db::promo_writes::ChannelListingInput {
+                channel_id: ch,
+                discount_value: l.discount_value.as_ref().and_then(|v| v.0.parse::<rust_decimal::Decimal>().ok()).unwrap_or(rust_decimal::Decimal::ZERO),
+                min_spent: l.min_amount_spent.as_ref().and_then(|v| v.0.parse::<rust_decimal::Decimal>().ok()),
+            });
+        }
+        let remove: Vec<i32> = input.remove_channels.clone().unwrap_or_default().iter().filter_map(|c| saleor_rustify_db::catalog::parse_gid(&c.0)).collect();
+        let currency = listing_currency(db, &add).await;
+        match saleor_rustify_db::promo_writes::voucher_channel_listings(db, vid, &add, &remove, &currency).await {
+            Ok(()) => Ok(gen::VoucherChannelListingUpdate { voucher: Some(assemble_voucher(db, vid).await?), errors: vec![] }),
+            Err(e) => Ok(gen::VoucherChannelListingUpdate { voucher: None, errors: vec![discount_err(None, e.to_string())] }),
+        }
+    }
+
+    /// Bulk code delete by code-row ids.
+    async fn voucher_code_bulk_delete(&self, ctx: &Context<'_>, ids: Vec<ID>) -> Result<gen::VoucherCodeBulkDelete> {
+        let _ = crate::account::require_perm(ctx, "manage_discounts").await?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let uuids: Vec<uuid::Uuid> = ids.iter().filter_map(|i| crate::common::parse_uuid_gid(&i.0)).collect();
+        match saleor_rustify_db::promo_writes::delete_voucher_codes(db, &uuids).await {
+            Ok(n) => Ok(gen::VoucherCodeBulkDelete { count: Some(n), errors: vec![] }),
+            Err(e) => Ok(gen::VoucherCodeBulkDelete {
+                count: Some(0),
+                errors: vec![gen::VoucherCodeBulkDeleteError { path: None, message: Some(e.to_string()), code: None }],
+            }),
         }
     }
 
