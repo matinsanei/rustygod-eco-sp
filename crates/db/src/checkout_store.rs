@@ -430,6 +430,95 @@ pub async fn sweep_expired_checkouts(
     }
     Ok(total)
 }
+
+/// Outcome of one automatic-completion beat run.
+#[derive(Debug, Default)]
+pub struct AutoCompleteReport {
+    pub attempted: u64,
+    pub completed: u64,
+    pub failed: u64,
+}
+
+/// Automatically complete fully-paid checkouts — Saleor
+/// `trigger_automatic_checkout_completion_task` parity (E10 final).
+///
+/// Django-faithful selection: channel opted in
+/// (`automatically_complete_fully_paid_checkouts`), checkout fully
+/// authorized, idle past the channel's `automatic_completion_delay`
+/// (minutes, default 0), created after the channel's cut-off date,
+/// modified within the safety window (30d default — very old checkouts are
+/// never auto-completed), has email or user, has a billing address, has a
+/// positive total and at least one line. Ordering is attempt-time
+/// nulls-first (never-tried wins) then `last_change`, like Django's
+/// `order_by(F(attempt).asc(nulls_first=True), "last_change")`.
+///
+/// Each candidate stamps `last_automatic_completion_attempt` in its own
+/// transaction BEFORE trying (Django does the same), then runs the shared
+/// `complete::complete_checkout` — idempotent via the order's checkout
+/// token, so a replayed beat never double-mints. One bad checkout never
+/// aborts the batch; failures are counted and retried after the retry
+/// window (24h default). Tunables: `RUSTYGOD_AUTO_COMPLETE_BATCH` (20),
+/// `RUSTYGOD_AUTO_COMPLETE_MAX_AGE_DAYS` (30),
+/// `RUSTYGOD_AUTO_COMPLETE_RETRY_HOURS` (24).
+pub async fn auto_complete_expired_checkouts(
+    db: &DatabaseConnection,
+) -> Result<AutoCompleteReport> {
+    fn env_u64(name: &str, dflt: u64) -> u64 {
+        std::env::var(name).ok().and_then(|s| s.parse().ok()).unwrap_or(dflt)
+    }
+    let batch = env_u64("RUSTYGOD_AUTO_COMPLETE_BATCH", 20).clamp(1, 500) as i64;
+    let oldest_cut =
+        Utc::now() - chrono::Duration::days(env_u64("RUSTYGOD_AUTO_COMPLETE_MAX_AGE_DAYS", 30) as i64);
+    let retry_cut =
+        Utc::now() - chrono::Duration::hours(env_u64("RUSTYGOD_AUTO_COMPLETE_RETRY_HOURS", 24) as i64);
+    let sel = sea_orm::Statement::from_sql_and_values(
+        sea_orm::DatabaseBackend::Postgres,
+        "SELECT c.token FROM checkout_checkout c \
+         JOIN channel_channel ch ON ch.id = c.channel_id \
+         WHERE ch.automatically_complete_fully_paid_checkouts \
+           AND c.authorize_status = 'full' \
+           AND c.last_change < now() - make_interval(mins => COALESCE(ch.automatic_completion_delay, 0)) \
+           AND c.last_change >= $1 \
+           AND (c.email IS NOT NULL OR c.user_id IS NOT NULL) \
+           AND c.billing_address_id IS NOT NULL \
+           AND c.total_gross_amount > 0 \
+           AND EXISTS (SELECT 1 FROM checkout_checkoutline l WHERE l.checkout_id = c.token) \
+           AND (ch.automatic_completion_cut_off_date IS NULL OR c.created_at >= ch.automatic_completion_cut_off_date) \
+           AND (c.last_automatic_completion_attempt IS NULL OR c.last_automatic_completion_attempt < $2) \
+         ORDER BY c.last_automatic_completion_attempt NULLS FIRST, c.last_change \
+         LIMIT $3",
+        [oldest_cut.into(), retry_cut.into(), batch.into()],
+    );
+    let mut report = AutoCompleteReport::default();
+    for r in db.query_all(sel).await? {
+        let token: Uuid = r.try_get("", "token")?;
+        // Stamp the attempt first, in its own transaction — a crash between
+        // stamp and completion still leaves the audit trail, and the retry
+        // window (not a lock) paces the next try.
+        let txn = db.begin().await?;
+        let locked = checkout_checkout::Entity::find_by_id(token)
+            .lock(LockType::Update)
+            .one(&txn)
+            .await?;
+        let Some(m) = locked else {
+            txn.rollback().await?;
+            continue;
+        };
+        let mut am: checkout_checkout::ActiveModel = m.into();
+        am.last_automatic_completion_attempt = Set(Some(Utc::now().into()));
+        am.update(&txn).await?;
+        txn.commit().await?;
+        report.attempted += 1;
+        match crate::complete::complete_checkout(db, token).await {
+            Ok(_) => report.completed += 1,
+            // One bad checkout never aborts the batch; the stamped attempt
+            // paces the retry (RETRY_HOURS) and `failed` is surfaced by the
+            // beat log line.
+            Err(_) => report.failed += 1,
+        }
+    }
+    Ok(report)
+}
 /// Rebuild the pure domain `Checkout` from Django rows. The line unit price
 /// follows Saleor precedence: `price_override` wins over the stored
 /// (undiscounted) unit price — same rule as

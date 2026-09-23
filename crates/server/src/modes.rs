@@ -168,6 +168,20 @@ fn beat_entries() -> Vec<BeatEntry> {
             }
         })
     }
+    fn checkout_automatic_completion(
+        db: &DatabaseConnection,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send + '_>> {
+        Box::pin(async move {
+            match rustygod_db::checkout_store::auto_complete_expired_checkouts(db).await {
+                Ok(r) if r.attempted == 0 => {}
+                Ok(r) => tracing::info!(
+                    "beat[checkout-automatic-completion]: attempted {} completed {} failed {}",
+                    r.attempted, r.completed, r.failed
+                ),
+                Err(e) => tracing::warn!("beat[checkout-automatic-completion] failed: {e}"),
+            }
+        })
+    }
     fn sweep_expired_checkouts(
         db: &DatabaseConnection,
     ) -> std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send + '_>> {
@@ -176,6 +190,21 @@ fn beat_entries() -> Vec<BeatEntry> {
                 Ok(0) => {}
                 Ok(n) => tracing::info!("beat[delete-expired-checkouts]: dropped {n}"),
                 Err(e) => tracing::warn!("beat[delete-expired-checkouts] failed: {e}"),
+            }
+        })
+    }
+    fn refresh_product_embeddings(
+        db: &DatabaseConnection,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send + '_>> {
+        Box::pin(async move {
+            let e = rustygod_ai::embed::HashingEmbedder::default();
+            match rustygod_ai::vectors::refresh_product_embeddings(db, &e).await {
+                Ok(r) if r.embedded == 0 => {}
+                Ok(r) => tracing::info!(
+                    "beat[refresh-product-embeddings]: scanned {} embedded {} skipped {}",
+                    r.scanned, r.embedded, r.skipped
+                ),
+                Err(e) => tracing::warn!("beat[refresh-product-embeddings] failed: {e}"),
             }
         })
     }
@@ -206,7 +235,9 @@ fn beat_entries() -> Vec<BeatEntry> {
         BeatEntry { name: "recalculate-promotion-rules", saleor_task: "saleor.product.tasks.update_variant_relations_for_active_promotion_rules_task", interval_secs: 30, job: Deferred },
         BeatEntry { name: "recalculate-discounted-price-for-products", saleor_task: "saleor.product.tasks.recalculate_discounted_price_for_products_task", interval_secs: 30, job: Deferred },
         // Saleor: every ~60s (automatic checkout completion check).
-        BeatEntry { name: "checkout-automatic-completion", saleor_task: "saleor.checkout.tasks.trigger_automatic_checkout_completion_task", interval_secs: 60, job: Deferred },
+        BeatEntry { name: "checkout-automatic-completion", saleor_task: "saleor.checkout.tasks.trigger_automatic_checkout_completion_task", interval_secs: 60, job: Real(checkout_automatic_completion) },
+        // Ours: vector-tier refresh (skip-unchanged, cheap on re-runs).
+        BeatEntry { name: "refresh-product-embeddings", saleor_task: "rustygod.vectors.refresh_product_embeddings", interval_secs: 24 * 3600, job: Real(refresh_product_embeddings) },
     ]
 }
 

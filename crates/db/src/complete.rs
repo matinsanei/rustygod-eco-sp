@@ -32,7 +32,10 @@ use uuid::Uuid;
 
 use crate::{
     catalog, checkout_store,
-    entities::{account_user, checkout_checkout, order_order, order_orderevent, warehouse_reservation},
+    entities::{
+        account_user, checkout_checkout, order_order, order_orderevent, payment_payment,
+        payment_transactionitem, warehouse_reservation,
+    },
     giftcards, order_store, promotions, warehouses, webhooks,
     DbError, Result,
 };
@@ -262,10 +265,42 @@ pub async fn complete_checkout(
     )
     .await?;
 
-    // 8. Delete the checkout (same end state as Django).
+    // 8. Payments follow the order (Django `_create_order_from_checkout`:
+    // `payments.update(order=order, checkout_id=None)` for BOTH the legacy
+    // Payment and the TransactionItem tables). Without this the money trail
+    // detaches when `delete_checkout_row` NULLs checkout_id below, and the
+    // auto-complete path (E10) would mint orders that look unpaid.
+    // Order charge/authorize data mirrors the checkout's — a fully
+    // authorized checkout mints a fully authorized order, same end state as
+    // Django's `update_order_charge_data` on full coverage.
+    payment_transactionitem::Entity::update_many()
+        .col_expr(
+            payment_transactionitem::Column::OrderId,
+            sea_orm::sea_query::Expr::value(Some(order_id)),
+        )
+        .filter(payment_transactionitem::Column::CheckoutId.eq(token))
+        .exec(&txn)
+        .await?;
+    payment_payment::Entity::update_many()
+        .col_expr(
+            payment_payment::Column::OrderId,
+            sea_orm::sea_query::Expr::value(Some(order_id)),
+        )
+        .filter(payment_payment::Column::CheckoutId.eq(token))
+        .exec(&txn)
+        .await?;
+    if let Some(order_row) = order_order::Entity::find_by_id(order_id).one(&txn).await? {
+        let mut am: order_order::ActiveModel = order_row.into();
+        am.authorize_status = Set(co.authorize_status.clone());
+        am.charge_status = Set(co.charge_status.clone());
+        am.updated_at = Set(Utc::now().into());
+        am.update(&txn).await?;
+    }
+
+    // 9. Delete the checkout (same end state as Django).
     checkout_store::delete_checkout_row(&txn, token).await?;
 
-    // 9. OUTBOX writes inside the same transaction (R8): deliveries are
+    // 10. OUTBOX writes inside the same transaction (R8): deliveries are
     // atomic with money. HTTP sending happens after commit (service,
     // best-effort) or via the sweeper — never inside this transaction.
     let payload = json!({
