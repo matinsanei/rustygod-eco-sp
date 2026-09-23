@@ -5,6 +5,7 @@
 //! under the Expand-Contract pattern: same tables, same constraints, zero data migration.
 
 pub mod apps;
+pub mod attribute_writes;
 pub mod auth;
 pub mod cancel;
 pub mod catalog;
@@ -14,6 +15,7 @@ pub mod checkout_store;
 pub mod commerce;
 pub mod complete;
 pub mod drafts;
+pub mod embeddings;
 pub mod entities;
 pub mod fulfillment;
 pub mod giftcards;

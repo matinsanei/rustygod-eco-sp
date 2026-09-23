@@ -29777,38 +29777,10 @@ impl GenMutation {
 
     }
 
-    #[graphql(name = "productAttributeAssign")]
-    async fn product_attribute_assign(&self, #[graphql(name = "operations")] _arg_operations: Vec<ProductAttributeAssignInput>, #[graphql(name = "productTypeId")] _arg_product_type_id: ID) -> Option<ProductAttributeAssign> {
-
-        Some(ProductAttributeAssign { product_type: None, errors: vec![] })
-
-    }
-
-    #[graphql(name = "productAttributeAssignmentUpdate")]
-    async fn product_attribute_assignment_update(&self, #[graphql(name = "operations")] _arg_operations: Vec<ProductAttributeAssignmentUpdateInput>, #[graphql(name = "productTypeId")] _arg_product_type_id: ID) -> Option<ProductAttributeAssignmentUpdate> {
-
-        Some(ProductAttributeAssignmentUpdate { product_type: None, errors: vec![] })
-
-    }
-
-    #[graphql(name = "productAttributeUnassign")]
-    async fn product_attribute_unassign(&self, #[graphql(name = "attributeIds")] _arg_attribute_ids: Vec<ID>, #[graphql(name = "productTypeId")] _arg_product_type_id: ID) -> Option<ProductAttributeUnassign> {
-
-        Some(ProductAttributeUnassign { product_type: None, errors: vec![] })
-
-    }
-
     #[graphql(name = "categoryBulkDelete")]
     async fn category_bulk_delete(&self, #[graphql(name = "ids")] _arg_ids: Vec<ID>) -> Option<CategoryBulkDelete> {
 
         Some(CategoryBulkDelete { errors: vec![] })
-
-    }
-
-    #[graphql(name = "collectionReorderProducts")]
-    async fn collection_reorder_products(&self, #[graphql(name = "collectionId")] _arg_collection_id: ID, #[graphql(name = "moves")] _arg_moves: Vec<MoveProductInput>) -> Option<CollectionReorderProducts> {
-
-        Some(CollectionReorderProducts { errors: vec![] })
 
     }
 
@@ -30565,69 +30537,6 @@ impl GenMutation {
     async fn channel_reorder_warehouses(&self, #[graphql(name = "channelId")] _arg_channel_id: ID, #[graphql(name = "moves")] _arg_moves: Vec<ReorderInput>) -> Option<ChannelReorderWarehouses> {
 
         Some(ChannelReorderWarehouses { channel: None, errors: vec![] })
-
-    }
-
-    #[graphql(name = "attributeCreate")]
-    async fn attribute_create(&self, #[graphql(name = "input")] _arg_input: AttributeCreateInput) -> Option<AttributeCreate> {
-
-        Some(AttributeCreate { attribute: None, errors: vec![] })
-
-    }
-
-    #[graphql(name = "attributeDelete")]
-    async fn attribute_delete(&self, #[graphql(name = "externalReference")] _arg_external_reference: Option<String>, #[graphql(name = "id")] _arg_id: Option<ID>) -> Option<AttributeDelete> {
-
-        Some(AttributeDelete { errors: vec![] })
-
-    }
-
-    #[graphql(name = "attributeUpdate")]
-    async fn attribute_update(&self, #[graphql(name = "externalReference")] _arg_external_reference: Option<String>, #[graphql(name = "id")] _arg_id: Option<ID>, #[graphql(name = "input")] _arg_input: AttributeUpdateInput) -> Option<AttributeUpdate> {
-
-        Some(AttributeUpdate { attribute: None, errors: vec![] })
-
-    }
-
-    #[graphql(name = "attributeBulkDelete")]
-    async fn attribute_bulk_delete(&self, #[graphql(name = "ids")] _arg_ids: Vec<ID>) -> Option<AttributeBulkDelete> {
-
-        Some(AttributeBulkDelete { errors: vec![] })
-
-    }
-
-    #[graphql(name = "attributeValueBulkDelete")]
-    async fn attribute_value_bulk_delete(&self, #[graphql(name = "ids")] _arg_ids: Vec<ID>) -> Option<AttributeValueBulkDelete> {
-
-        Some(AttributeValueBulkDelete { count: None, errors: vec![] })
-
-    }
-
-    #[graphql(name = "attributeValueCreate")]
-    async fn attribute_value_create(&self, #[graphql(name = "attribute")] _arg_attribute: ID, #[graphql(name = "input")] _arg_input: AttributeValueCreateInput) -> Option<AttributeValueCreate> {
-
-        Some(AttributeValueCreate { attribute: None, errors: vec![] })
-
-    }
-
-    #[graphql(name = "attributeValueDelete")]
-    async fn attribute_value_delete(&self, #[graphql(name = "externalReference")] _arg_external_reference: Option<String>, #[graphql(name = "id")] _arg_id: Option<ID>) -> Option<AttributeValueDelete> {
-
-        Some(AttributeValueDelete { attribute: None, errors: vec![] })
-
-    }
-
-    #[graphql(name = "attributeValueUpdate")]
-    async fn attribute_value_update(&self, #[graphql(name = "externalReference")] _arg_external_reference: Option<String>, #[graphql(name = "id")] _arg_id: Option<ID>, #[graphql(name = "input")] _arg_input: AttributeValueUpdateInput) -> Option<AttributeValueUpdate> {
-
-        Some(AttributeValueUpdate { attribute: None, errors: vec![] })
-
-    }
-
-    #[graphql(name = "attributeReorderValues")]
-    async fn attribute_reorder_values(&self, #[graphql(name = "attributeId")] _arg_attribute_id: ID, #[graphql(name = "moves")] _arg_moves: Vec<ReorderInput>) -> Option<AttributeReorderValues> {
-
-        Some(AttributeReorderValues { attribute: None, errors: vec![] })
 
     }
 

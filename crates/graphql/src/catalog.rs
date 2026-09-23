@@ -1297,6 +1297,89 @@ fn merged(cur: serde_json::Value, input: Option<Vec<crate::common::MetadataInput
     input.map(|v| crate::common::merge_metadata(&cur, &v))
 }
 
+fn aerr(field: Option<String>, message: String) -> gen::AttributeError {
+    gen::AttributeError { field, message: Some(message), code: None }
+}
+
+/// Saleor enum DEBUG name -> DB value (`SINGLEREFERENCE` -> `single-reference`).
+fn attr_input_type(t: &gen::AttributeInputTypeEnum) -> String {
+    match format!("{t:?}").as_str() {
+        "SINGLEREFERENCE" => "single-reference".into(),
+        "RICHTEXT" => "rich-text".into(),
+        "PLAINTEXT" => "plain-text".into(),
+        "DATETIME" => "date-time".into(),
+        other => other.to_lowercase(),
+    }
+}
+
+fn attr_kind(t: &gen::AttributeTypeEnum) -> String {
+    match format!("{t:?}").as_str() {
+        "PRODUCTTYPE" => "product-type".into(),
+        "PAGETYPE" => "page-type".into(),
+        "CUSTOMERTYPE" => "customer-type".into(),
+        other => other.to_lowercase(),
+    }
+}
+
+fn entity_type_name(t: &gen::AttributeEntityTypeEnum) -> String {
+    match format!("{t:?}").as_str() {
+        "PAGE" => "Page".into(),
+        "PRODUCT" => "Product".into(),
+        other => {
+            let mut c = other.to_lowercase();
+            c.get_mut(0..1).map(|f| f.make_ascii_uppercase());
+            c
+        }
+    }
+}
+
+async fn resolve_attribute(db: &sea_orm::DatabaseConnection, id: Option<ID>, ext: Option<String>) -> Result<Option<i32>> {
+    use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QuerySelect};
+    type A = rustygod_db::entities::attribute_attribute::Entity;
+    use rustygod_db::entities::attribute_attribute::Column as ACol;
+    if let Some(i) = id {
+        return Ok(rustygod_db::catalog::parse_gid(&i.0));
+    }
+    if let Some(x) = ext {
+        return Ok(A::find().select_only().column(ACol::Id)
+            .filter(ACol::ExternalReference.eq(x))
+            .into_tuple::<i32>().one(db).await.map_err(|e| Error::new(e.to_string()))?);
+    }
+    Ok(None)
+}
+
+async fn resolve_value(db: &sea_orm::DatabaseConnection, id: Option<ID>, ext: Option<String>) -> Result<Option<i32>> {
+    use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QuerySelect};
+    type V = rustygod_db::entities::attribute_attributevalue::Entity;
+    use rustygod_db::entities::attribute_attributevalue::Column as VCol;
+    if let Some(i) = id {
+        return Ok(rustygod_db::catalog::parse_gid(&i.0));
+    }
+    if let Some(x) = ext {
+        return Ok(V::find().select_only().column(VCol::Id)
+            .filter(VCol::ExternalReference.eq(x))
+            .into_tuple::<i32>().one(db).await.map_err(|e| Error::new(e.to_string()))?);
+    }
+    Ok(None)
+}
+
+fn json_of(g: &gen::GenJSONString) -> serde_json::Value {
+    serde_json::from_str(&g.0).unwrap_or_else(|_| serde_json::Value::String(g.0.clone()))
+}
+
+fn value_create(i: &gen::AttributeValueCreateInput) -> rustygod_db::attribute_writes::ValueCreate {
+    rustygod_db::attribute_writes::ValueCreate {
+        name: i.name.clone(), value: i.value.clone(), plain_text: i.plain_text.clone(),
+        rich_text: i.rich_text.as_ref().map(json_of),
+        file_url: i.file_url.clone(), content_type: i.content_type.clone(),
+        external_reference: i.external_reference.clone(),
+    }
+}
+
+async fn attr_payload(db: &sea_orm::DatabaseConnection, aid: i32) -> Result<Option<gen::Attribute>> {
+    assemble_attribute(db, aid).await.map_err(Error::new)
+}
+
 #[Object]
 impl CatalogWriteMutation {
     /// Dashboard `UpdateProduct`: identity fields + category + collections +
@@ -1585,6 +1668,250 @@ impl CatalogWriteMutation {
         match rustygod_db::catalog_writes::collection_remove_products(db, cid, &prods).await {
             Ok(()) => Ok(gen::CollectionRemoveProducts { collection: None, errors: vec![] }),
             Err(e) => Ok(gen::CollectionRemoveProducts { collection: None, errors: vec![cerr(None, e.to_string())] }),
+        }
+    }
+
+    async fn collection_reorder_products(&self, ctx: &Context<'_>, #[graphql(name = "collectionId")] collection_id: ID, moves: Vec<gen::MoveProductInput>) -> Result<gen::CollectionReorderProducts> {
+        require_staff(ctx)?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let Some(cid) = rustygod_db::catalog::parse_gid(&collection_id.0) else {
+            return Ok(gen::CollectionReorderProducts { errors: vec![cerr(Some("collectionId".into()), "bad collection id".into())] });
+        };
+        let mv: Vec<(i32, i32)> = moves.iter()
+            .filter_map(|m| rustygod_db::catalog::parse_gid(&m.product_id.0).map(|p| (p, m.sort_order.unwrap_or(0))))
+            .collect();
+        match rustygod_db::attribute_writes::reorder_collection_products(db, cid, &mv).await {
+            Ok(()) => Ok(gen::CollectionReorderProducts { errors: vec![] }),
+            Err(e) => Ok(gen::CollectionReorderProducts { errors: vec![cerr(None, e.to_string())] }),
+        }
+    }
+
+    /// Dashboard product-type attributes tab: assign PRODUCT/VARIANT scoped
+    /// attributes with Django's validations (type, variant-only, coherence).
+    async fn product_attribute_assign(&self, ctx: &Context<'_>, operations: Vec<gen::ProductAttributeAssignInput>, #[graphql(name = "productTypeId")] product_type_id: ID) -> Result<gen::ProductAttributeAssign> {
+        require_staff(ctx)?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let err = |m: String| gen::ProductAttributeAssign { product_type: None, errors: vec![perr(Some("operations".into()), m)] };
+        let Some(pt) = rustygod_db::catalog::parse_gid(&product_type_id.0) else {
+            return Ok(err("bad product type id".into()));
+        };
+        let mut ops = vec![];
+        for o in &operations {
+            let Some(aid) = rustygod_db::catalog::parse_gid(&o.id.0) else {
+                return Ok(err("bad attribute id".into()));
+            };
+            let kind = match format!("{:?}", o.r#type).as_str() {
+                "PRODUCT" => rustygod_db::attribute_writes::AssignKind::Product,
+                _ => rustygod_db::attribute_writes::AssignKind::Variant,
+            };
+            ops.push(rustygod_db::attribute_writes::AssignOp { attr_id: aid, kind, variant_selection: o.variant_selection.unwrap_or(false) });
+        }
+        match rustygod_db::attribute_writes::assign_attributes(db, pt, &ops).await {
+            Ok(()) => Ok(gen::ProductAttributeAssign { product_type: None, errors: vec![] }),
+            Err(e) => Ok(err(e.to_string())),
+        }
+    }
+
+    async fn product_attribute_unassign(&self, ctx: &Context<'_>, #[graphql(name = "attributeIds")] attribute_ids: Vec<ID>, #[graphql(name = "productTypeId")] product_type_id: ID) -> Result<gen::ProductAttributeUnassign> {
+        require_staff(ctx)?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let err = |m: String| gen::ProductAttributeUnassign { product_type: None, errors: vec![perr(Some("attributeIds".into()), m)] };
+        let Some(pt) = rustygod_db::catalog::parse_gid(&product_type_id.0) else {
+            return Ok(err("bad product type id".into()));
+        };
+        let aids: Vec<i32> = attribute_ids.iter().filter_map(|i| rustygod_db::catalog::parse_gid(&i.0)).collect();
+        match rustygod_db::attribute_writes::unassign_attributes(db, pt, &aids).await {
+            Ok(_) => Ok(gen::ProductAttributeUnassign { product_type: None, errors: vec![] }),
+            Err(e) => Ok(err(e.to_string())),
+        }
+    }
+
+    async fn product_attribute_assignment_update(&self, ctx: &Context<'_>, operations: Vec<gen::ProductAttributeAssignmentUpdateInput>, #[graphql(name = "productTypeId")] product_type_id: ID) -> Result<gen::ProductAttributeAssignmentUpdate> {
+        require_staff(ctx)?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let err = |m: String| gen::ProductAttributeAssignmentUpdate { product_type: None, errors: vec![perr(Some("operations".into()), m)] };
+        let Some(pt) = rustygod_db::catalog::parse_gid(&product_type_id.0) else {
+            return Ok(err("bad product type id".into()));
+        };
+        let mut ops = vec![];
+        for o in &operations {
+            let Some(aid) = rustygod_db::catalog::parse_gid(&o.id.0) else {
+                return Ok(err("bad attribute id".into()));
+            };
+            ops.push((aid, o.variant_selection));
+        }
+        match rustygod_db::attribute_writes::update_attribute_assignment(db, pt, &ops).await {
+            Ok(()) => Ok(gen::ProductAttributeAssignmentUpdate { product_type: None, errors: vec![] }),
+            Err(e) => Ok(err(e.to_string())),
+        }
+    }
+
+    async fn attribute_create(&self, ctx: &Context<'_>, input: gen::AttributeCreateInput) -> Result<gen::AttributeCreate> {
+        require_staff(ctx)?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let err = |m: String| gen::AttributeCreate { attribute: None, errors: vec![aerr(None, m)] };
+        let create = rustygod_db::attribute_writes::AttributeCreate {
+            name: input.name.clone(),
+            slug: input.slug.clone(),
+            input_type: input.input_type.as_ref().map(attr_input_type).unwrap_or_else(|| "dropdown".into()),
+            attr_type: attr_kind(&input.r#type),
+            entity_type: input.entity_type.as_ref().map(entity_type_name),
+            unit: input.unit.as_ref().map(|u| format!("{u:?}").to_lowercase()),
+            value_required: input.value_required.unwrap_or(false),
+            external_reference: input.external_reference.clone(),
+            reference_types: input.reference_types.as_ref().map(|v| v.iter().filter_map(|i| rustygod_db::catalog::parse_gid(&i.0)).collect()).unwrap_or_default(),
+        };
+        let aid = match rustygod_db::attribute_writes::create_attribute(db, &create).await {
+            Ok(a) => a,
+            Err(e) => return Ok(err(e.to_string())),
+        };
+        for v in input.values.as_ref().map(|v| v.as_slice()).unwrap_or(&[]) {
+            if let Err(e) = rustygod_db::attribute_writes::create_attribute_value(db, aid, &value_create(v)).await {
+                return Ok(err(e.to_string()));
+            }
+        }
+        Ok(gen::AttributeCreate { attribute: attr_payload(db, aid).await?, errors: vec![] })
+    }
+
+    async fn attribute_update(&self, ctx: &Context<'_>, #[graphql(name = "externalReference")] external_reference: Option<String>, id: Option<ID>, input: gen::AttributeUpdateInput) -> Result<gen::AttributeUpdate> {
+        require_staff(ctx)?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let err = |m: String| gen::AttributeUpdate { attribute: None, errors: vec![aerr(None, m)] };
+        let Some(aid) = resolve_attribute(db, id, external_reference).await? else {
+            return Ok(gen::AttributeUpdate { attribute: None, errors: vec![aerr(Some("id".into()), "attribute not found".into())] });
+        };
+        let patch = rustygod_db::attribute_writes::AttributePatch {
+            name: input.name.clone(),
+            slug: input.slug.clone(),
+            unit: input.unit.as_ref().map(|u| format!("{u:?}").to_lowercase()),
+            value_required: input.value_required,
+            is_variant_only: input.is_variant_only,
+            visible_in_storefront: input.visible_in_storefront,
+            filterable_in_storefront: input.filterable_in_storefront,
+            filterable_in_dashboard: input.filterable_in_dashboard,
+            storefront_search_position: input.storefront_search_position,
+            available_in_grid: input.available_in_grid,
+            external_reference: input.external_reference.clone(),
+            entity_type: None,
+            reference_types: input.reference_types.as_ref().map(|v| v.iter().filter_map(|i| rustygod_db::catalog::parse_gid(&i.0)).collect()),
+        };
+        let mut adds = vec![];
+        for v in input.add_values.as_ref().map(|v| v.as_slice()).unwrap_or(&[]) {
+            let Some(n) = v.name.clone().filter(|n| !n.trim().is_empty()) else {
+                return Ok(err("value name is required".into()));
+            };
+            adds.push(rustygod_db::attribute_writes::ValueCreate {
+                name: n, value: v.value.clone(), plain_text: v.plain_text.clone(),
+                rich_text: v.rich_text.as_ref().map(json_of),
+                file_url: v.file_url.clone(), content_type: v.content_type.clone(),
+                external_reference: v.external_reference.clone(),
+            });
+        }
+        let removes: Vec<i32> = input.remove_values.as_ref().map(|v| v.as_slice()).unwrap_or(&[])
+            .iter().filter_map(|i| rustygod_db::catalog::parse_gid(&i.0)).collect();
+        match rustygod_db::attribute_writes::update_attribute(db, aid, &patch, &adds, &removes).await {
+            Ok(()) => Ok(gen::AttributeUpdate { attribute: attr_payload(db, aid).await?, errors: vec![] }),
+            Err(e) => Ok(err(e.to_string())),
+        }
+    }
+
+    async fn attribute_delete(&self, ctx: &Context<'_>, #[graphql(name = "externalReference")] external_reference: Option<String>, id: Option<ID>) -> Result<gen::AttributeDelete> {
+        require_staff(ctx)?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let Some(aid) = resolve_attribute(db, id, external_reference).await? else {
+            return Ok(gen::AttributeDelete { errors: vec![aerr(Some("id".into()), "attribute not found".into())] });
+        };
+        match rustygod_db::attribute_writes::delete_attribute(db, aid).await {
+            Ok(()) => Ok(gen::AttributeDelete { errors: vec![] }),
+            Err(e) => Ok(gen::AttributeDelete { errors: vec![aerr(None, e.to_string())] }),
+        }
+    }
+
+    async fn attribute_bulk_delete(&self, ctx: &Context<'_>, ids: Vec<ID>) -> Result<gen::AttributeBulkDelete> {
+        require_staff(ctx)?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let aids: Vec<i32> = ids.iter().filter_map(|i| rustygod_db::catalog::parse_gid(&i.0)).collect();
+        match rustygod_db::attribute_writes::bulk_delete_attributes(db, &aids).await {
+            Ok(_) => Ok(gen::AttributeBulkDelete { errors: vec![] }),
+            Err(e) => Ok(gen::AttributeBulkDelete { errors: vec![aerr(None, e.to_string())] }),
+        }
+    }
+
+    async fn attribute_value_create(&self, ctx: &Context<'_>, attribute: ID, input: gen::AttributeValueCreateInput) -> Result<gen::AttributeValueCreate> {
+        require_staff(ctx)?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let err = |m: String| gen::AttributeValueCreate { attribute: None, errors: vec![aerr(None, m)] };
+        let Some(aid) = rustygod_db::catalog::parse_gid(&attribute.0) else {
+            return Ok(err("bad attribute id".into()));
+        };
+        match rustygod_db::attribute_writes::create_attribute_value(db, aid, &value_create(&input)).await {
+            Ok(_) => Ok(gen::AttributeValueCreate { attribute: attr_payload(db, aid).await?, errors: vec![] }),
+            Err(e) => Ok(err(e.to_string())),
+        }
+    }
+
+    async fn attribute_value_update(&self, ctx: &Context<'_>, #[graphql(name = "externalReference")] external_reference: Option<String>, id: Option<ID>, input: gen::AttributeValueUpdateInput) -> Result<gen::AttributeValueUpdate> {
+        require_staff(ctx)?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let err = |m: String| gen::AttributeValueUpdate { attribute: None, errors: vec![aerr(None, m)] };
+        let Some(vid) = resolve_value(db, id, external_reference).await? else {
+            return Ok(gen::AttributeValueUpdate { attribute: None, errors: vec![aerr(Some("id".into()), "attribute value not found".into())] });
+        };
+        // The parent attribute id for the payload: resolve via value row.
+        use sea_orm::{EntityTrait, QuerySelect};
+        let aid: Option<i32> = rustygod_db::entities::attribute_attributevalue::Entity::find_by_id(vid)
+            .select_only().column(rustygod_db::entities::attribute_attributevalue::Column::AttributeId)
+            .into_tuple::<i32>().one(db).await.map_err(|e| Error::new(e.to_string()))?;
+        let patch = rustygod_db::attribute_writes::ValuePatch {
+            name: input.name.clone(), value: input.value.clone(), plain_text: input.plain_text.clone(),
+            rich_text: input.rich_text.as_ref().map(json_of),
+            file_url: input.file_url.clone(), content_type: input.content_type.clone(),
+            external_reference: input.external_reference.clone(),
+        };
+        match rustygod_db::attribute_writes::update_attribute_value(db, vid, &patch).await {
+            Ok(()) => Ok(gen::AttributeValueUpdate {
+                attribute: match aid { Some(a) => attr_payload(db, a).await?, None => None },
+                errors: vec![],
+            }),
+            Err(e) => Ok(err(e.to_string())),
+        }
+    }
+
+    async fn attribute_value_delete(&self, ctx: &Context<'_>, #[graphql(name = "externalReference")] external_reference: Option<String>, id: Option<ID>) -> Result<gen::AttributeValueDelete> {
+        require_staff(ctx)?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let Some(vid) = resolve_value(db, id, external_reference).await? else {
+            return Ok(gen::AttributeValueDelete { attribute: None, errors: vec![aerr(Some("id".into()), "attribute value not found".into())] });
+        };
+        match rustygod_db::attribute_writes::delete_attribute_value(db, vid).await {
+            Ok(()) => Ok(gen::AttributeValueDelete { attribute: None, errors: vec![] }),
+            Err(e) => Ok(gen::AttributeValueDelete { attribute: None, errors: vec![aerr(None, e.to_string())] }),
+        }
+    }
+
+    async fn attribute_value_bulk_delete(&self, ctx: &Context<'_>, ids: Vec<ID>) -> Result<gen::AttributeValueBulkDelete> {
+        require_staff(ctx)?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let vids: Vec<i32> = ids.iter().filter_map(|i| rustygod_db::catalog::parse_gid(&i.0)).collect();
+        match rustygod_db::attribute_writes::bulk_delete_attribute_values(db, &vids).await {
+            Ok(n) => Ok(gen::AttributeValueBulkDelete { count: Some(n as i32), errors: vec![] }),
+            Err(e) => Ok(gen::AttributeValueBulkDelete { count: None, errors: vec![aerr(None, e.to_string())] }),
+        }
+    }
+
+    async fn attribute_reorder_values(&self, ctx: &Context<'_>, #[graphql(name = "attributeId")] attribute_id: ID, moves: Vec<gen::ReorderInput>) -> Result<gen::AttributeReorderValues> {
+        require_staff(ctx)?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let err = |m: String| gen::AttributeReorderValues { attribute: None, errors: vec![aerr(None, m)] };
+        let Some(aid) = rustygod_db::catalog::parse_gid(&attribute_id.0) else {
+            return Ok(err("bad attribute id".into()));
+        };
+        let mv: Vec<(i32, i32)> = moves.iter()
+            .filter_map(|m| rustygod_db::catalog::parse_gid(&m.id.0).map(|v| (v, m.sort_order.unwrap_or(0))))
+            .collect();
+        match rustygod_db::attribute_writes::reorder_attribute_values(db, aid, &mv).await {
+            Ok(()) => Ok(gen::AttributeReorderValues { attribute: attr_payload(db, aid).await?, errors: vec![] }),
+            Err(e) => Ok(err(e.to_string())),
         }
     }
 
