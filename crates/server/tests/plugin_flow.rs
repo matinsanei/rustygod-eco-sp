@@ -1,12 +1,12 @@
 //! DB-mode plugin flow over gRPC handlers: builtin tax plugin answers,
 //! registration validates, unknown plugins 404 — all staff-gated.
 
-use rustygod_db::database_url;
-use rustygod_proto::plugin::{
+use saleor_rustify_db::database_url;
+use saleor_rustify_proto::plugin::{
     plugin_service_server::PluginService, CalculateTaxRequest, CallPluginRequest,
     ListPluginsRequest, PluginManifestInfo, RegisterPluginRequest, UnregisterPluginRequest,
 };
-use rustygod_server::service_plugin::PluginServiceImpl;
+use saleor_rustify_server::service_plugin::PluginServiceImpl;
 use tonic::Request;
 
 fn test_key() -> String {
@@ -19,12 +19,12 @@ fn test_key() -> String {
 
 async fn staff_req<T>(msg: T) -> Request<T> {
     std::env::set_var("RSA_PRIVATE_KEY", test_key());
-    let db = rustygod_db::connect(&database_url()).await.unwrap();
-    let (user, _) = rustygod_db::auth::find_for_login(&db, "admin@example.com")
+    let db = saleor_rustify_db::connect(&database_url()).await.unwrap();
+    let (user, _) = saleor_rustify_db::auth::find_for_login(&db, "admin@example.com")
         .await
         .unwrap()
         .unwrap();
-    let pair = rustygod_core::auth::mint_tokens_with_key(
+    let pair = saleor_rustify_core::auth::mint_tokens_with_key(
         &test_key(),
         "test",
         &user.email,
@@ -42,7 +42,7 @@ async fn staff_req<T>(msg: T) -> Request<T> {
 }
 
 async fn svc() -> PluginServiceImpl {
-    let db = rustygod_db::connect(&database_url()).await.unwrap();
+    let db = saleor_rustify_db::connect(&database_url()).await.unwrap();
     PluginServiceImpl::new(Some(db))
 }
 
@@ -129,11 +129,11 @@ async fn grpc_plugin_lifecycle() {
 #[tokio::test]
 async fn grpc_plugin_persistence_and_public_points() {
     std::env::set_var("RSA_PRIVATE_KEY", test_key());
-    let db = rustygod_db::connect(&database_url()).await.unwrap();
+    let db = saleor_rustify_db::connect(&database_url()).await.unwrap();
     let svc = PluginServiceImpl::new(Some(db.clone()));
 
     // Register a validator copy under a new name (persisted to postgres).
-    let v = rustygod_plugins::reference_validator_plugin().unwrap();
+    let v = saleor_rustify_plugins::reference_validator_plugin().unwrap();
     let reg = svc
         .register_plugin(
             staff_req(RegisterPluginRequest {
@@ -190,7 +190,7 @@ async fn grpc_plugin_persistence_and_public_points() {
     assert!(gone.unregistered);
 
     // Public points: storefront calls without auth when env-listed.
-    std::env::set_var("RUSTYGOD_PUBLIC_POINTS", "calculate_tax");
+    std::env::set_var("RUSTIFY_PUBLIC_POINTS", "calculate_tax");
     let svc3 = PluginServiceImpl::new(Some(db));
     let open = svc3
         .calculate_tax(Request::new(CalculateTaxRequest {
@@ -213,5 +213,5 @@ async fn grpc_plugin_persistence_and_public_points() {
         .await
         .unwrap_err();
     assert_eq!(err.code(), tonic::Code::Unauthenticated);
-    std::env::remove_var("RUSTYGOD_PUBLIC_POINTS");
+    std::env::remove_var("RUSTIFY_PUBLIC_POINTS");
 }

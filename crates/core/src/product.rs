@@ -54,8 +54,8 @@ impl Product {
         Ok(())
     }
 
-    pub fn to_proto(&self) -> rustygod_proto::product::Product {
-        rustygod_proto::product::Product {
+    pub fn to_proto(&self) -> saleor_rustify_proto::product::Product {
+        saleor_rustify_proto::product::Product {
             id: self.id.clone(),
             name: self.name.clone(),
             slug: self.slug.clone(),
@@ -70,8 +70,8 @@ impl Product {
 }
 
 impl ProductVariant {
-    pub fn to_proto(&self) -> rustygod_proto::product::ProductVariant {
-        rustygod_proto::product::ProductVariant {
+    pub fn to_proto(&self) -> saleor_rustify_proto::product::ProductVariant {
+        saleor_rustify_proto::product::ProductVariant {
             id: self.id.clone(),
             product_id: self.product_id.clone(),
             name: self.name.clone(),
@@ -83,8 +83,8 @@ impl ProductVariant {
 }
 
 impl Category {
-    pub fn to_proto(&self) -> rustygod_proto::product::Category {
-        rustygod_proto::product::Category {
+    pub fn to_proto(&self) -> saleor_rustify_proto::product::Category {
+        saleor_rustify_proto::product::Category {
             id: self.id.clone(),
             name: self.name.clone(),
             slug: self.slug.clone(),

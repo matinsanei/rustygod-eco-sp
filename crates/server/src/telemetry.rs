@@ -9,7 +9,7 @@
 //! header-only tower layer cannot label per-RPC codes without buffering
 //! bodies — failed calls surface here as latency + server error logs, and
 //! business errors are already explicit in every response's `errors` field.
-//! Scrape via the Prometheus exporter (`RUSTYGOD_METRICS_ADDR`, default
+//! Scrape via the Prometheus exporter (`RUSTIFY_METRICS_ADDR`, default
 //! `127.0.0.1:9000`). Spans come from
 //! `tower_http::trace::TraceLayer::new_for_grpc` (wired in `main.rs`).
 

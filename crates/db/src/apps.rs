@@ -9,7 +9,7 @@
 //!   same strings staff checks use (`manage_orders`, `manage_gift_card`…).
 
 use rand::Rng;
-use rustygod_core::auth::{self, PasswordCheck};
+use saleor_rustify_core::auth::{self, PasswordCheck};
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, QuerySelect, Set,
 };

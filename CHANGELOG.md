@@ -91,8 +91,8 @@
 - Webhook outbox: deliveries are created inside the business transaction;
   post-commit fast send + sweeper pickup (`sending` claim, single-flight).
 - `OrderService.CancelOrder` (unpaid only) and `ReconcileOrder` (9 checks).
-- Sweeper (`RUSTYGOD_SWEEP_SECS`, default 60): expired reservations +
+- Sweeper (`RUSTIFY_SWEEP_SECS`, default 60): expired reservations +
   due webhook deliveries, with indexes.
 - `delete_checkout_row` now releases line reservations (they were orphaned).
 - Fulfillment skips stock moves for `track_inventory = false` variants.
-- `RUSTYGOD_PUBLIC_POINTS` for storefront-safe extension points.
+- `RUSTIFY_PUBLIC_POINTS` for storefront-safe extension points.

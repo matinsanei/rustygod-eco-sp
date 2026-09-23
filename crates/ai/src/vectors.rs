@@ -27,7 +27,7 @@ pub async fn refresh_product_embeddings(
     db: &DatabaseConnection,
     embedder: &impl Embedder,
 ) -> Result<RefreshReport> {
-    rustygod_db::embeddings::ensure_table(db).await?;
+    saleor_rustify_db::embeddings::ensure_table(db).await?;
     let rows = db
         .query_all(Statement::from_string(
             sea_orm::DatabaseBackend::Postgres,
@@ -38,7 +38,7 @@ pub async fn refresh_product_embeddings(
                 .to_string(),
         ))
         .await?;
-    let stored = rustygod_db::embeddings::stored_sources(db).await?;
+    let stored = saleor_rustify_db::embeddings::stored_sources(db).await?;
     let mut pending: Vec<(i32, String)> = Vec::new();
     let mut skipped = 0usize;
     for r in rows {
@@ -59,7 +59,7 @@ pub async fn refresh_product_embeddings(
         let texts: Vec<String> = chunk.iter().map(|(_, s)| s.clone()).collect();
         let vecs = embedder.embed(&texts).await?;
         for ((pid, source), vec) in chunk.iter().zip(vecs) {
-            rustygod_db::embeddings::upsert(db, *pid, &vec, source).await?;
+            saleor_rustify_db::embeddings::upsert(db, *pid, &vec, source).await?;
             embedded += 1;
         }
     }
@@ -68,14 +68,14 @@ pub async fn refresh_product_embeddings(
 
 /// Cosine-ranked product ids for a raw query embedding, restricted to the
 /// published set. `limit` caps the scan output, not the scan itself
-/// (catalog-scale full scan by design — see `rustygod_db::embeddings`).
+/// (catalog-scale full scan by design — see `saleor_rustify_db::embeddings`).
 pub async fn similar_to_vector(
     db: &DatabaseConnection,
     query: &[f32],
     published: &HashSet<i32>,
     limit: usize,
 ) -> Result<Vec<(i32, f64)>> {
-    let all = rustygod_db::embeddings::load_all(db).await?;
+    let all = saleor_rustify_db::embeddings::load_all(db).await?;
     let mut scored: Vec<(i32, f64)> = all
         .into_iter()
         .filter(|e| published.contains(&e.product_id) && e.embedding.len() == query.len())
@@ -108,7 +108,7 @@ pub async fn similar_products(
     published: &HashSet<i32>,
     limit: usize,
 ) -> Result<Vec<(i32, f64)>> {
-    let all = rustygod_db::embeddings::load_all(db).await?;
+    let all = saleor_rustify_db::embeddings::load_all(db).await?;
     let Some(own) = all.iter().find(|e| e.product_id == product_id).map(|e| (e.embedding.clone(),)) else {
         return Ok(vec![]);
     };

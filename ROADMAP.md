@@ -1,4 +1,4 @@
-# 🗺️ rustygod-saleor Roadmap: what Saleor couldn't build
+# 🗺️ saleor-rustify Roadmap: what Saleor couldn't build
 
 **Goal:** a real Rust commerce engine that beats Saleor where it failed —
 performance, size, frontend experience — without regrowing its 116k-line
@@ -86,7 +86,7 @@ GraphQL monster.
 - [x] `PluginService` gRPC (register/unregister/call/list/tax, `manage_apps`) + `sdk/plugin.mjs`
 - [x] Capability-based permission checks on every mutating RPC (Phase 2.5 access layer)
 - [x] Plugin persistence (`rustygod_plugin` table — Django ignores it)
-- [x] Public extension points via `RUSTYGOD_PUBLIC_POINTS` (storefront path, default closed)
+- [x] Public extension points via `RUSTIFY_PUBLIC_POINTS` (storefront path, default closed)
 - [ ] Follow-ups → Phase 4: OTLP export, per-point storefront gateway, generated TS clients
 
 ### Phase 4 — Frontend that beats Saleor (STARTED)

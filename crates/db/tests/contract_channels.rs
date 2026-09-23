@@ -5,11 +5,11 @@
 
 use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
-use rustygod_db::{catalog, channels, database_url};
+use saleor_rustify_db::{catalog, channels, database_url};
 use sea_orm::DatabaseConnection;
 
 async fn db() -> DatabaseConnection {
-    rustygod_db::connect(&database_url())
+    saleor_rustify_db::connect(&database_url())
         .await
         .expect("saleor postgres must be up (localhost:5434)")
 }

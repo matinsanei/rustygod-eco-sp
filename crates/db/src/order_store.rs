@@ -14,7 +14,7 @@
 
 use chrono::Utc;
 use rust_decimal::Decimal;
-use rustygod_core::{
+use saleor_rustify_core::{
     checkout::Checkout,
     money::Money,
     order::{Order, OrderLine, OrderStatus},

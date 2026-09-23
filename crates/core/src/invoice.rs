@@ -1,7 +1,7 @@
 //! Invoice domain logic, mirroring `saleor/invoice/` and
 //! `saleor/graphql/invoice/mutations/`.
 //!
-//! Pure functions only — persistence lives in `rustygod_db::invoices`.
+//! Pure functions only — persistence lives in `saleor_rustify_db::invoices`.
 //! v1 note: Django renders invoices through async plugins; we fulfill
 //! synchronously with the same `pending → success/failed/deleted` job
 //! state machine and the same event vocabulary.

@@ -25,7 +25,7 @@ impl Money {
     }
 }
 
-impl From<Money> for rustygod_proto::common::Money {
+impl From<Money> for saleor_rustify_proto::common::Money {
     fn from(m: Money) -> Self {
         Self {
             currency: m.currency,
@@ -34,10 +34,10 @@ impl From<Money> for rustygod_proto::common::Money {
     }
 }
 
-impl TryFrom<rustygod_proto::common::Money> for Money {
+impl TryFrom<saleor_rustify_proto::common::Money> for Money {
     type Error = crate::DomainError;
 
-    fn try_from(m: rustygod_proto::common::Money) -> crate::Result<Self> {
+    fn try_from(m: saleor_rustify_proto::common::Money) -> crate::Result<Self> {
         let amount =
             m.amount
                 .parse::<Decimal>()

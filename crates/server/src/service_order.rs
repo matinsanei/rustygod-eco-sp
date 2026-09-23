@@ -1,6 +1,6 @@
-use rustygod_core::order::Order;
-use rustygod_db::{fulfillment, granted_refunds, order_store};
-use rustygod_proto::order::{
+use saleor_rustify_core::order::Order;
+use saleor_rustify_db::{fulfillment, granted_refunds, order_store};
+use saleor_rustify_proto::order::{
     order_service_server::OrderService, CancelFulfillmentRequest, CancelOrderRequest,
     CancelOrderResponse, CreateFulfillmentRequest, CreateGrantedRefundRequest,
     CreateGrantedRefundResponse, ExecuteGrantedRefundRequest, ExecuteGrantedRefundResponse,
@@ -33,8 +33,8 @@ impl OrderServiceImpl {
         }
     }
 
-    fn err(code: &str, message: String) -> rustygod_proto::common::Error {
-        rustygod_proto::common::Error {
+    fn err(code: &str, message: String) -> saleor_rustify_proto::common::Error {
+        saleor_rustify_proto::common::Error {
             code: code.into(),
             message,
             field: String::new(),
@@ -94,7 +94,7 @@ impl OrderService for OrderServiceImpl {
     ) -> Result<Response<ListOrdersResponse>, Status> {
         let req = request.into_inner();
         if let Some(db) = &self.db {
-            use rustygod_db::entities::order_order;
+            use saleor_rustify_db::entities::order_order;
             use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QueryOrder, QuerySelect};
             let first = if req.first <= 0 { 100 } else { (req.first as u64).min(1000) };
             let mut q = order_order::Entity::find()
@@ -121,7 +121,7 @@ impl OrderService for OrderServiceImpl {
             }
             return Ok(Response::new(ListOrdersResponse {
                 orders,
-                page_info: Some(rustygod_proto::common::PageInfo {
+                page_info: Some(saleor_rustify_proto::common::PageInfo {
                     has_next_page: false,
                     end_cursor: String::new(),
                 }),
@@ -139,7 +139,7 @@ impl OrderService for OrderServiceImpl {
         orders.truncate(first);
         Ok(Response::new(ListOrdersResponse {
             orders,
-            page_info: Some(rustygod_proto::common::PageInfo {
+            page_info: Some(saleor_rustify_proto::common::PageInfo {
                 has_next_page: false,
                 end_cursor: String::new(),
             }),
@@ -265,14 +265,14 @@ impl OrderService for OrderServiceImpl {
             return Ok(Response::new(ReconcileOrderResponse {
                 checks: vec![],
                 all_ok: false,
-                errors: vec![rustygod_proto::common::Error {
+                errors: vec![saleor_rustify_proto::common::Error {
                     code: "INVALID".into(),
                     message: "id must be a UUID".into(),
                     field: String::new(),
                 }],
             }));
         };
-        match rustygod_db::reconcile::reconcile_order(db, order_id).await {
+        match saleor_rustify_db::reconcile::reconcile_order(db, order_id).await {
             Ok(checks) => {
                 let all_ok = checks.iter().all(|c| c.ok);
                 Ok(Response::new(ReconcileOrderResponse {
@@ -287,7 +287,7 @@ impl OrderService for OrderServiceImpl {
             Err(e) => Ok(Response::new(ReconcileOrderResponse {
                 checks: vec![],
                 all_ok: false,
-                errors: vec![rustygod_proto::common::Error {
+                errors: vec![saleor_rustify_proto::common::Error {
                     code: "NOT_FOUND".into(),
                     message: e.to_string(),
                     field: String::new(),
@@ -305,7 +305,7 @@ impl OrderService for OrderServiceImpl {
         let Ok(order_id) = request.into_inner().id.parse::<Uuid>() else {
             return Ok(Response::new(CancelOrderResponse {
                 status: String::new(),
-                errors: vec![rustygod_proto::common::Error {
+                errors: vec![saleor_rustify_proto::common::Error {
                     code: "INVALID".into(),
                     message: "id must be a UUID".into(),
                     field: String::new(),
@@ -314,12 +314,12 @@ impl OrderService for OrderServiceImpl {
                 granted_refund_ids: vec![],
             }));
         };
-        match rustygod_db::cancel::cancel_order(db, order_id).await {
+        match saleor_rustify_db::cancel::cancel_order(db, order_id).await {
             Ok(out) => {
                 // Post-commit fast path, same as complete (best-effort).
                 if !out.delivery_ids.is_empty() {
                     let dbc = db.clone();
-                    let domain = std::env::var("RUSTYGOD_DOMAIN")
+                    let domain = std::env::var("RUSTIFY_DOMAIN")
                         .unwrap_or_else(|_| "localhost".into());
                     let ids = out.delivery_ids.clone();
                     tokio::spawn(async move {
@@ -344,7 +344,7 @@ impl OrderService for OrderServiceImpl {
                 };
                 Ok(Response::new(CancelOrderResponse {
                     status: String::new(),
-                    errors: vec![rustygod_proto::common::Error {
+                    errors: vec![saleor_rustify_proto::common::Error {
                         code: code.into(),
                         message: msg,
                         field: String::new(),
@@ -368,7 +368,7 @@ impl OrderService for OrderServiceImpl {
                 fulfillment_id: 0,
                 granted_refund_id: 0,
                 amount: String::new(),
-                errors: vec![rustygod_proto::common::Error {
+                errors: vec![saleor_rustify_proto::common::Error {
                     code: code.into(),
                     message,
                     field: String::new(),
@@ -383,13 +383,13 @@ impl OrderService for OrderServiceImpl {
             let Ok(lid) = l.order_line_id.parse::<Uuid>() else {
                 return Ok(fail("INVALID", "order_line_id must be a UUID".into()));
             };
-            items.push(rustygod_db::fulfillment::FulfillItem {
+            items.push(saleor_rustify_db::fulfillment::FulfillItem {
                 order_line_id: lid,
                 quantity: l.quantity,
                 stock_id: (l.stock_id != 0).then_some(l.stock_id),
             });
         }
-        match rustygod_db::fulfillment::return_and_refund(
+        match saleor_rustify_db::fulfillment::return_and_refund(
             db,
             order_id,
             &items,
@@ -433,7 +433,7 @@ impl OrderService for OrderServiceImpl {
                 amount: String::new(),
                 status: String::new(),
                 lines: vec![],
-                errors: vec![rustygod_proto::common::Error {
+                errors: vec![saleor_rustify_proto::common::Error {
                     code: code.into(),
                     message,
                     field: String::new(),
@@ -506,7 +506,7 @@ impl OrderService for OrderServiceImpl {
             Response::new(ExecuteGrantedRefundResponse {
                 status: String::new(),
                 replayed: false,
-                errors: vec![rustygod_proto::common::Error {
+                errors: vec![saleor_rustify_proto::common::Error {
                     code: code.into(),
                     message,
                     field: String::new(),
@@ -523,7 +523,7 @@ impl OrderService for OrderServiceImpl {
                 // Post-commit fast path, same contract as complete/cancel.
                 if !out.delivery_ids.is_empty() {
                     let dbc = db.clone();
-                    let domain = std::env::var("RUSTYGOD_DOMAIN")
+                    let domain = std::env::var("RUSTIFY_DOMAIN")
                         .unwrap_or_else(|_| "localhost".into());
                     let ids = out.delivery_ids.clone();
                     tokio::spawn(async move {
@@ -581,7 +581,7 @@ impl OrderService for OrderServiceImpl {
                 status: String::new(),
                 reason: String::new(),
                 lines: vec![],
-                errors: vec![rustygod_proto::common::Error {
+                errors: vec![saleor_rustify_proto::common::Error {
                     code: "NOT_FOUND".into(),
                     message: e.to_string(),
                     field: String::new(),

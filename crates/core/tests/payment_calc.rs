@@ -5,8 +5,8 @@
 
 use chrono::{DateTime, TimeZone, Utc};
 use rust_decimal::Decimal;
-use rustygod_core::payments::*;
-use rustygod_core::payments::{recalculate, CalcEvent};
+use saleor_rustify_core::payments::*;
+use saleor_rustify_core::payments::{recalculate, CalcEvent};
 
 fn at(secs: i64) -> DateTime<Utc> {
     Utc.timestamp_opt(secs, 0).unwrap()

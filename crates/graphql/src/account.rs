@@ -102,12 +102,12 @@ fn shop_err(message: String) -> gen::ShopError {
 /// Customer-type assembly with ordered attributes (modeling pages).
 async fn assemble_customer_type(db: &sea_orm::DatabaseConnection, ct: i32) -> Result<Option<gen::CustomerType>, String> {
     use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QueryOrder, QuerySelect};
-    let Some(m) = rustygod_db::entities::account_customertype::Entity::find_by_id(ct)
+    let Some(m) = saleor_rustify_db::entities::account_customertype::Entity::find_by_id(ct)
         .one(db).await.map_err(|e| e.to_string())? else { return Ok(None) };
-    let aids: Vec<i32> = rustygod_db::entities::attribute_attributecustomertype::Entity::find()
-        .select_only().column(rustygod_db::entities::attribute_attributecustomertype::Column::AttributeId)
-        .filter(rustygod_db::entities::attribute_attributecustomertype::Column::CustomerTypeId.eq(ct))
-        .order_by_asc(rustygod_db::entities::attribute_attributecustomertype::Column::SortOrder)
+    let aids: Vec<i32> = saleor_rustify_db::entities::attribute_attributecustomertype::Entity::find()
+        .select_only().column(saleor_rustify_db::entities::attribute_attributecustomertype::Column::AttributeId)
+        .filter(saleor_rustify_db::entities::attribute_attributecustomertype::Column::CustomerTypeId.eq(ct))
+        .order_by_asc(saleor_rustify_db::entities::attribute_attributecustomertype::Column::SortOrder)
         .into_tuple::<i32>().all(db).await.map_err(|e| e.to_string())?;
     let mut attributes = vec![];
     for aid in aids {
@@ -126,7 +126,7 @@ async fn assemble_customer_type(db: &sea_orm::DatabaseConnection, ct: i32) -> Re
 }
 
 async fn assemble_recipient(db: &sea_orm::DatabaseConnection, rid: i32) -> Result<Option<gen::StaffNotificationRecipient>, String> {
-    let row = rustygod_db::entities::account_staffnotificationrecipient::Entity::find_by_id(rid)
+    let row = saleor_rustify_db::entities::account_staffnotificationrecipient::Entity::find_by_id(rid)
         .one(db).await.map_err(|e| e.to_string())?;
     let Some(r) = row else { return Ok(None) };
     let user = match r.user_id {
@@ -151,12 +151,12 @@ fn bearer_token(ctx: &Context<'_>) -> Result<String> {
 /// key (rotation revokes). Returns (user id, claims user id).
 pub(crate) async fn requester(ctx: &Context<'_>, db: &sea_orm::DatabaseConnection) -> Result<(i32, String)> {
     let token = bearer_token(ctx)?;
-    let claims = rustygod_core::auth::decode(&token).map_err(|e| Error::new(format!("auth: {e}")))?;
-    if claims.token_type != rustygod_core::auth::TOKEN_TYPE_ACCESS {
+    let claims = saleor_rustify_core::auth::decode(&token).map_err(|e| Error::new(format!("auth: {e}")))?;
+    if claims.token_type != saleor_rustify_core::auth::TOKEN_TYPE_ACCESS {
         return Err(Error::new("authentication required"));
     }
-    let uid = rustygod_core::auth::parse_user_global_id(&claims.user_id).unwrap_or(0);
-    let user = rustygod_db::entities::account_user::Entity::find_by_id(uid)
+    let uid = saleor_rustify_core::auth::parse_user_global_id(&claims.user_id).unwrap_or(0);
+    let user = saleor_rustify_db::entities::account_user::Entity::find_by_id(uid)
         .one(db).await.map_err(|e| Error::new(e.to_string()))?
         .ok_or_else(|| Error::new("user not found"))?;
     if !user.is_active || user.jwt_token_key != claims.token {
@@ -171,13 +171,13 @@ pub async fn require_perm(ctx: &Context<'_>, codename: &str) -> Result<i32> {
     let g = ctx.data::<GqlContext>()?;
     let db = g.db()?;
     let (uid, _) = requester(ctx, db).await?;
-    let user = rustygod_db::entities::account_user::Entity::find_by_id(uid)
+    let user = saleor_rustify_db::entities::account_user::Entity::find_by_id(uid)
         .one(db).await.map_err(|e| Error::new(e.to_string()))?
         .ok_or_else(|| Error::new("user not found"))?;
     if user.is_superuser {
         return Ok(uid);
     }
-    if rustygod_db::auth::has_permission(db, uid, codename).await.unwrap_or(false) {
+    if saleor_rustify_db::auth::has_permission(db, uid, codename).await.unwrap_or(false) {
         return Ok(uid);
     }
     Err(Error::new(format!("permission denied: {codename} required")))
@@ -188,21 +188,21 @@ pub(crate) async fn require_any_perm(ctx: &Context<'_>, codenames: &[&str]) -> R
     let g = ctx.data::<GqlContext>()?;
     let db = g.db()?;
     let (uid, _) = requester(ctx, db).await?;
-    let user = rustygod_db::entities::account_user::Entity::find_by_id(uid)
+    let user = saleor_rustify_db::entities::account_user::Entity::find_by_id(uid)
         .one(db).await.map_err(|e| Error::new(e.to_string()))?
         .ok_or_else(|| Error::new("user not found"))?;
     if user.is_superuser {
         return Ok(uid);
     }
     for c in codenames {
-        if rustygod_db::auth::has_permission(db, uid, c).await.unwrap_or(false) {
+        if saleor_rustify_db::auth::has_permission(db, uid, c).await.unwrap_or(false) {
             return Ok(uid);
         }
     }
     Err(Error::new(format!("permission denied: one of {} required", codenames.join("/"))))
 }
 
-fn lite_channel(c: &rustygod_db::commerce::ChannelView) -> gen::Channel {
+fn lite_channel(c: &saleor_rustify_db::commerce::ChannelView) -> gen::Channel {
     gen::Channel {
         id: Some(ID(crate::common::gid("Channel", &c.id))),
         private_metadata: vec![],
@@ -222,7 +222,7 @@ fn lite_channel(c: &rustygod_db::commerce::ChannelView) -> gen::Channel {
     }
 }
 
-pub fn to_gql_address(m: &rustygod_db::entities::account_address::Model) -> crate::order::GqlAddress {
+pub fn to_gql_address(m: &saleor_rustify_db::entities::account_address::Model) -> crate::order::GqlAddress {
     crate::order::GqlAddress {
         id: ID(crate::common::gid("Address", m.id)),
         city: m.city.clone(),
@@ -243,13 +243,13 @@ pub fn to_gql_address(m: &rustygod_db::entities::account_address::Model) -> crat
 
 async fn user_addresses(db: &sea_orm::DatabaseConnection, uid: i32) -> Result<Vec<crate::order::GqlAddress>, String> {
     use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QuerySelect};
-    let aids: Vec<i32> = rustygod_db::entities::account_user_addresses::Entity::find()
-        .select_only().column(rustygod_db::entities::account_user_addresses::Column::AddressId)
-        .filter(rustygod_db::entities::account_user_addresses::Column::UserId.eq(uid))
+    let aids: Vec<i32> = saleor_rustify_db::entities::account_user_addresses::Entity::find()
+        .select_only().column(saleor_rustify_db::entities::account_user_addresses::Column::AddressId)
+        .filter(saleor_rustify_db::entities::account_user_addresses::Column::UserId.eq(uid))
         .into_tuple::<i32>().all(db).await.map_err(|e| format!("{e:?}"))?;
     let mut out = vec![];
     for aid in aids {
-        if let Some(a) = rustygod_db::entities::account_address::Entity::find_by_id(aid)
+        if let Some(a) = saleor_rustify_db::entities::account_address::Entity::find_by_id(aid)
             .one(db).await.map_err(|e| format!("{e:?}"))? {
             out.push(to_gql_address(&a));
         }
@@ -259,20 +259,20 @@ async fn user_addresses(db: &sea_orm::DatabaseConnection, uid: i32) -> Result<Ve
 
 async fn user_group_ids(db: &sea_orm::DatabaseConnection, uid: i32) -> Result<Vec<i32>, String> {
     use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QuerySelect};
-    rustygod_db::entities::account_user_groups::Entity::find()
-        .select_only().column(rustygod_db::entities::account_user_groups::Column::GroupId)
-        .filter(rustygod_db::entities::account_user_groups::Column::UserId.eq(uid))
+    saleor_rustify_db::entities::account_user_groups::Entity::find()
+        .select_only().column(saleor_rustify_db::entities::account_user_groups::Column::GroupId)
+        .filter(saleor_rustify_db::entities::account_user_groups::Column::UserId.eq(uid))
         .into_tuple::<i32>().all(db).await.map_err(|e| format!("{e:?}"))
 }
 
 /// Full user assembly: identity + addresses + defaults + groups +
 /// permissions + channels (dashboard details pages read all of these).
 async fn assemble_user(db: &sea_orm::DatabaseConnection, uid: i32, claims_user_id: &str) -> Result<gen::User, String> {
-    let user = rustygod_db::entities::account_user::Entity::find_by_id(uid)
+    let user = saleor_rustify_db::entities::account_user::Entity::find_by_id(uid)
         .one(db).await.map_err(|e| e.to_string())?
         .ok_or_else(|| "user not found".to_string())?;
     let perms = collect_permissions(db, uid).await.map_err(|e| e.to_string())?;
-    let channels = rustygod_db::commerce::list_channels(db).await.unwrap_or_default();
+    let channels = saleor_rustify_db::commerce::list_channels(db).await.unwrap_or_default();
     let addresses = user_addresses(db, uid).await.map_err(|e| e.to_string())?;
     let gids = user_group_ids(db, uid).await.map_err(|e| e.to_string())?;
     let mut groups = vec![];
@@ -317,11 +317,11 @@ async fn assemble_user(db: &sea_orm::DatabaseConnection, uid: i32, claims_user_i
 /// Permission-group assembly (dashboard group pages + `User.permissionGroups`).
 async fn assemble_group(db: &sea_orm::DatabaseConnection, gid: i32, can_manage: bool) -> Result<Option<gen::Group>, String> {
     use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QuerySelect};
-    let Some(g) = rustygod_db::entities::account_group::Entity::find_by_id(gid)
+    let Some(g) = saleor_rustify_db::entities::account_group::Entity::find_by_id(gid)
         .one(db).await.map_err(|e| e.to_string())? else { return Ok(None) };
-    let member_ids: Vec<i32> = rustygod_db::entities::account_user_groups::Entity::find()
-        .select_only().column(rustygod_db::entities::account_user_groups::Column::UserId)
-        .filter(rustygod_db::entities::account_user_groups::Column::GroupId.eq(gid))
+    let member_ids: Vec<i32> = saleor_rustify_db::entities::account_user_groups::Entity::find()
+        .select_only().column(saleor_rustify_db::entities::account_user_groups::Column::UserId)
+        .filter(saleor_rustify_db::entities::account_user_groups::Column::GroupId.eq(gid))
         .into_tuple::<i32>().all(db).await.map_err(|e| e.to_string())?;
     let mut users = vec![];
     for uid in member_ids {
@@ -330,13 +330,13 @@ async fn assemble_group(db: &sea_orm::DatabaseConnection, gid: i32, can_manage: 
             users.push(Box::new(row));
         }
     }
-    let perm_ids: Vec<i32> = rustygod_db::entities::account_group_permissions::Entity::find()
-        .select_only().column(rustygod_db::entities::account_group_permissions::Column::PermissionId)
-        .filter(rustygod_db::entities::account_group_permissions::Column::GroupId.eq(gid))
+    let perm_ids: Vec<i32> = saleor_rustify_db::entities::account_group_permissions::Entity::find()
+        .select_only().column(saleor_rustify_db::entities::account_group_permissions::Column::PermissionId)
+        .filter(saleor_rustify_db::entities::account_group_permissions::Column::GroupId.eq(gid))
         .into_tuple::<i32>().all(db).await.map_err(|e| e.to_string())?;
     let mut permissions = vec![];
     for pid in perm_ids {
-        if let Some(p) = rustygod_db::entities::permission_permission::Entity::find_by_id(pid)
+        if let Some(p) = saleor_rustify_db::entities::permission_permission::Entity::find_by_id(pid)
             .one(db).await.map_err(|e| e.to_string())? {
             permissions.push(crate::commerce::GqlPermission {
                 code: crate::common::permission_enum_code(&p.codename),
@@ -344,11 +344,11 @@ async fn assemble_group(db: &sea_orm::DatabaseConnection, gid: i32, can_manage: 
             });
         }
     }
-    let channel_ids: Vec<i32> = rustygod_db::entities::account_group_channels::Entity::find()
-        .select_only().column(rustygod_db::entities::account_group_channels::Column::ChannelId)
-        .filter(rustygod_db::entities::account_group_channels::Column::GroupId.eq(gid))
+    let channel_ids: Vec<i32> = saleor_rustify_db::entities::account_group_channels::Entity::find()
+        .select_only().column(saleor_rustify_db::entities::account_group_channels::Column::ChannelId)
+        .filter(saleor_rustify_db::entities::account_group_channels::Column::GroupId.eq(gid))
         .into_tuple::<i32>().all(db).await.map_err(|e| e.to_string())?;
-    let all_channels = rustygod_db::commerce::list_channels(db).await.unwrap_or_default();
+    let all_channels = saleor_rustify_db::commerce::list_channels(db).await.unwrap_or_default();
     Ok(Some(gen::Group {
         id: Some(ID(crate::common::gid("Group", gid))),
         name: Some(g.name),
@@ -364,7 +364,7 @@ async fn assemble_group(db: &sea_orm::DatabaseConnection, gid: i32, can_manage: 
 
 async fn slim_user_row(db: &sea_orm::DatabaseConnection, uid: i32) -> Result<Option<gen::User>, String> {
     use sea_orm::{EntityTrait, QuerySelect};
-    use rustygod_db::entities::account_user::{Column as UCol, Entity as UEnt};
+    use saleor_rustify_db::entities::account_user::{Column as UCol, Entity as UEnt};
     let row: Option<(i32, String, String, String, bool, bool, chrono::DateTime<chrono::Utc>)> = UEnt::find_by_id(uid)
         .select_only()
         .column(UCol::Id).column(UCol::Email).column(UCol::FirstName).column(UCol::LastName)
@@ -382,13 +382,13 @@ impl AccountQuery {
         let bearer = ctx.data_opt::<Bearer>().map(|b| b.0.as_str().to_string())
             .or_else(|| ctx.data_opt::<GqlContext>().and_then(|g| g.bearer.clone()));
         let Some(token) = bearer else { return Ok(None) };
-        let claims = rustygod_core::auth::decode(&token).map_err(|e| Error::new(format!("auth: {e}")))?;
-        if claims.token_type != rustygod_core::auth::TOKEN_TYPE_ACCESS {
+        let claims = saleor_rustify_core::auth::decode(&token).map_err(|e| Error::new(format!("auth: {e}")))?;
+        if claims.token_type != saleor_rustify_core::auth::TOKEN_TYPE_ACCESS {
             return Ok(None);
         }
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
-        let uid = rustygod_core::auth::parse_user_global_id(&claims.user_id).unwrap_or(0);
-        let _user = rustygod_db::entities::account_user::Entity::find_by_id(uid)
+        let uid = saleor_rustify_core::auth::parse_user_global_id(&claims.user_id).unwrap_or(0);
+        let _user = saleor_rustify_db::entities::account_user::Entity::find_by_id(uid)
             .one(db).await.map_err(|e| Error::new(e.to_string()))?
             .ok_or_else(|| Error::new("user not found"))?;
         // Permissions: collect from direct + group grants (like server::access).
@@ -411,7 +411,7 @@ impl AccountQuery {
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
         let off = after.and_then(|c| crate::common::decode_cursor(&c)).unwrap_or(0);
         let lim = first.unwrap_or(20).clamp(1, 100) as usize;
-        use rustygod_db::entities::account_user::{Column as UCol, Entity as UEnt};
+        use saleor_rustify_db::entities::account_user::{Column as UCol, Entity as UEnt};
         use sea_orm::{ColumnTrait, Condition, EntityTrait, QueryFilter, QueryOrder, QuerySelect};
         let mut cond = Condition::all().add(UCol::IsStaff.eq(false));
         let mut search_terms: Vec<String> = vec![];
@@ -494,10 +494,10 @@ impl AccountQuery {
     ) -> Result<Option<gen::User>> {
         require_any_perm(ctx, &["manage_staff", "manage_users", "manage_orders"]).await?;
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
-        use rustygod_db::entities::account_user::{Column as UCol, Entity as UEnt};
+        use saleor_rustify_db::entities::account_user::{Column as UCol, Entity as UEnt};
         use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QuerySelect};
         let uid: Option<i32> = if let Some(i) = id {
-            rustygod_db::catalog::parse_gid(&i.0)
+            saleor_rustify_db::catalog::parse_gid(&i.0)
         } else if let Some(e) = email {
             UEnt::find().select_only().column(UCol::Id)
                 .filter(UCol::Email.eq(e))
@@ -528,7 +528,7 @@ impl AccountQuery {
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
         let off = after.and_then(|c| crate::common::decode_cursor(&c)).unwrap_or(0);
         let lim = first.unwrap_or(20).clamp(1, 100) as usize;
-        use rustygod_db::entities::account_user::{Column as UCol, Entity as UEnt};
+        use saleor_rustify_db::entities::account_user::{Column as UCol, Entity as UEnt};
         use sea_orm::{ColumnTrait, Condition, EntityTrait, QueryFilter, QueryOrder, QuerySelect};
         let mut cond = Condition::all().add(UCol::IsStaff.eq(true));
         if let Some(f) = filter.as_ref() {
@@ -588,7 +588,7 @@ impl AccountQuery {
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
         let off = after.and_then(|c| crate::common::decode_cursor(&c)).unwrap_or(0);
         let lim = first.unwrap_or(20).clamp(1, 100) as usize;
-        use rustygod_db::entities::account_group::{Column as GCol, Entity as GEnt};
+        use saleor_rustify_db::entities::account_group::{Column as GCol, Entity as GEnt};
         use sea_orm::{ColumnTrait, Condition, EntityTrait, QueryFilter, QueryOrder, QuerySelect};
         let mut cond = Condition::all();
         if let Some(f) = filter.as_ref() {
@@ -620,15 +620,15 @@ impl AccountQuery {
     async fn permission_group(&self, ctx: &Context<'_>, id: ID) -> Result<Option<gen::Group>> {
         crate::account::require_perm(ctx, "manage_staff").await?;
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
-        let Some(gid) = rustygod_db::catalog::parse_gid(&id.0) else { return Ok(None) };
+        let Some(gid) = saleor_rustify_db::catalog::parse_gid(&id.0) else { return Ok(None) };
         assemble_group(db, gid, true).await.map_err(Error::new)
     }
 
     /// Single address (Django: MANAGE_USERS sees any, otherwise only owned).
     async fn address(&self, ctx: &Context<'_>, id: ID) -> Result<Option<crate::order::GqlAddress>> {
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
-        let Some(aid) = rustygod_db::catalog::parse_gid(&id.0) else { return Ok(None) };
-        let addr = rustygod_db::entities::account_address::Entity::find_by_id(aid)
+        let Some(aid) = saleor_rustify_db::catalog::parse_gid(&id.0) else { return Ok(None) };
+        let addr = saleor_rustify_db::entities::account_address::Entity::find_by_id(aid)
             .one(db).await.map_err(|e| Error::new(e.to_string()))?;
         let Some(a) = addr else { return Ok(None) };
         if crate::account::require_any_perm(ctx, &["manage_users", "manage_staff", "manage_orders"]).await.is_ok() {
@@ -649,7 +649,7 @@ impl AccountQuery {
     async fn customer_type(&self, ctx: &Context<'_>, id: ID) -> Result<Option<gen::CustomerType>> {
         require_any_perm(ctx, &["manage_staff", "manage_users"]).await?;
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
-        let Some(ct) = rustygod_db::catalog::parse_gid(&id.0) else { return Ok(None) };
+        let Some(ct) = saleor_rustify_db::catalog::parse_gid(&id.0) else { return Ok(None) };
         assemble_customer_type(db, ct).await.map_err(Error::new)
     }
 
@@ -665,7 +665,7 @@ impl AccountQuery {
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
         let off = after.and_then(|c| crate::common::decode_cursor(&c)).unwrap_or(0);
         let lim = first.unwrap_or(20).clamp(1, 100) as usize;
-        use rustygod_db::entities::account_customertype::{Column as CCol, Entity as CEnt};
+        use saleor_rustify_db::entities::account_customertype::{Column as CCol, Entity as CEnt};
         use sea_orm::{ColumnTrait, Condition, EntityTrait, QueryFilter, QueryOrder, QuerySelect};
         fn apply_where(cond: Condition, w: &gen::CustomerTypeWhereInput) -> Condition {
             let mut c = cond;
@@ -800,9 +800,9 @@ pub struct GqlEmailChange {
 
 async fn resolve_user_id(db: &sea_orm::DatabaseConnection, id: Option<ID>, ext: Option<String>) -> Result<Option<i32>> {
     use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QuerySelect};
-    use rustygod_db::entities::account_user::{Column as UCol, Entity as UEnt};
+    use saleor_rustify_db::entities::account_user::{Column as UCol, Entity as UEnt};
     if let Some(i) = id {
-        return Ok(rustygod_db::catalog::parse_gid(&i.0));
+        return Ok(saleor_rustify_db::catalog::parse_gid(&i.0));
     }
     if let Some(x) = ext {
         return Ok(UEnt::find().select_only().column(UCol::Id)
@@ -814,14 +814,14 @@ async fn resolve_user_id(db: &sea_orm::DatabaseConnection, id: Option<ID>, ext: 
 
 async fn address_owner(db: &sea_orm::DatabaseConnection, addr_id: i32) -> Result<Option<i32>> {
     use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QuerySelect};
-    rustygod_db::entities::account_user_addresses::Entity::find()
-        .select_only().column(rustygod_db::entities::account_user_addresses::Column::UserId)
-        .filter(rustygod_db::entities::account_user_addresses::Column::AddressId.eq(addr_id))
+    saleor_rustify_db::entities::account_user_addresses::Entity::find()
+        .select_only().column(saleor_rustify_db::entities::account_user_addresses::Column::UserId)
+        .filter(saleor_rustify_db::entities::account_user_addresses::Column::AddressId.eq(addr_id))
         .into_tuple::<i32>().one(db).await.map_err(|e| Error::new(e.to_string()))
 }
 
-fn address_input_of(input: &gen::AddressInput) -> rustygod_db::account_writes::AddressInput {
-    rustygod_db::account_writes::AddressInput {
+fn address_input_of(input: &gen::AddressInput) -> saleor_rustify_db::account_writes::AddressInput {
+    saleor_rustify_db::account_writes::AddressInput {
         first_name: input.first_name.clone().unwrap_or_default(),
         last_name: input.last_name.clone().unwrap_or_default(),
         company_name: input.company_name.clone(),
@@ -844,12 +844,12 @@ async fn apply_default_addresses(
     billing: Option<&gen::AddressInput>,
 ) -> Result<(), String> {
     if let Some(s) = shipping {
-        let aid = rustygod_db::account_writes::create_address(db, uid, &address_input_of(s)).await.map_err(|e| e.to_string())?;
-        rustygod_db::account_writes::set_default_address(db, uid, rustygod_db::account_writes::DefaultKind::Shipping, aid).await.map_err(|e| e.to_string())?;
+        let aid = saleor_rustify_db::account_writes::create_address(db, uid, &address_input_of(s)).await.map_err(|e| e.to_string())?;
+        saleor_rustify_db::account_writes::set_default_address(db, uid, saleor_rustify_db::account_writes::DefaultKind::Shipping, aid).await.map_err(|e| e.to_string())?;
     }
     if let Some(b) = billing {
-        let aid = rustygod_db::account_writes::create_address(db, uid, &address_input_of(b)).await.map_err(|e| e.to_string())?;
-        rustygod_db::account_writes::set_default_address(db, uid, rustygod_db::account_writes::DefaultKind::Billing, aid).await.map_err(|e| e.to_string())?;
+        let aid = saleor_rustify_db::account_writes::create_address(db, uid, &address_input_of(b)).await.map_err(|e| e.to_string())?;
+        saleor_rustify_db::account_writes::set_default_address(db, uid, saleor_rustify_db::account_writes::DefaultKind::Billing, aid).await.map_err(|e| e.to_string())?;
     }
     Ok(())
 }
@@ -870,16 +870,16 @@ impl AccountMutation {
             token: String::new(), refresh_token: String::new(), user: None,
             errors: vec![GqlAccountError { address_type: None, attributes: None, field, message: message.into(), code: code.into() }],
         };
-        if rustygod_db::account_writes::throttle_check(db, ip, &email).await.is_err() {
+        if saleor_rustify_db::account_writes::throttle_check(db, ip, &email).await.is_err() {
             return Ok(bad(None, "LOGIN_THROTTLED", "Too many login attempts, try again later"));
         }
         let fail = || async {
-            let _ = rustygod_db::account_writes::throttle_fail(db, ip, &email).await;
+            let _ = saleor_rustify_db::account_writes::throttle_fail(db, ip, &email).await;
             // Dummy verify: equalize timing for unknown emails (Django throttling).
-            let _ = rustygod_core::auth::verify_password(&password, "pbkdf2_sha256$600000$dummy$dummy");
+            let _ = saleor_rustify_core::auth::verify_password(&password, "pbkdf2_sha256$600000$dummy$dummy");
         };
         let email_lc = email.trim().to_lowercase();
-        let Some((user, hash)) = rustygod_db::auth::find_for_login(db, &email_lc).await.map_err(|e| Error::new(e.to_string()))? else {
+        let Some((user, hash)) = saleor_rustify_db::auth::find_for_login(db, &email_lc).await.map_err(|e| Error::new(e.to_string()))? else {
             fail().await;
             return Ok(bad(Some("email".into()), "INVALID_CREDENTIALS", "Invalid credentials"));
         };
@@ -888,22 +888,22 @@ impl AccountMutation {
             return Ok(bad(None, "INACTIVE", "User is inactive"));
         }
         // Load confirmation state (Django ACCOUNT_NOT_CONFIRMED).
-        let confirmed: bool = rustygod_db::entities::account_user::Entity::find_by_id(user.id)
+        let confirmed: bool = saleor_rustify_db::entities::account_user::Entity::find_by_id(user.id)
             .one(db).await.map_err(|e| Error::new(e.to_string()))?
             .map(|u| u.is_confirmed).unwrap_or(true);
         if !confirmed {
             fail().await;
             return Ok(bad(None, "ACCOUNT_NOT_CONFIRMED", "Account needs confirmation"));
         }
-        let ok = matches!(rustygod_core::auth::verify_password(&password, &hash), rustygod_core::auth::PasswordCheck::Ok);
+        let ok = matches!(saleor_rustify_core::auth::verify_password(&password, &hash), saleor_rustify_core::auth::PasswordCheck::Ok);
         if !ok {
             fail().await;
             return Ok(bad(Some("password".into()), "INVALID_CREDENTIALS", "Invalid credentials"));
         }
-        let _ = rustygod_db::account_writes::throttle_clear(db, ip, &email).await;
-        let _ = rustygod_db::account_writes::bump_last_login(db, user.id).await;
-        let pair = rustygod_core::auth::mint_tokens("http://localhost:8000/graphql/", &user.email, user.id, user.is_staff, &user.jwt_token_key).map_err(|e| Error::new(format!("mint: {e}")))?;
-        let claims = rustygod_core::auth::decode(&pair.access).map_err(|e| Error::new(format!("decode: {e}")))?;
+        let _ = saleor_rustify_db::account_writes::throttle_clear(db, ip, &email).await;
+        let _ = saleor_rustify_db::account_writes::bump_last_login(db, user.id).await;
+        let pair = saleor_rustify_core::auth::mint_tokens("http://localhost:8000/graphql/", &user.email, user.id, user.is_staff, &user.jwt_token_key).map_err(|e| Error::new(format!("mint: {e}")))?;
+        let claims = saleor_rustify_core::auth::decode(&pair.access).map_err(|e| Error::new(format!("decode: {e}")))?;
         let gql_user = assemble_user(db, user.id, &claims.user_id).await.map_err(Error::new)?;
         Ok(GqlTokenCreate { token: pair.access, refresh_token: pair.refresh, user: Some(gql_user), errors: vec![] })
     }
@@ -917,16 +917,16 @@ impl AccountMutation {
         let Some(token) = bearer else {
             return Ok(err_update("AUTHENTICATION_REQUIRED", "Authentication required"));
         };
-        let claims = rustygod_core::auth::decode(&token).map_err(|e| Error::new(format!("auth: {e}")))?;
-        let uid = rustygod_core::auth::parse_user_global_id(&claims.user_id).unwrap_or(0);
+        let claims = saleor_rustify_core::auth::decode(&token).map_err(|e| Error::new(format!("auth: {e}")))?;
+        let uid = saleor_rustify_core::auth::parse_user_global_id(&claims.user_id).unwrap_or(0);
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
-        let user = rustygod_db::entities::account_user::Entity::find_by_id(uid)
+        let user = saleor_rustify_db::entities::account_user::Entity::find_by_id(uid)
             .one(db).await.map_err(|e| Error::new(e.to_string()))?
             .ok_or_else(|| Error::new("user not found"))?;
         {
             use sea_orm::{ActiveModelTrait, Set};
             let current_meta = serde_json::to_value(&user.metadata).unwrap_or(serde_json::Value::Null);
-            let mut am: rustygod_db::entities::account_user::ActiveModel = user.into();
+            let mut am: saleor_rustify_db::entities::account_user::ActiveModel = user.into();
             if let Some(first) = input.first_name { am.first_name = Set(first); }
             if let Some(last) = input.last_name { am.last_name = Set(last); }
             if let Some(lang) = input.language_code { am.language_code = Set(lang); }
@@ -939,18 +939,18 @@ impl AccountMutation {
         Ok(GqlAccountUpdate { user: Some(gql_user), errors: vec![] })
     }
 
-    async fn token_refresh(&self, ctx: &Context<'_>, refresh_token: String) -> Result<GqlTokenCreate> {        let claims = rustygod_core::auth::decode(&refresh_token).map_err(|e| Error::new(format!("auth: {e}")))?;
-        if claims.token_type != rustygod_core::auth::TOKEN_TYPE_REFRESH {
+    async fn token_refresh(&self, ctx: &Context<'_>, refresh_token: String) -> Result<GqlTokenCreate> {        let claims = saleor_rustify_core::auth::decode(&refresh_token).map_err(|e| Error::new(format!("auth: {e}")))?;
+        if claims.token_type != saleor_rustify_core::auth::TOKEN_TYPE_REFRESH {
             return Ok(GqlTokenCreate { token: String::new(), refresh_token: String::new(), user: None, errors: vec![GqlAccountError { address_type: None, attributes: None, field: None, message: "Invalid refresh token".into(), code: "INVALID".into() }] });
         }
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
-        let uid = rustygod_core::auth::parse_user_global_id(&claims.user_id).unwrap_or(0);
-        let user = rustygod_db::entities::account_user::Entity::find_by_id(uid).one(db).await.map_err(|e| Error::new(e.to_string()))?.ok_or_else(|| Error::new("user not found"))?;
+        let uid = saleor_rustify_core::auth::parse_user_global_id(&claims.user_id).unwrap_or(0);
+        let user = saleor_rustify_db::entities::account_user::Entity::find_by_id(uid).one(db).await.map_err(|e| Error::new(e.to_string()))?.ok_or_else(|| Error::new("user not found"))?;
         // Rotate check: Django invalidates refresh if jwt_token_key changed.
         if user.jwt_token_key != claims.token {
             return Ok(GqlTokenCreate { token: String::new(), refresh_token: String::new(), user: None, errors: vec![GqlAccountError { address_type: None, attributes: None, field: None, message: "Token expired".into(), code: "EXPIRED".into() }] });
         }
-        let pair = rustygod_core::auth::mint_tokens("http://localhost:8000/graphql/", &user.email, user.id, user.is_staff, &user.jwt_token_key).map_err(|e| Error::new(format!("mint: {e}")))?;
+        let pair = saleor_rustify_core::auth::mint_tokens("http://localhost:8000/graphql/", &user.email, user.id, user.is_staff, &user.jwt_token_key).map_err(|e| Error::new(format!("mint: {e}")))?;
         let gql_user = assemble_user(db, user.id, &claims.user_id).await.map_err(Error::new)?;
         Ok(GqlTokenCreate { token: pair.access, refresh_token: pair.refresh, user: Some(gql_user), errors: vec![] })
     }
@@ -966,7 +966,7 @@ impl AccountMutation {
         let Some(email) = input.email.clone().filter(|e| !e.trim().is_empty()) else {
             return Ok(err("email is required".into()));
         };
-        let nu = rustygod_db::account_writes::NewUser {
+        let nu = saleor_rustify_db::account_writes::NewUser {
             email,
             first_name: input.first_name.clone().unwrap_or_default(),
             last_name: input.last_name.clone().unwrap_or_default(),
@@ -981,7 +981,7 @@ impl AccountMutation {
             customer_type_id: None,
             is_confirmed: true,
         };
-        match rustygod_db::account_writes::create_staff(db, req, &nu).await {
+        match saleor_rustify_db::account_writes::create_staff(db, req, &nu).await {
             Ok(uid) => Ok(gen::StaffCreate {
                 user: Some(assemble_user(db, uid, &uid.to_string()).await.map_err(Error::new)?),
                 errors: vec![],
@@ -994,7 +994,7 @@ impl AccountMutation {
         let req = require_perm(ctx, "manage_staff").await?;
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
         let err = |m: String| gen::StaffUpdate { user: None, errors: vec![serr(None, m)] };
-        let Some(uid) = rustygod_db::catalog::parse_gid(&id.0) else {
+        let Some(uid) = saleor_rustify_db::catalog::parse_gid(&id.0) else {
             return Ok(err("bad user id".into()));
         };
         // add/remove group semantics (Django StaffUpdateInput).
@@ -1009,7 +1009,7 @@ impl AccountMutation {
             Some(cur)
         } else { None };
         let _ = &mut group_ids;
-        let patch = rustygod_db::account_writes::UserPatch {
+        let patch = saleor_rustify_db::account_writes::UserPatch {
             email: input.email.clone(),
             first_name: input.first_name.clone(),
             last_name: input.last_name.clone(),
@@ -1024,7 +1024,7 @@ impl AccountMutation {
             customer_type_id: None,
             is_confirmed: None,
         };
-        match rustygod_db::account_writes::update_user(db, req, uid, true, &patch).await {
+        match saleor_rustify_db::account_writes::update_user(db, req, uid, true, &patch).await {
             Ok(()) => Ok(gen::StaffUpdate {
                 user: Some(assemble_user(db, uid, &uid.to_string()).await.map_err(Error::new)?),
                 errors: vec![],
@@ -1036,10 +1036,10 @@ impl AccountMutation {
     async fn staff_delete(&self, ctx: &Context<'_>, id: ID) -> Result<gen::StaffDelete> {
         let req = require_perm(ctx, "manage_staff").await?;
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
-        let Some(uid) = rustygod_db::catalog::parse_gid(&id.0) else {
+        let Some(uid) = saleor_rustify_db::catalog::parse_gid(&id.0) else {
             return Ok(gen::StaffDelete { errors: vec![serr(Some("id".into()), "bad user id".into())] });
         };
-        match rustygod_db::account_writes::delete_user(db, req, uid, true).await {
+        match saleor_rustify_db::account_writes::delete_user(db, req, uid, true).await {
             Ok(()) => Ok(gen::StaffDelete { errors: vec![] }),
             Err(e) => Ok(gen::StaffDelete { errors: vec![serr(None, e.to_string())] }),
         }
@@ -1048,8 +1048,8 @@ impl AccountMutation {
     async fn staff_bulk_delete(&self, ctx: &Context<'_>, ids: Vec<ID>) -> Result<GqlBulkResult> {
         let req = require_perm(ctx, "manage_staff").await?;
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
-        let uids: Vec<i32> = ids.iter().filter_map(|i| rustygod_db::catalog::parse_gid(&i.0)).collect();
-        match rustygod_db::account_writes::bulk_delete_users(db, req, &uids, true).await {
+        let uids: Vec<i32> = ids.iter().filter_map(|i| saleor_rustify_db::catalog::parse_gid(&i.0)).collect();
+        match saleor_rustify_db::account_writes::bulk_delete_users(db, req, &uids, true).await {
             Ok(n) => Ok(GqlBulkResult { count: Some(n as i32), errors: vec![] }),
             Err(e) => Ok(GqlBulkResult { count: None, errors: vec![aerr("INVALID", None, e.to_string())] }),
         }
@@ -1062,7 +1062,7 @@ impl AccountMutation {
         let Some(email) = input.email.clone().filter(|e| !e.trim().is_empty()) else {
             return Ok(err("email is required".into()));
         };
-        let nu = rustygod_db::account_writes::NewUser {
+        let nu = saleor_rustify_db::account_writes::NewUser {
             email,
             first_name: input.first_name.clone().unwrap_or_default(),
             last_name: input.last_name.clone().unwrap_or_default(),
@@ -1074,10 +1074,10 @@ impl AccountMutation {
             metadata: input.metadata.as_ref().map(|v| crate::common::merge_metadata(&serde_json::Value::Null, v)),
             private_metadata: input.private_metadata.as_ref().map(|v| crate::common::merge_metadata(&serde_json::Value::Null, v)),
             external_reference: input.external_reference.clone(),
-            customer_type_id: input.customer_type.as_ref().and_then(|i| rustygod_db::catalog::parse_gid(&i.0)),
+            customer_type_id: input.customer_type.as_ref().and_then(|i| saleor_rustify_db::catalog::parse_gid(&i.0)),
             is_confirmed: input.is_confirmed.unwrap_or(true),
         };
-        match rustygod_db::account_writes::create_customer(db, &nu).await {
+        match saleor_rustify_db::account_writes::create_customer(db, &nu).await {
             Ok(uid) => {
                 // Default addresses ride on the create (Django CustomerInput).
                 if let Err(e) = apply_default_addresses(db, uid, input.default_shipping_address.as_ref(), input.default_billing_address.as_ref()).await {
@@ -1103,7 +1103,7 @@ impl AccountMutation {
         let Some(uid) = resolve_user_id(db, id, external_reference).await? else {
             return Ok(gen::CustomerUpdate { user: None, errors: vec![aerr("NOT_FOUND", Some("id".into()), "user not found".into())] });
         };
-        let patch = rustygod_db::account_writes::UserPatch {
+        let patch = saleor_rustify_db::account_writes::UserPatch {
             email: input.email.clone(),
             first_name: input.first_name.clone(),
             last_name: input.last_name.clone(),
@@ -1115,10 +1115,10 @@ impl AccountMutation {
             metadata: input.metadata.as_ref().map(|v| crate::common::merge_metadata(&serde_json::Value::Null, v)),
             private_metadata: input.private_metadata.as_ref().map(|v| crate::common::merge_metadata(&serde_json::Value::Null, v)),
             external_reference: input.external_reference.clone(),
-            customer_type_id: input.customer_type.as_ref().and_then(|i| rustygod_db::catalog::parse_gid(&i.0)),
+            customer_type_id: input.customer_type.as_ref().and_then(|i| saleor_rustify_db::catalog::parse_gid(&i.0)),
             is_confirmed: input.is_confirmed,
         };
-        match rustygod_db::account_writes::update_user(db, _req, uid, false, &patch).await {
+        match saleor_rustify_db::account_writes::update_user(db, _req, uid, false, &patch).await {
             Ok(()) => {
                 if let Err(e) = apply_default_addresses(db, uid, input.default_shipping_address.as_ref(), input.default_billing_address.as_ref()).await {
                     return Ok(err(e));
@@ -1142,9 +1142,9 @@ impl AccountMutation {
         let Some(uid) = resolve_user_id(db, id, external_reference).await? else {
             return Ok(gen::CustomerDelete { errors: vec![aerr("NOT_FOUND", Some("id".into()), "user not found".into())] });
         };
-        match rustygod_db::account_writes::delete_user(db, req, uid, false).await {
+        match saleor_rustify_db::account_writes::delete_user(db, req, uid, false).await {
             Ok(()) => {
-                let _ = rustygod_db::account_writes::log_event(db, req, "customer_deleted", None, serde_json::json!({"user_id": uid})).await;
+                let _ = saleor_rustify_db::account_writes::log_event(db, req, "customer_deleted", None, serde_json::json!({"user_id": uid})).await;
                 Ok(gen::CustomerDelete { errors: vec![] })
             }
             Err(e) => Ok(gen::CustomerDelete { errors: vec![aerr("INVALID", None, e.to_string())] }),
@@ -1154,8 +1154,8 @@ impl AccountMutation {
     async fn customer_bulk_delete(&self, ctx: &Context<'_>, ids: Vec<ID>) -> Result<gen::CustomerBulkDelete> {
         let req = require_perm(ctx, "manage_users").await?;
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
-        let uids: Vec<i32> = ids.iter().filter_map(|i| rustygod_db::catalog::parse_gid(&i.0)).collect();
-        match rustygod_db::account_writes::bulk_delete_users(db, req, &uids, false).await {
+        let uids: Vec<i32> = ids.iter().filter_map(|i| saleor_rustify_db::catalog::parse_gid(&i.0)).collect();
+        match saleor_rustify_db::account_writes::bulk_delete_users(db, req, &uids, false).await {
             Ok(_) => Ok(gen::CustomerBulkDelete { errors: vec![] }),
             Err(e) => Ok(gen::CustomerBulkDelete { errors: vec![aerr("INVALID", None, e.to_string())] }),
         }
@@ -1164,8 +1164,8 @@ impl AccountMutation {
     async fn user_bulk_set_active(&self, ctx: &Context<'_>, ids: Vec<ID>, #[graphql(name = "isActive")] is_active: bool) -> Result<GqlBulkResult> {
         let req = require_perm(ctx, "manage_users").await?;
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
-        let uids: Vec<i32> = ids.iter().filter_map(|i| rustygod_db::catalog::parse_gid(&i.0)).collect();
-        match rustygod_db::account_writes::bulk_set_active(db, req, &uids, is_active).await {
+        let uids: Vec<i32> = ids.iter().filter_map(|i| saleor_rustify_db::catalog::parse_gid(&i.0)).collect();
+        match saleor_rustify_db::account_writes::bulk_set_active(db, req, &uids, is_active).await {
             Ok(n) => Ok(GqlBulkResult { count: Some(n as i32), errors: vec![] }),
             Err(e) => Ok(GqlBulkResult { count: None, errors: vec![aerr("INVALID", None, e.to_string())] }),
         }
@@ -1179,13 +1179,13 @@ impl AccountMutation {
         let _req = require_perm(ctx, "manage_users").await?;
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
         let err = |m: String| gen::AddressCreate { user: None, address: None, errors: vec![aerr("INVALID", None, m)] };
-        let Some(uid) = rustygod_db::catalog::parse_gid(&user_id.0) else {
+        let Some(uid) = saleor_rustify_db::catalog::parse_gid(&user_id.0) else {
             return Ok(err("bad user id".into()));
         };
         let ai = address_input_of(&input);
-        match rustygod_db::account_writes::create_address(db, uid, &ai).await {
+        match saleor_rustify_db::account_writes::create_address(db, uid, &ai).await {
             Ok(aid) => {
-                let addr = rustygod_db::entities::account_address::Entity::find_by_id(aid)
+                let addr = saleor_rustify_db::entities::account_address::Entity::find_by_id(aid)
                     .one(db).await.map_err(|e| Error::new(e.to_string()))?
                     .ok_or_else(|| Error::new("address vanished"))?;
                 Ok(gen::AddressCreate {
@@ -1202,13 +1202,13 @@ impl AccountMutation {
         let _req = require_perm(ctx, "manage_users").await?;
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
         let err = |m: String| gen::AddressUpdate { address: None, errors: vec![aerr("INVALID", None, m)] };
-        let Some(aid) = rustygod_db::catalog::parse_gid(&id.0) else {
+        let Some(aid) = saleor_rustify_db::catalog::parse_gid(&id.0) else {
             return Ok(err("bad address id".into()));
         };
         let Some(owner) = address_owner(db, aid).await? else {
             return Ok(gen::AddressUpdate { address: None, errors: vec![aerr("NOT_FOUND", Some("id".into()), "address not found".into())] });
         };
-        let patch = rustygod_db::account_writes::AddressPatch {
+        let patch = saleor_rustify_db::account_writes::AddressPatch {
             first_name: input.first_name.clone(), last_name: input.last_name.clone(),
             company_name: input.company_name.clone(), street_1: input.street_address1.clone(),
             street_2: input.street_address2.clone(), city: input.city.clone(),
@@ -1217,9 +1217,9 @@ impl AccountMutation {
             country_area: input.country_area.clone(), city_area: input.city_area.clone(),
             phone: input.phone.clone(),
         };
-        match rustygod_db::account_writes::update_address(db, owner, aid, &patch).await {
+        match saleor_rustify_db::account_writes::update_address(db, owner, aid, &patch).await {
             Ok(()) => {
-                let addr = rustygod_db::entities::account_address::Entity::find_by_id(aid)
+                let addr = saleor_rustify_db::entities::account_address::Entity::find_by_id(aid)
                     .one(db).await.map_err(|e| Error::new(e.to_string()))?
                     .ok_or_else(|| Error::new("address vanished"))?;
                 Ok(gen::AddressUpdate { address: Some(to_gql_address(&addr)), errors: vec![] })
@@ -1232,13 +1232,13 @@ impl AccountMutation {
         let _req = require_perm(ctx, "manage_users").await?;
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
         let err = |m: String| gen::AddressDelete { user: None, errors: vec![aerr("INVALID", None, m)] };
-        let Some(aid) = rustygod_db::catalog::parse_gid(&id.0) else {
+        let Some(aid) = saleor_rustify_db::catalog::parse_gid(&id.0) else {
             return Ok(err("bad address id".into()));
         };
         let Some(owner) = address_owner(db, aid).await? else {
             return Ok(gen::AddressDelete { user: None, errors: vec![aerr("NOT_FOUND", Some("id".into()), "address not found".into())] });
         };
-        match rustygod_db::account_writes::delete_address(db, owner, aid).await {
+        match saleor_rustify_db::account_writes::delete_address(db, owner, aid).await {
             Ok(()) => Ok(gen::AddressDelete {
                 user: Some(assemble_user(db, owner, &owner.to_string()).await.map_err(Error::new)?),
                 errors: vec![],
@@ -1256,14 +1256,14 @@ impl AccountMutation {
         let _req = require_perm(ctx, "manage_users").await?;
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
         let err = |m: String| gen::AddressSetDefault { user: None, errors: vec![aerr("INVALID", None, m)] };
-        let (Some(aid), Some(uid)) = (rustygod_db::catalog::parse_gid(&address_id.0), rustygod_db::catalog::parse_gid(&user_id.0)) else {
+        let (Some(aid), Some(uid)) = (saleor_rustify_db::catalog::parse_gid(&address_id.0), saleor_rustify_db::catalog::parse_gid(&user_id.0)) else {
             return Ok(err("bad id".into()));
         };
         let kind = match format!("{address_type:?}").as_str() {
-            "BILLING" => rustygod_db::account_writes::DefaultKind::Billing,
-            _ => rustygod_db::account_writes::DefaultKind::Shipping,
+            "BILLING" => saleor_rustify_db::account_writes::DefaultKind::Billing,
+            _ => saleor_rustify_db::account_writes::DefaultKind::Shipping,
         };
-        match rustygod_db::account_writes::set_default_address(db, uid, kind, aid).await {
+        match saleor_rustify_db::account_writes::set_default_address(db, uid, kind, aid).await {
             Ok(()) => Ok(gen::AddressSetDefault {
                 user: Some(assemble_user(db, uid, &uid.to_string()).await.map_err(Error::new)?),
                 errors: vec![],
@@ -1280,7 +1280,7 @@ impl AccountMutation {
         let req = require_perm(ctx, "manage_staff").await?;
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
         let err = |m: String| gen::PermissionGroupCreate { group: None, errors: vec![gerr(None, m)] };
-        let gi = rustygod_db::account_writes::GroupInput {
+        let gi = saleor_rustify_db::account_writes::GroupInput {
             name: input.name.clone(),
             permission_codenames: input.add_permissions.as_ref().map(|v| v.as_slice()).unwrap_or(&[])
                 .iter().map(|p| format!("{p:?}").to_lowercase()).collect(),
@@ -1288,7 +1288,7 @@ impl AccountMutation {
             channel_ids: crate::catalog::gid_vec(input.add_channels.clone()),
             restricted_access_to_channels: input.restricted_access_to_channels.unwrap_or(false),
         };
-        match rustygod_db::account_writes::create_group_full(db, req, &gi).await {
+        match saleor_rustify_db::account_writes::create_group_full(db, req, &gi).await {
             Ok(gid) => Ok(gen::PermissionGroupCreate {
                 group: assemble_group(db, gid, true).await.map_err(Error::new)?,
                 errors: vec![],
@@ -1301,12 +1301,12 @@ impl AccountMutation {
         let req = require_perm(ctx, "manage_staff").await?;
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
         let err = |m: String| gen::PermissionGroupUpdate { group: None, errors: vec![gerr(None, m)] };
-        let Some(gid) = rustygod_db::catalog::parse_gid(&id.0) else {
+        let Some(gid) = saleor_rustify_db::catalog::parse_gid(&id.0) else {
             return Ok(err("bad group id".into()));
         };
         let codes = |v: Option<Vec<gen::PermissionEnum>>| v.as_ref().map(|x| x.as_slice()).unwrap_or(&[])
             .iter().map(|p| format!("{p:?}").to_lowercase()).collect::<Vec<_>>();
-        let patch = rustygod_db::account_writes::GroupPatch {
+        let patch = saleor_rustify_db::account_writes::GroupPatch {
             name: input.name.clone(),
             add_permissions: codes(input.add_permissions.clone()),
             remove_permissions: codes(input.remove_permissions.clone()),
@@ -1316,7 +1316,7 @@ impl AccountMutation {
             remove_channels: crate::catalog::gid_vec(input.remove_channels.clone()),
             restricted_access_to_channels: input.restricted_access_to_channels,
         };
-        match rustygod_db::account_writes::update_group_full(db, req, gid, &patch).await {
+        match saleor_rustify_db::account_writes::update_group_full(db, req, gid, &patch).await {
             Ok(()) => Ok(gen::PermissionGroupUpdate {
                 group: assemble_group(db, gid, true).await.map_err(Error::new)?,
                 errors: vec![],
@@ -1328,10 +1328,10 @@ impl AccountMutation {
     async fn permission_group_delete(&self, ctx: &Context<'_>, id: ID) -> Result<gen::PermissionGroupDelete> {
         let req = require_perm(ctx, "manage_staff").await?;
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
-        let Some(gid) = rustygod_db::catalog::parse_gid(&id.0) else {
+        let Some(gid) = saleor_rustify_db::catalog::parse_gid(&id.0) else {
             return Ok(gen::PermissionGroupDelete { errors: vec![gerr(Some("id".into()), "bad group id".into())] });
         };
-        match rustygod_db::account_writes::delete_group_full(db, req, gid).await {
+        match saleor_rustify_db::account_writes::delete_group_full(db, req, gid).await {
             Ok(()) => Ok(gen::PermissionGroupDelete { errors: vec![] }),
             Err(e) => Ok(gen::PermissionGroupDelete { errors: vec![gerr(None, e.to_string())] }),
         }
@@ -1349,21 +1349,21 @@ impl AccountMutation {
             Err(_) => return Ok(err("authentication required".into())),
         };
         // Old password verified unless the account has an unusable one.
-        let hash: Option<String> = rustygod_db::entities::account_user::Entity::find_by_id(uid)
+        let hash: Option<String> = saleor_rustify_db::entities::account_user::Entity::find_by_id(uid)
             .one(db).await.map_err(|e| Error::new(e.to_string()))?.map(|u| u.password);
         if let Some(h) = hash {
             if !h.starts_with('!') {
                 let Some(old) = old_password.filter(|o| !o.is_empty()) else {
                     return Ok(err("old password is required".into()));
                 };
-                if !matches!(rustygod_core::auth::verify_password(&old, &h), rustygod_core::auth::PasswordCheck::Ok) {
+                if !matches!(saleor_rustify_core::auth::verify_password(&old, &h), saleor_rustify_core::auth::PasswordCheck::Ok) {
                     return Ok(err("old password is incorrect".into()));
                 }
             }
         }
-        match rustygod_db::account_writes::set_password(db, uid, &new_password).await {
+        match saleor_rustify_db::account_writes::set_password(db, uid, &new_password).await {
             Ok(()) => {
-                let _ = rustygod_db::account_writes::log_event(db, uid, "password_changed", None, serde_json::json!({})).await;
+                let _ = saleor_rustify_db::account_writes::log_event(db, uid, "password_changed", None, serde_json::json!({})).await;
                 Ok(gen::PasswordChange { errors: vec![] })
             }
             Err(e) => Ok(err(e.to_string())),
@@ -1377,9 +1377,9 @@ impl AccountMutation {
         let _ = (channel, redirect_url);
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
         // Never leak existence (Django returns success for unknown emails).
-        if let Some((user, _)) = rustygod_db::auth::find_for_login(db, &email.trim().to_lowercase()).await.map_err(|e| Error::new(e.to_string()))? {
-            if let Ok(raw) = rustygod_db::account_writes::issue_token(db, "password-reset", user.id, 1, "").await {
-                let _ = rustygod_db::account_writes::log_event(db, user.id, "password_reset_link_sent", None, serde_json::json!({})).await;
+        if let Some((user, _)) = saleor_rustify_db::auth::find_for_login(db, &email.trim().to_lowercase()).await.map_err(|e| Error::new(e.to_string()))? {
+            if let Ok(raw) = saleor_rustify_db::account_writes::issue_token(db, "password-reset", user.id, 1, "").await {
+                let _ = saleor_rustify_db::account_writes::log_event(db, user.id, "password_reset_link_sent", None, serde_json::json!({})).await;
                 // Console-backend parity: the token is logged, not emailed
                 // (no SMTP wired; see checklist). Grep the log in dev.
                 tracing::info!("password-reset token for {}: {}", user.email, raw);
@@ -1391,30 +1391,30 @@ impl AccountMutation {
     async fn set_password(&self, ctx: &Context<'_>, email: String, password: String, token: String) -> Result<gen::SetPassword> {
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
         let err = |m: String| gen::SetPassword { token: None, refresh_token: None, user: None, errors: vec![aerr("INVALID", None, m)] };
-        let (uid, _) = match rustygod_db::account_writes::consume_token(db, "password-reset", &token).await {
+        let (uid, _) = match saleor_rustify_db::account_writes::consume_token(db, "password-reset", &token).await {
             Ok(v) => v,
             Err(e) => return Ok(err(e.to_string())),
         };
         // The token is bound to the email it was issued for.
-        let user = rustygod_db::entities::account_user::Entity::find_by_id(uid)
+        let user = saleor_rustify_db::entities::account_user::Entity::find_by_id(uid)
             .one(db).await.map_err(|e| Error::new(e.to_string()))?
             .ok_or_else(|| Error::new("user not found"))?;
         if user.email.to_lowercase() != email.trim().to_lowercase() {
             return Ok(err("token does not match this email".into()));
         }
-        if let Err(e) = rustygod_db::account_writes::set_password(db, uid, &password).await {
+        if let Err(e) = saleor_rustify_db::account_writes::set_password(db, uid, &password).await {
             return Ok(err(e.to_string()));
         }
-        let _ = rustygod_db::account_writes::log_event(db, uid, "password_reset", None, serde_json::json!({})).await;
+        let _ = saleor_rustify_db::account_writes::log_event(db, uid, "password_reset", None, serde_json::json!({})).await;
         if !user.is_active {
             return Ok(gen::SetPassword { token: None, refresh_token: None, user: None, errors: vec![aerr("INACTIVE", None, "User is inactive".into())] });
         }
         // set_password rotated jwt_token_key: re-read so the fresh claims
         // carry the CURRENT key (else the new tokens are born revoked).
-        let fresh = rustygod_db::entities::account_user::Entity::find_by_id(uid)
+        let fresh = saleor_rustify_db::entities::account_user::Entity::find_by_id(uid)
             .one(db).await.map_err(|e| Error::new(e.to_string()))?
             .ok_or_else(|| Error::new("user not found"))?;
-        let pair = rustygod_core::auth::mint_tokens("http://localhost:8000/graphql/", &fresh.email, fresh.id, fresh.is_staff, &fresh.jwt_token_key).map_err(|e| Error::new(format!("mint: {e}")))?;
+        let pair = saleor_rustify_core::auth::mint_tokens("http://localhost:8000/graphql/", &fresh.email, fresh.id, fresh.is_staff, &fresh.jwt_token_key).map_err(|e| Error::new(format!("mint: {e}")))?;
         let gql_user = assemble_user(db, uid, &uid.to_string()).await.map_err(Error::new)?;
         Ok(gen::SetPassword { token: Some(pair.access), refresh_token: Some(pair.refresh), user: Some(gql_user), errors: vec![] })
     }
@@ -1426,16 +1426,16 @@ impl AccountMutation {
     async fn token_verify(&self, ctx: &Context<'_>, token: String) -> Result<GqlTokenVerify> {
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
         let err = |m: String| GqlTokenVerify { is_valid: false, errors: vec![aerr("INVALID", None, m)] };
-        let claims = match rustygod_core::auth::decode(&token) {
+        let claims = match saleor_rustify_core::auth::decode(&token) {
             Ok(c) => c,
             Err(e) => return Ok(err(format!("auth: {e}"))),
         };
-        if claims.token_type != rustygod_core::auth::TOKEN_TYPE_ACCESS
-            && claims.token_type != rustygod_core::auth::TOKEN_TYPE_REFRESH {
+        if claims.token_type != saleor_rustify_core::auth::TOKEN_TYPE_ACCESS
+            && claims.token_type != saleor_rustify_core::auth::TOKEN_TYPE_REFRESH {
             return Ok(err("not an access or refresh token".into()));
         }
-        let uid = rustygod_core::auth::parse_user_global_id(&claims.user_id).unwrap_or(0);
-        let user = rustygod_db::entities::account_user::Entity::find_by_id(uid)
+        let uid = saleor_rustify_core::auth::parse_user_global_id(&claims.user_id).unwrap_or(0);
+        let user = saleor_rustify_db::entities::account_user::Entity::find_by_id(uid)
             .one(db).await.map_err(|e| Error::new(e.to_string()))?;
         match user {
             Some(u) if u.is_active && u.jwt_token_key == claims.token => Ok(GqlTokenVerify { is_valid: true, errors: vec![] }),
@@ -1450,7 +1450,7 @@ impl AccountMutation {
             Ok(v) => v,
             Err(_) => return Ok(GqlDeactivateAll { errors: vec![aerr("AUTHENTICATION_REQUIRED", None, "authentication required".into())] }),
         };
-        match rustygod_db::account_writes::rotate_key(db, uid).await {
+        match saleor_rustify_db::account_writes::rotate_key(db, uid).await {
             Ok(()) => Ok(GqlDeactivateAll { errors: vec![] }),
             Err(e) => Ok(GqlDeactivateAll { errors: vec![aerr("INVALID", None, e.to_string())] }),
         }
@@ -1462,7 +1462,7 @@ impl AccountMutation {
         if input.password.len() < 8 {
             return Ok(err("password must be at least 8 characters".into()));
         }
-        let nu = rustygod_db::account_writes::NewUser {
+        let nu = saleor_rustify_db::account_writes::NewUser {
             email: input.email.clone(),
             first_name: input.first_name.clone().unwrap_or_default(),
             last_name: input.last_name.clone().unwrap_or_default(),
@@ -1477,15 +1477,15 @@ impl AccountMutation {
             customer_type_id: None,
             is_confirmed: false,
         };
-        let uid = match rustygod_db::account_writes::create_customer(db, &nu).await {
+        let uid = match saleor_rustify_db::account_writes::create_customer(db, &nu).await {
             Ok(u) => u,
             Err(e) => return Ok(err(e.to_string())),
         };
         // Usable password from day one (Django AccountRegister sets it).
-        if let Err(e) = rustygod_db::account_writes::set_password(db, uid, &input.password).await {
+        if let Err(e) = saleor_rustify_db::account_writes::set_password(db, uid, &input.password).await {
             return Ok(err(e.to_string()));
         }
-        let token = rustygod_db::account_writes::issue_token(db, "confirm", uid, 24 * 7, "").await.map_err(|e| Error::new(e.to_string()))?;
+        let token = saleor_rustify_db::account_writes::issue_token(db, "confirm", uid, 24 * 7, "").await.map_err(|e| Error::new(e.to_string()))?;
         tracing::info!("account-confirm token for {}: {}", nu.email, token);
         Ok(GqlAccountRegister {
             user: Some(assemble_user(db, uid, &uid.to_string()).await.map_err(Error::new)?),
@@ -1496,11 +1496,11 @@ impl AccountMutation {
     async fn confirm_account(&self, ctx: &Context<'_>, token: String) -> Result<GqlConfirmResult> {
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
         let err = |m: String| GqlConfirmResult { user: None, errors: vec![aerr("INVALID", None, m)] };
-        let (uid, _) = match rustygod_db::account_writes::consume_token(db, "confirm", &token).await {
+        let (uid, _) = match saleor_rustify_db::account_writes::consume_token(db, "confirm", &token).await {
             Ok(v) => v,
             Err(e) => return Ok(err(e.to_string())),
         };
-        if let Err(e) = rustygod_db::account_writes::confirm_user(db, uid).await {
+        if let Err(e) = saleor_rustify_db::account_writes::confirm_user(db, uid).await {
             return Ok(err(e.to_string()));
         }
         Ok(GqlConfirmResult {
@@ -1516,7 +1516,7 @@ impl AccountMutation {
             Ok(v) => v,
             Err(_) => return Ok(GqlAccountDelete { errors: vec![aerr("AUTHENTICATION_REQUIRED", None, "authentication required".into())] }),
         };
-        match rustygod_db::account_writes::issue_token(db, "account-delete", uid, 24, "").await {
+        match saleor_rustify_db::account_writes::issue_token(db, "account-delete", uid, 24, "").await {
             Ok(raw) => {
                 tracing::info!("account-delete token for user {uid}: {raw}");
                 Ok(GqlAccountDelete { errors: vec![] })
@@ -1528,11 +1528,11 @@ impl AccountMutation {
     async fn account_delete(&self, ctx: &Context<'_>, token: String) -> Result<GqlAccountDelete> {
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
         let err = |m: String| GqlAccountDelete { errors: vec![aerr("INVALID", None, m)] };
-        let (uid, _) = match rustygod_db::account_writes::consume_token(db, "account-delete", &token).await {
+        let (uid, _) = match saleor_rustify_db::account_writes::consume_token(db, "account-delete", &token).await {
             Ok(v) => v,
             Err(e) => return Ok(err(e.to_string())),
         };
-        match rustygod_db::account_writes::delete_own_account(db, uid).await {
+        match saleor_rustify_db::account_writes::delete_own_account(db, uid).await {
             Ok(()) => Ok(GqlAccountDelete { errors: vec![] }),
             Err(e) => Ok(err(e.to_string())),
         }
@@ -1549,20 +1549,20 @@ impl AccountMutation {
             Ok(v) => v,
             Err(_) => return Ok(err("authentication required".into())),
         };
-        let user = rustygod_db::entities::account_user::Entity::find_by_id(uid)
+        let user = saleor_rustify_db::entities::account_user::Entity::find_by_id(uid)
             .one(db).await.map_err(|e| Error::new(e.to_string()))?
             .ok_or_else(|| Error::new("user not found"))?;
         if !user.password.starts_with('!')
-            && !matches!(rustygod_core::auth::verify_password(&password, &user.password), rustygod_core::auth::PasswordCheck::Ok) {
+            && !matches!(saleor_rustify_core::auth::verify_password(&password, &user.password), saleor_rustify_core::auth::PasswordCheck::Ok) {
             return Ok(err("incorrect password".into()));
         }
         let email = new_email.trim().to_lowercase();
         if email.is_empty() || !email.contains('@') {
             return Ok(err("valid email is required".into()));
         }
-        match rustygod_db::account_writes::issue_token(db, "email-change", uid, 1, &email).await {
+        match saleor_rustify_db::account_writes::issue_token(db, "email-change", uid, 1, &email).await {
             Ok(raw) => {
-                let _ = rustygod_db::account_writes::log_event(db, uid, "email_changed_request", None, serde_json::json!({"new_email": email})).await;
+                let _ = saleor_rustify_db::account_writes::log_event(db, uid, "email_changed_request", None, serde_json::json!({"new_email": email})).await;
                 tracing::info!("email-change token for user {uid}: {raw}");
                 Ok(GqlEmailChange { errors: vec![] })
             }
@@ -1573,13 +1573,13 @@ impl AccountMutation {
     async fn confirm_email_change(&self, ctx: &Context<'_>, token: String) -> Result<GqlEmailChange> {
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
         let err = |m: String| GqlEmailChange { errors: vec![aerr("INVALID", None, m)] };
-        let (uid, new_email) = match rustygod_db::account_writes::consume_token(db, "email-change", &token).await {
+        let (uid, new_email) = match saleor_rustify_db::account_writes::consume_token(db, "email-change", &token).await {
             Ok(v) => v,
             Err(e) => return Ok(err(e.to_string())),
         };
-        match rustygod_db::account_writes::set_own_email(db, uid, &new_email).await {
+        match saleor_rustify_db::account_writes::set_own_email(db, uid, &new_email).await {
             Ok(()) => {
-                let _ = rustygod_db::account_writes::log_event(db, uid, "email_changed", None, serde_json::json!({"new_email": new_email})).await;
+                let _ = saleor_rustify_db::account_writes::log_event(db, uid, "email_changed", None, serde_json::json!({"new_email": new_email})).await;
                 Ok(GqlEmailChange { errors: vec![] })
             }
             Err(e) => Ok(err(e.to_string())),
@@ -1594,10 +1594,10 @@ impl AccountMutation {
         require_perm(ctx, "manage_customer_types_and_attributes").await?;
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
         let err = |m: String| gen::CustomerTypeCreate { customer_type: None, errors: vec![cterr(None, m)] };
-        let c = rustygod_db::customer_types::CustomerTypeCreate {
+        let c = saleor_rustify_db::customer_types::CustomerTypeCreate {
             name: input.name.clone(), slug: input.slug.clone(), is_default: input.is_default.unwrap_or(false),
         };
-        match rustygod_db::customer_types::create_customer_type(db, &c).await {
+        match saleor_rustify_db::customer_types::create_customer_type(db, &c).await {
             Ok(ct) => Ok(gen::CustomerTypeCreate {
                 customer_type: assemble_customer_type(db, ct).await.map_err(Error::new)?,
                 errors: vec![],
@@ -1610,13 +1610,13 @@ impl AccountMutation {
         require_perm(ctx, "manage_customer_types_and_attributes").await?;
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
         let err = |m: String| gen::CustomerTypeUpdate { customer_type: None, errors: vec![cterr_u(None, m)] };
-        let Some(ct) = rustygod_db::catalog::parse_gid(&id.0) else {
+        let Some(ct) = saleor_rustify_db::catalog::parse_gid(&id.0) else {
             return Ok(err("bad customer type id".into()));
         };
-        let patch = rustygod_db::customer_types::CustomerTypePatch {
+        let patch = saleor_rustify_db::customer_types::CustomerTypePatch {
             name: input.name.clone(), slug: input.slug.clone(), is_default: input.is_default,
         };
-        match rustygod_db::customer_types::update_customer_type(db, ct, &patch).await {
+        match saleor_rustify_db::customer_types::update_customer_type(db, ct, &patch).await {
             Ok(()) => Ok(gen::CustomerTypeUpdate {
                 customer_type: assemble_customer_type(db, ct).await.map_err(Error::new)?,
                 errors: vec![],
@@ -1629,10 +1629,10 @@ impl AccountMutation {
         require_perm(ctx, "manage_customer_types_and_attributes").await?;
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
         let err = |m: String| gen::CustomerTypeDelete { customer_type: None, errors: vec![cterr_d(None, m)] };
-        let Some(ct) = rustygod_db::catalog::parse_gid(&id.0) else {
+        let Some(ct) = saleor_rustify_db::catalog::parse_gid(&id.0) else {
             return Ok(err("bad customer type id".into()));
         };
-        match rustygod_db::customer_types::delete_customer_type(db, ct).await {
+        match saleor_rustify_db::customer_types::delete_customer_type(db, ct).await {
             Ok(()) => Ok(gen::CustomerTypeDelete { customer_type: None, errors: vec![] }),
             Err(e) => Ok(err(e.to_string())),
         }
@@ -1646,11 +1646,11 @@ impl AccountMutation {
         require_perm(ctx, "manage_customer_types_and_attributes").await?;
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
         let err = |m: String| gen::CustomerTypeAssignAttributes { customer_type: None, errors: vec![cterr_a(None, m)] };
-        let Some(ct) = rustygod_db::catalog::parse_gid(&customer_type_id.0) else {
+        let Some(ct) = saleor_rustify_db::catalog::parse_gid(&customer_type_id.0) else {
             return Ok(err("bad customer type id".into()));
         };
-        let aids: Vec<i32> = attribute_ids.iter().filter_map(|i| rustygod_db::catalog::parse_gid(&i.0)).collect();
-        match rustygod_db::customer_types::assign_attributes(db, ct, &aids).await {
+        let aids: Vec<i32> = attribute_ids.iter().filter_map(|i| saleor_rustify_db::catalog::parse_gid(&i.0)).collect();
+        match saleor_rustify_db::customer_types::assign_attributes(db, ct, &aids).await {
             Ok(()) => Ok(gen::CustomerTypeAssignAttributes {
                 customer_type: assemble_customer_type(db, ct).await.map_err(Error::new)?,
                 errors: vec![],
@@ -1667,11 +1667,11 @@ impl AccountMutation {
         require_perm(ctx, "manage_customer_types_and_attributes").await?;
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
         let err = |m: String| gen::CustomerTypeUnassignAttributes { customer_type: None, errors: vec![cterr_un(None, m)] };
-        let Some(ct) = rustygod_db::catalog::parse_gid(&customer_type_id.0) else {
+        let Some(ct) = saleor_rustify_db::catalog::parse_gid(&customer_type_id.0) else {
             return Ok(err("bad customer type id".into()));
         };
-        let aids: Vec<i32> = attribute_ids.iter().filter_map(|i| rustygod_db::catalog::parse_gid(&i.0)).collect();
-        match rustygod_db::customer_types::unassign_attributes(db, ct, &aids).await {
+        let aids: Vec<i32> = attribute_ids.iter().filter_map(|i| saleor_rustify_db::catalog::parse_gid(&i.0)).collect();
+        match saleor_rustify_db::customer_types::unassign_attributes(db, ct, &aids).await {
             Ok(_) => Ok(gen::CustomerTypeUnassignAttributes {
                 customer_type: assemble_customer_type(db, ct).await.map_err(Error::new)?,
                 errors: vec![],
@@ -1688,13 +1688,13 @@ impl AccountMutation {
         require_perm(ctx, "manage_customer_types_and_attributes").await?;
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
         let err = |m: String| gen::CustomerTypeReorderAttributes { customer_type: None, errors: vec![cterr_r(None, m)] };
-        let Some(ct) = rustygod_db::catalog::parse_gid(&customer_type_id.0) else {
+        let Some(ct) = saleor_rustify_db::catalog::parse_gid(&customer_type_id.0) else {
             return Ok(err("bad customer type id".into()));
         };
         let mv: Vec<(i32, i32)> = moves.iter()
-            .filter_map(|m| rustygod_db::catalog::parse_gid(&m.id.0).map(|v| (v, m.sort_order.unwrap_or(0))))
+            .filter_map(|m| saleor_rustify_db::catalog::parse_gid(&m.id.0).map(|v| (v, m.sort_order.unwrap_or(0))))
             .collect();
-        match rustygod_db::customer_types::reorder_attributes(db, ct, &mv).await {
+        match saleor_rustify_db::customer_types::reorder_attributes(db, ct, &mv).await {
             Ok(()) => Ok(gen::CustomerTypeReorderAttributes {
                 customer_type: assemble_customer_type(db, ct).await.map_err(Error::new)?,
                 errors: vec![],
@@ -1706,7 +1706,7 @@ impl AccountMutation {
     async fn customer_bulk_update(&self, ctx: &Context<'_>, ids: Vec<ID>, input: gen::CustomerInput) -> Result<GqlBulkResult> {
         let req = require_perm(ctx, "manage_users").await?;
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
-        let patch = rustygod_db::account_writes::UserPatch {
+        let patch = saleor_rustify_db::account_writes::UserPatch {
             email: None,
             first_name: input.first_name.clone(),
             last_name: input.last_name.clone(),
@@ -1718,13 +1718,13 @@ impl AccountMutation {
             metadata: input.metadata.as_ref().map(|v| crate::common::merge_metadata(&serde_json::Value::Null, v)),
             private_metadata: input.private_metadata.as_ref().map(|v| crate::common::merge_metadata(&serde_json::Value::Null, v)),
             external_reference: input.external_reference.clone(),
-            customer_type_id: input.customer_type.as_ref().and_then(|i| rustygod_db::catalog::parse_gid(&i.0)),
+            customer_type_id: input.customer_type.as_ref().and_then(|i| saleor_rustify_db::catalog::parse_gid(&i.0)),
             is_confirmed: input.is_confirmed,
         };
         let mut n = 0;
         for i in &ids {
-            if let Some(uid) = rustygod_db::catalog::parse_gid(&i.0) {
-                if rustygod_db::account_writes::update_user(db, req, uid, false, &patch).await.is_ok() {
+            if let Some(uid) = saleor_rustify_db::catalog::parse_gid(&i.0) {
+                if saleor_rustify_db::account_writes::update_user(db, req, uid, false, &patch).await.is_ok() {
                     n += 1;
                 }
             }
@@ -1740,8 +1740,8 @@ impl AccountMutation {
         require_perm(ctx, "manage_settings").await?;
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
         let err = |m: String| gen::StaffNotificationRecipientCreate { staff_notification_recipient: None, errors: vec![shop_err(m)] };
-        let uid = input.user.as_ref().and_then(|i| rustygod_db::catalog::parse_gid(&i.0));
-        match rustygod_db::account_writes::create_notification_recipient(db, uid, input.email.clone(), input.active.unwrap_or(true)).await {
+        let uid = input.user.as_ref().and_then(|i| saleor_rustify_db::catalog::parse_gid(&i.0));
+        match saleor_rustify_db::account_writes::create_notification_recipient(db, uid, input.email.clone(), input.active.unwrap_or(true)).await {
             Ok(rid) => Ok(gen::StaffNotificationRecipientCreate {
                 staff_notification_recipient: assemble_recipient(db, rid).await.map_err(Error::new)?,
                 errors: vec![],
@@ -1753,10 +1753,10 @@ impl AccountMutation {
     async fn staff_notification_recipient_delete(&self, ctx: &Context<'_>, id: ID) -> Result<gen::StaffNotificationRecipientDelete> {
         require_perm(ctx, "manage_settings").await?;
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
-        let Some(rid) = rustygod_db::catalog::parse_gid(&id.0) else {
+        let Some(rid) = saleor_rustify_db::catalog::parse_gid(&id.0) else {
             return Ok(gen::StaffNotificationRecipientDelete { errors: vec![shop_err("bad id".into())] });
         };
-        match rustygod_db::account_writes::delete_notification_recipient(db, rid).await {
+        match saleor_rustify_db::account_writes::delete_notification_recipient(db, rid).await {
             Ok(()) => Ok(gen::StaffNotificationRecipientDelete { errors: vec![] }),
             Err(e) => Ok(gen::StaffNotificationRecipientDelete { errors: vec![shop_err(e.to_string())] }),
         }
@@ -1810,7 +1810,7 @@ fn slim_list_user(
 
 async fn collect_permissions(db: &sea_orm::DatabaseConnection, user_id: i32) -> Result<Vec<String>, sea_orm::DbErr> {
     use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QuerySelect};
-    use rustygod_db::entities::{account_user_user_permissions, permission_permission, account_user_groups, account_group_permissions};
+    use saleor_rustify_db::entities::{account_user_user_permissions, permission_permission, account_user_groups, account_group_permissions};
     let mut codes: Vec<String> = vec![];
     // Direct permissions
     let direct_pids: Vec<i32> = account_user_user_permissions::Entity::find()
@@ -1841,11 +1841,11 @@ async fn collect_permissions(db: &sea_orm::DatabaseConnection, user_id: i32) -> 
     if codes.is_empty() {
         // Fallback for populatedb admin (superuser bypass in server::access).
         // Return ALL permissions so Dashboard menu renders (was 5, now all).
-        let user = rustygod_db::entities::account_user::Entity::find_by_id(user_id).one(db).await?.unwrap();
+        let user = saleor_rustify_db::entities::account_user::Entity::find_by_id(user_id).one(db).await?.unwrap();
         if user.is_superuser {
-            let all: Vec<(i32, String)> = rustygod_db::entities::permission_permission::Entity::find()
-                .select_only().column(rustygod_db::entities::permission_permission::Column::Id)
-                .column(rustygod_db::entities::permission_permission::Column::Codename)
+            let all: Vec<(i32, String)> = saleor_rustify_db::entities::permission_permission::Entity::find()
+                .select_only().column(saleor_rustify_db::entities::permission_permission::Column::Id)
+                .column(saleor_rustify_db::entities::permission_permission::Column::Codename)
                 .into_tuple::<(i32, String)>().all(db).await?.into_iter().collect();
             codes = all.into_iter().map(|(_, c)| c).collect();
             if codes.is_empty() {

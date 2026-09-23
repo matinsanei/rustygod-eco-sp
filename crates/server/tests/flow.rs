@@ -4,14 +4,14 @@
 //! completing a checkout consumes it exactly once and mints an order whose
 //! lines and totals match the checkout.
 
-use rustygod_proto::{
+use saleor_rustify_proto::{
     checkout::{
         checkout_service_server::CheckoutService, AddLinesRequest, CheckoutLine,
         CompleteCheckoutRequest, CreateCheckoutRequest,
     },
     order::{order_service_server::OrderService, GetOrderRequest, ListOrdersRequest},
 };
-use rustygod_server::{
+use saleor_rustify_server::{
     service_checkout::CheckoutServiceImpl, service_order::OrderServiceImpl,
     store::{new_store, seed},
 };

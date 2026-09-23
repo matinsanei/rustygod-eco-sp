@@ -240,7 +240,7 @@ pub async fn refresh_order_promotion_in(
     let mut cands: Vec<Candidate> = vec![];
     let mut gift_rules: Vec<OrderRule> = vec![];
     for rule in rules {
-        if !rustygod_core::discount::order_predicate_matches(&rule.order_predicate, subtotal) {
+        if !saleor_rustify_core::discount::order_predicate_matches(&rule.order_predicate, subtotal) {
             continue;
         }
         match rule.reward_type.as_str() {
@@ -250,7 +250,7 @@ pub async fn refresh_order_promotion_in(
                     continue;
                 };
                 let saving =
-                    rustygod_core::discount::saving_for_rule(subtotal, &vt, rv, &co.currency);
+                    saleor_rustify_core::discount::saving_for_rule(subtotal, &vt, rv, &co.currency);
                 if saving > Decimal::ZERO {
                     cands.push(Candidate { rule, saving, gift: None });
                 }

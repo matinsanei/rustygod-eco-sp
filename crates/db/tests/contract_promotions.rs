@@ -4,18 +4,18 @@
 //! the same amounts, voucher usage increments on completion.
 
 use rust_decimal::Decimal;
-use rustygod_db::{catalog, checkout_store, database_url, promotions};
+use saleor_rustify_db::{catalog, checkout_store, database_url, promotions};
 use sea_orm::{ConnectionTrait, DatabaseConnection};
 
 async fn db() -> DatabaseConnection {
-    rustygod_db::connect(&database_url())
+    saleor_rustify_db::connect(&database_url())
         .await
         .expect("saleor postgres must be up (localhost:5434)")
 }
 
 #[tokio::test]
 async fn catalogue_rule_evaluates_on_real_variant() {
-    use rustygod_db::entities::product_productvariant;
+    use saleor_rustify_db::entities::product_productvariant;
     use sea_orm::{EntityTrait, QuerySelect};
 
     let db = db().await;
@@ -39,7 +39,7 @@ async fn catalogue_rule_evaluates_on_real_variant() {
 
 #[tokio::test]
 async fn checkout_totals_drop_by_promotion() {
-    use rustygod_db::checkout_store::NewLine;
+    use saleor_rustify_db::checkout_store::NewLine;
 
     let db = db().await;
     let (ch_id, currency) = catalog::channel_info(&db, "default-channel").await.unwrap();
@@ -62,7 +62,7 @@ async fn checkout_totals_drop_by_promotion() {
     assert_eq!(co.total_gross_amount, Decimal::new(2800, 2));
 
     // The discount row Django would write exists.
-    use rustygod_db::entities::discount_checkoutlinediscount;
+    use saleor_rustify_db::entities::discount_checkoutlinediscount;
     use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
     let d = discount_checkoutlinediscount::Entity::find()
         .filter(discount_checkoutlinediscount::Column::LineId.eq(lines[0].id))
@@ -88,8 +88,8 @@ async fn checkout_totals_drop_by_promotion() {
 
 #[tokio::test]
 async fn voucher_entire_order_applies_and_increments_on_complete() {
-    use rustygod_db::{checkout_store::NewLine, order_store};
-    use rustygod_db::entities::discount_vouchercode;
+    use saleor_rustify_db::{checkout_store::NewLine, order_store};
+    use saleor_rustify_db::entities::discount_vouchercode;
     use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
 
     let db = db().await;
@@ -149,7 +149,7 @@ async fn voucher_entire_order_applies_and_increments_on_complete() {
         ))
         .await
         .unwrap();
-        use rustygod_db::entities::discount_vouchercustomer;
+        use saleor_rustify_db::entities::discount_vouchercustomer;
         discount_vouchercustomer::Entity::delete_many()
             .filter(discount_vouchercustomer::Column::CustomerEmail.eq("buyer@example.com"))
             .exec(&db)
@@ -158,7 +158,7 @@ async fn voucher_entire_order_applies_and_increments_on_complete() {
     }
     // Remove voucher discount rows + checkout.
     {
-        use rustygod_db::entities::discount_checkoutdiscount;
+        use saleor_rustify_db::entities::discount_checkoutdiscount;
         discount_checkoutdiscount::Entity::delete_many()
             .filter(discount_checkoutdiscount::Column::CheckoutId.eq(token))
             .exec(&db)

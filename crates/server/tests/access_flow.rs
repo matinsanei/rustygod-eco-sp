@@ -3,12 +3,12 @@
 //! PERMISSION_DENIED. Mirrors Saleor's permission decorators on the
 //! `MANAGE_*` mutations.
 
-use rustygod_core::auth as core_auth;
-use rustygod_db::{apps, auth as db_auth, database_url};
-use rustygod_proto::draft::{
+use saleor_rustify_core::auth as core_auth;
+use saleor_rustify_db::{apps, auth as db_auth, database_url};
+use saleor_rustify_proto::draft::{
     draft_order_service_server::DraftOrderService, CreateDraftOrderRequest, DraftLineInput,
 };
-use rustygod_server::{
+use saleor_rustify_server::{
     access::{self, MANAGE_GIFT_CARD, MANAGE_ORDERS},
     service_draft::DraftOrderServiceImpl,
 };
@@ -28,7 +28,7 @@ fn test_key() -> String {
 }
 
 async fn db() -> DatabaseConnection {
-    rustygod_db::connect(&database_url())
+    saleor_rustify_db::connect(&database_url())
         .await
         .expect("saleor postgres must be up (localhost:5434)")
 }
@@ -172,7 +172,7 @@ async fn draft_rpc_enforces_manage_orders() {
     assert!(err.errors[0].message.contains("at least one line"));
 
     // App token without the grant → denied.
-    let db2 = rustygod_db::connect(&database_url()).await.unwrap();
+    let db2 = saleor_rustify_db::connect(&database_url()).await.unwrap();
     let app_id = apps::create_app(&db2, "ci-draft-app", &[]).await.unwrap();
     let (_, raw) = apps::create_app_token(&db2, app_id, "t").await.unwrap();
     let err = svc

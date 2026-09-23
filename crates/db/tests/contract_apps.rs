@@ -3,11 +3,11 @@
 //! token once (only hash + last-4 stored), `AppTokenVerify` semantics,
 //! revocation, and permission codename resolution.
 
-use rustygod_db::{apps, database_url};
+use saleor_rustify_db::{apps, database_url};
 use sea_orm::DatabaseConnection;
 
 async fn db() -> DatabaseConnection {
-    rustygod_db::connect(&database_url())
+    saleor_rustify_db::connect(&database_url())
         .await
         .expect("saleor postgres must be up (localhost:5434)")
 }
@@ -28,7 +28,7 @@ async fn token_lifecycle_hash_verify_revoke() {
     assert_eq!(raw[raw.len() - 4..].len(), 4);
 
     // Stored hashed: the row must not contain the raw token.
-    use rustygod_db::entities::app_apptoken;
+    use saleor_rustify_db::entities::app_apptoken;
     use sea_orm::EntityTrait;
     let row = app_apptoken::Entity::find_by_id(tid).one(&db).await.unwrap().unwrap();
     assert_ne!(row.auth_token, raw);
@@ -59,7 +59,7 @@ async fn token_lifecycle_hash_verify_revoke() {
 async fn create_rejects_unknown_or_inactive_app() {
     let db = db().await;
     let err = apps::create_app_token(&db, i32::MAX, "x").await.unwrap_err();
-    assert!(matches!(err, rustygod_db::DbError::App(_)));
+    assert!(matches!(err, saleor_rustify_db::DbError::App(_)));
 }
 
 #[tokio::test]

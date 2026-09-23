@@ -1,5 +1,5 @@
 [package]
-name = "rustygod-ai"
+name = "saleor-rustify-ai"
 version = "0.1.0"
 edition = "2021"
 
@@ -11,8 +11,8 @@ tracing = { workspace = true }
 rust_decimal = { workspace = true }
 thiserror = { workspace = true }
 async-trait = { workspace = true }
-rustygod-db = { path = "../db" }
-rustygod-core = { path = "../core" }
+saleor-rustify-db = { path = "../db" }
+saleor-rustify-core = { path = "../core" }
 
 [dev-dependencies]
 tokio = { workspace = true }

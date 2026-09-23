@@ -212,7 +212,7 @@ pub async fn complete_checkout(
             .iter()
             .filter(|c| {
                 c.currency == co.currency
-                    && rustygod_core::giftcard::is_active_card(
+                    && saleor_rustify_core::giftcard::is_active_card(
                         c.is_active,
                         c.expiry_date,
                         Utc::now().date_naive(),
@@ -220,7 +220,7 @@ pub async fn complete_checkout(
             })
             .map(|c| c.current_balance_amount)
             .collect();
-        let mut remaining = rustygod_core::giftcard::cover_total(minted_total, &balances).0;
+        let mut remaining = saleor_rustify_core::giftcard::cover_total(minted_total, &balances).0;
         for card in cards.iter().filter(|c| c.currency == co.currency) {
             if remaining <= Decimal::ZERO {
                 break;

@@ -6,13 +6,13 @@
 
 use chrono::Utc;
 use rust_decimal::Decimal;
-use rustygod_db::{catalog, checkout_store, complete, database_url, order_promotions, order_store};
+use saleor_rustify_db::{catalog, checkout_store, complete, database_url, order_promotions, order_store};
 use sea_orm::DatabaseConnection;
 use serde_json::json;
 use uuid::Uuid;
 
 async fn db() -> DatabaseConnection {
-    rustygod_db::connect(&database_url())
+    saleor_rustify_db::connect(&database_url())
         .await
         .expect("saleor postgres must be up (localhost:5434)")
 }
@@ -35,7 +35,7 @@ mod fs2 {
             let f = std::fs::OpenOptions::new()
                 .create(true)
                 .write(true)
-                .open("/tmp/rustygod-stock.lock")
+                .open("/tmp/rustify-stock.lock")
                 .expect("stock lock");
             f.lock_exclusive().expect("stock lock");
             Self { _f: f }
@@ -59,7 +59,7 @@ async fn make_promo(
     value: Option<Decimal>,
     predicate: serde_json::Value,
 ) -> Promo {
-    use rustygod_db::entities::{
+    use saleor_rustify_db::entities::{
         discount_promotion, discount_promotionrule, discount_promotionrule_channels,
     };
     use sea_orm::{ActiveModelTrait, Set};
@@ -114,7 +114,7 @@ async fn make_promo(
 }
 
 async fn link_gift(db: &DatabaseConnection, rule_id: Uuid, variant_id: i32) {
-    use rustygod_db::entities::discount_promotionrule_gifts;
+    use saleor_rustify_db::entities::discount_promotionrule_gifts;
     use sea_orm::{ActiveModelTrait, Set};
     discount_promotionrule_gifts::ActiveModel {
         promotionrule_id: Set(rule_id),
@@ -127,7 +127,7 @@ async fn link_gift(db: &DatabaseConnection, rule_id: Uuid, variant_id: i32) {
 }
 
 async fn drop_promo(db: &DatabaseConnection, p: &Promo) {
-    use rustygod_db::entities::{
+    use saleor_rustify_db::entities::{
         discount_checkoutdiscount, discount_orderdiscount, discount_promotion,
         discount_promotionrule, discount_promotionrule_channels, discount_promotionrule_gifts,
     };
@@ -192,7 +192,7 @@ async fn checkout_total(db: &DatabaseConnection, token: Uuid) -> Decimal {
 }
 
 async fn promo_rows(db: &DatabaseConnection, token: Uuid) -> usize {
-    use rustygod_db::entities::discount_checkoutdiscount;
+    use saleor_rustify_db::entities::discount_checkoutdiscount;
     use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
     discount_checkoutdiscount::Entity::find()
         .filter(discount_checkoutdiscount::Column::CheckoutId.eq(token))
@@ -204,7 +204,7 @@ async fn promo_rows(db: &DatabaseConnection, token: Uuid) -> usize {
 }
 
 async fn gift_lines(db: &DatabaseConnection, token: Uuid) -> Vec<Uuid> {
-    use rustygod_db::entities::checkout_checkoutline;
+    use saleor_rustify_db::entities::checkout_checkoutline;
     use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
     checkout_checkoutline::Entity::find()
         .filter(checkout_checkoutline::Column::CheckoutId.eq(token))
@@ -278,7 +278,7 @@ async fn voucher_suppresses_order_promotion() {
     assert!(matches!(out, order_promotions::RefreshOutcome::Discount { .. }));
     // Staff applies a voucher code (row edit mirrors apply_voucher's stamp).
     {
-        use rustygod_db::entities::checkout_checkout;
+        use saleor_rustify_db::entities::checkout_checkout;
         use sea_orm::{ActiveModelTrait, EntityTrait};
         let co = checkout_checkout::Entity::find_by_id(token).one(&db).await.unwrap().unwrap();
         let mut am: checkout_checkout::ActiveModel = co.into();
@@ -329,7 +329,7 @@ async fn gift_line_created_free_and_competes_by_value() {
     assert_eq!(checkout_total(&db, token).await, subtotal, "gift is free");
     // Gift row audit: qty 1, totals 0, listing price kept.
     {
-        use rustygod_db::entities::checkout_checkoutline;
+        use saleor_rustify_db::entities::checkout_checkoutline;
         use sea_orm::{EntityTrait};
         let row = checkout_checkoutline::Entity::find_by_id(gift_line).one(&db).await.unwrap().unwrap();
         assert_eq!(row.quantity, 1);
@@ -367,7 +367,7 @@ async fn complete_carries_discount_row_and_gift_line() {
     let (header, lines) = order_store::get_order_rows(&db, done.order_id).await.unwrap().unwrap();
     assert_eq!(header.total_gross_amount, (subtotal - want_disc).max(dec("0")));
     {
-        use rustygod_db::entities::discount_orderdiscount;
+        use saleor_rustify_db::entities::discount_orderdiscount;
         use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
         let d = discount_orderdiscount::Entity::find()
             .filter(discount_orderdiscount::Column::OrderId.eq(done.order_id))
@@ -392,7 +392,7 @@ async fn complete_carries_gift_line_with_allocation() {
     let (token, _vid, _unit) = stocked_checkout(&db, 2).await;
     // Tracked gift variant (real stock movement expected).
     let products = catalog::list_products(&db, "default-channel", None, 100).await.unwrap();
-    use rustygod_db::entities::product_productvariant;
+    use saleor_rustify_db::entities::product_productvariant;
     use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
     let mut gift_vid = 0;
     for p in products.iter().flat_map(|p| &p.variants) {
@@ -421,7 +421,7 @@ async fn complete_carries_gift_line_with_allocation() {
     assert!(gift.undiscounted_unit_price_gross_amount > dec("0"));
     assert!(gift.unit_discount_amount > dec("0"), "discount audit trail");
     // Real units, real allocation (tracked gift variant).
-    use rustygod_db::entities::warehouse_allocation;
+    use saleor_rustify_db::entities::warehouse_allocation;
     let alloced: i32 = warehouse_allocation::Entity::find()
         .filter(warehouse_allocation::Column::OrderLineId.eq(gift.id))
         .all(&db)

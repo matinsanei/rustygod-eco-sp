@@ -1,7 +1,7 @@
 //! InvoiceService: request/fulfill/send/delete over Django's tables.
 
-use rustygod_db::{entities::invoice_invoice, invoices};
-use rustygod_proto::invoice::{
+use saleor_rustify_db::{entities::invoice_invoice, invoices};
+use saleor_rustify_proto::invoice::{
     invoice_service_server::InvoiceService, FulfillInvoiceRequest, FulfillInvoiceResponse,
     InvoiceIdRequest, InvoiceInfo, InvoiceResponse, ListReadyInvoicesRequest,
     ListReadyInvoicesResponse, RequestInvoiceRequest, RequestInvoiceResponse, SendInvoiceRequest,
@@ -26,8 +26,8 @@ impl InvoiceServiceImpl {
             .ok_or_else(|| Status::unavailable("postgres unavailable"))
     }
 
-    fn err(code: &str, message: String) -> rustygod_proto::common::Error {
-        rustygod_proto::common::Error {
+    fn err(code: &str, message: String) -> saleor_rustify_proto::common::Error {
+        saleor_rustify_proto::common::Error {
             code: code.into(),
             message,
             field: String::new(),
@@ -55,8 +55,8 @@ impl InvoiceServiceImpl {
     }
 }
 
-fn db_err(e: rustygod_db::DbError) -> rustygod_proto::common::Error {
-    use rustygod_db::DbError as E;
+fn db_err(e: saleor_rustify_db::DbError) -> saleor_rustify_proto::common::Error {
+    use saleor_rustify_db::DbError as E;
     let code = match e {
         E::Invoice(_) => "NOT_APPLICABLE",
         _ => "DB_ERROR",

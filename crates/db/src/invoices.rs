@@ -13,7 +13,7 @@
 //!   v1 executes immediately and says so).
 
 use chrono::Utc;
-use rustygod_core::invoice as domain;
+use saleor_rustify_core::invoice as domain;
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, ConnectionTrait, DatabaseConnection, EntityTrait,
     QueryFilter, QueryOrder, QuerySelect, Set, TransactionTrait,

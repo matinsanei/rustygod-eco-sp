@@ -144,7 +144,7 @@ async fn rule_matches_variant(
         return Ok(true);
     }
     // Otherwise the catalogue predicate decides.
-    Ok(rustygod_core::discount::predicate_matches(
+    Ok(saleor_rustify_core::discount::predicate_matches(
         &rule.predicate,
         variant_id,
         ctx.product_id,
@@ -195,12 +195,12 @@ pub async fn evaluate_line(
         return Ok(None);
     }
     let Some((best_idx, _)) =
-        rustygod_core::discount::best_rule(unit_price, &applicable, currency)
+        saleor_rustify_core::discount::best_rule(unit_price, &applicable, currency)
     else {
         return Ok(None);
     };
     // Django skips zero-saving "discounts".
-    let saving = rustygod_core::discount::saving_for_rule(
+    let saving = saleor_rustify_core::discount::saving_for_rule(
         unit_price,
         &applicable[best_idx].1,
         applicable[best_idx].2,
@@ -375,8 +375,8 @@ pub async fn apply_voucher(
             // Django: CheckoutDiscount row (order-level) + voucher_code on checkout.
             let base: Decimal = co.total_gross_amount;
             let discounted = match v.discount_value_type.as_str() {
-                "fixed" => rustygod_core::discount::apply_fixed(base, listing.discount_value),
-                "percentage" => rustygod_core::discount::apply_percentage(
+                "fixed" => saleor_rustify_core::discount::apply_fixed(base, listing.discount_value),
+                "percentage" => saleor_rustify_core::discount::apply_percentage(
                     base,
                     listing.discount_value,
                     &listing.currency,
@@ -477,8 +477,8 @@ pub async fn apply_voucher(
                 }
                 let unit = line.price_override.unwrap_or(line.undiscounted_unit_price_amount);
                 let discounted = match v.discount_value_type.as_str() {
-                    "fixed" => rustygod_core::discount::apply_fixed(unit, listing.discount_value),
-                    "percentage" => rustygod_core::discount::apply_percentage(
+                    "fixed" => saleor_rustify_core::discount::apply_fixed(unit, listing.discount_value),
+                    "percentage" => saleor_rustify_core::discount::apply_percentage(
                         unit,
                         listing.discount_value,
                         &listing.currency,

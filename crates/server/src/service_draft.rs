@@ -1,8 +1,8 @@
 //! DraftOrderService: staff draft orders over Django's `order_*` tables.
 
 use rust_decimal::Decimal;
-use rustygod_db::drafts::{self, DraftLineInput, DraftOrderView};
-use rustygod_proto::draft::{
+use saleor_rustify_db::drafts::{self, DraftLineInput, DraftOrderView};
+use saleor_rustify_proto::draft::{
     draft_order_service_server::DraftOrderService, CompleteDraftOrderResponse,
     CreateDraftOrderRequest, CreateDraftOrderResponse, DeleteDraftOrderResponse,
     DraftOrderIdRequest, DraftOrderInfo, DraftOrderLinesRequest, DraftOrderLinesResponse,
@@ -28,8 +28,8 @@ impl DraftOrderServiceImpl {
             .ok_or_else(|| Status::unavailable("postgres unavailable"))
     }
 
-    fn err(code: &str, message: String) -> rustygod_proto::common::Error {
-        rustygod_proto::common::Error {
+    fn err(code: &str, message: String) -> saleor_rustify_proto::common::Error {
+        saleor_rustify_proto::common::Error {
             code: code.into(),
             message,
             field: String::new(),
@@ -53,7 +53,7 @@ impl DraftOrderServiceImpl {
     }
 
     fn lines(
-        raw: Vec<rustygod_proto::draft::DraftLineInput>,
+        raw: Vec<saleor_rustify_proto::draft::DraftLineInput>,
     ) -> Result<Vec<DraftLineInput>, Status> {
         raw.into_iter()
             .map(|l| {
@@ -77,8 +77,8 @@ impl DraftOrderServiceImpl {
     }
 }
 
-fn db_err(e: rustygod_db::DbError) -> rustygod_proto::common::Error {
-    use rustygod_db::DbError as E;
+fn db_err(e: saleor_rustify_db::DbError) -> saleor_rustify_proto::common::Error {
+    use saleor_rustify_db::DbError as E;
     let code = match e {
         E::Draft(_) => "NOT_APPLICABLE",
         E::CheckoutNotFound(_) => "NOT_FOUND",

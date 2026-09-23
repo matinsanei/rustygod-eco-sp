@@ -75,16 +75,16 @@ impl Checkout {
         Money::new(amount, self.currency.clone())
     }
 
-    pub fn to_proto(&self) -> rustygod_proto::checkout::Checkout {
+    pub fn to_proto(&self) -> saleor_rustify_proto::checkout::Checkout {
         let total = self.total();
-        rustygod_proto::checkout::Checkout {
+        saleor_rustify_proto::checkout::Checkout {
             id: self.id.clone(),
             channel: self.channel.clone(),
             email: self.email.clone(),
             lines: self
                 .lines
                 .iter()
-                .map(|l| rustygod_proto::checkout::CheckoutLine {
+                .map(|l| saleor_rustify_proto::checkout::CheckoutLine {
                     variant_id: l.variant_id.clone(),
                     quantity: l.quantity,
                     unit_price: Some(l.unit_price.clone().into()),

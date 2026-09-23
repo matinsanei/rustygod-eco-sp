@@ -1,12 +1,12 @@
 //! WarehouseService writes over gRPC: create/update/delete, stock
 //! upsert, zone links — staff-gated, on real tables.
 
-use rustygod_db::database_url;
-use rustygod_proto::commerce::{
+use saleor_rustify_db::database_url;
+use saleor_rustify_proto::commerce::{
     warehouse_service_server::WarehouseService, CreateWarehouseRequest, DeleteWarehouseRequest,
     ListZonesRequest, UpdateWarehouseRequest, UpsertStockRequest, ZoneLinkRequest,
 };
-use rustygod_server::service_commerce::WarehouseServiceImpl;
+use saleor_rustify_server::service_commerce::WarehouseServiceImpl;
 use tonic::Request;
 use uuid::Uuid;
 
@@ -20,12 +20,12 @@ fn test_key() -> String {
 
 async fn staff_req<T>(msg: T) -> Request<T> {
     std::env::set_var("RSA_PRIVATE_KEY", test_key());
-    let db = rustygod_db::connect(&database_url()).await.unwrap();
-    let (user, _) = rustygod_db::auth::find_for_login(&db, "admin@example.com")
+    let db = saleor_rustify_db::connect(&database_url()).await.unwrap();
+    let (user, _) = saleor_rustify_db::auth::find_for_login(&db, "admin@example.com")
         .await
         .unwrap()
         .unwrap();
-    let pair = rustygod_core::auth::mint_tokens_with_key(
+    let pair = saleor_rustify_core::auth::mint_tokens_with_key(
         &test_key(),
         "test",
         &user.email,
@@ -43,7 +43,7 @@ async fn staff_req<T>(msg: T) -> Request<T> {
 }
 
 async fn svc() -> WarehouseServiceImpl {
-    let db = rustygod_db::connect(&database_url()).await.unwrap();
+    let db = saleor_rustify_db::connect(&database_url()).await.unwrap();
     WarehouseServiceImpl::new(Some(db))
 }
 
@@ -113,9 +113,9 @@ async fn grpc_warehouse_writes() {
     assert!(link.ok);
 
     // Stock upsert on the new warehouse.
-    use rustygod_db::entities::product_productvariant;
+    use saleor_rustify_db::entities::product_productvariant;
     use sea_orm::{EntityTrait, QuerySelect};
-    let db = rustygod_db::connect(&database_url()).await.unwrap();
+    let db = saleor_rustify_db::connect(&database_url()).await.unwrap();
     let vid: i32 = product_productvariant::Entity::find()
         .select_only()
         .column(product_productvariant::Column::Id)
@@ -168,8 +168,8 @@ async fn grpc_warehouse_writes() {
     assert!(!denied.ok);
 
     // Cleanup via deep delete (test-only).
-    let db = rustygod_db::connect(&database_url()).await.unwrap();
-    rustygod_db::warehouses::delete_warehouse_deep(&db, wh.id.parse().unwrap())
+    let db = saleor_rustify_db::connect(&database_url()).await.unwrap();
+    saleor_rustify_db::warehouses::delete_warehouse_deep(&db, wh.id.parse().unwrap())
         .await
         .unwrap();
 }

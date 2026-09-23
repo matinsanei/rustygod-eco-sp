@@ -3,18 +3,18 @@
 //! member add/remove, grant/revoke codenames, delete-drops-links, and the
 //! punchline — membership actually authorizes through `has_permission`.
 
-use rustygod_db::{auth as db_auth, database_url, groups};
+use saleor_rustify_db::{auth as db_auth, database_url, groups};
 use sea_orm::DatabaseConnection;
 use uuid::Uuid;
 
 async fn db() -> DatabaseConnection {
-    rustygod_db::connect(&database_url())
+    saleor_rustify_db::connect(&database_url())
         .await
         .expect("saleor postgres must be up (localhost:5434)")
 }
 
 async fn staff_user(db: &DatabaseConnection) -> i32 {
-    use rustygod_db::entities::account_user;
+    use saleor_rustify_db::entities::account_user;
     use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QuerySelect};
     account_user::Entity::find()
         .select_only()

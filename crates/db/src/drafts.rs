@@ -16,7 +16,7 @@
 
 use chrono::Utc;
 use rust_decimal::Decimal;
-use rustygod_core::draft as domain;
+use saleor_rustify_core::draft as domain;
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, ConnectionTrait, DatabaseConnection, EntityTrait,
     QueryFilter, QueryOrder, QuerySelect, Set, TransactionTrait,
@@ -125,7 +125,7 @@ async fn insert_line(
     order_id: Uuid,
     currency: &str,
     input: &DraftLineInput,
-    pricing: &std::collections::HashMap<i32, (rustygod_core::money::Money, String)>,
+    pricing: &std::collections::HashMap<i32, (saleor_rustify_core::money::Money, String)>,
     details: &std::collections::HashMap<i32, crate::order_store::VariantDetail>,
 ) -> Result<Uuid> {
     if input.quantity < 1 {

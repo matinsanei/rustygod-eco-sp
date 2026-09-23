@@ -3,21 +3,21 @@
 //! `saleor/order/tests/test_order.py` (creation/numbers) and
 //! `saleor/checkout/tests/test_order_from_checkout.py`.
 //!
-//! Requires the Saleor database (`RUSTYGOD_DATABASE_URL`).
+//! Requires the Saleor database (`RUSTIFY_DATABASE_URL`).
 
 use rust_decimal::Decimal;
-use rustygod_db::{catalog, checkout_store, database_url, order_store};
+use saleor_rustify_db::{catalog, checkout_store, database_url, order_store};
 use sea_orm::DatabaseConnection;
 
 async fn db() -> DatabaseConnection {
-    rustygod_db::connect(&database_url())
+    saleor_rustify_db::connect(&database_url())
         .await
         .expect("saleor postgres must be up (localhost:5434)")
 }
 
 async fn checkout_with_line(
     db: &DatabaseConnection,
-) -> rustygod_core::checkout::Checkout {
+) -> saleor_rustify_core::checkout::Checkout {
     let (ch_id, currency) = catalog::channel_info(db, "default-channel").await.unwrap();
     let products = catalog::list_products(db, "default-channel", None, 10_000)
         .await
@@ -72,7 +72,7 @@ async fn minted_order_lives_in_django_tables() {
     assert_eq!(order.number, header.number.to_string());
 
     // Cleanup (test rows only).
-    use rustygod_db::entities::{order_order, order_orderline};
+    use saleor_rustify_db::entities::{order_order, order_orderline};
     use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
     order_orderline::Entity::delete_many()
         .filter(order_orderline::Column::OrderId.eq(oid))
@@ -94,7 +94,7 @@ async fn order_numbers_come_from_django_sequence() {
 #[tokio::test]
 async fn django_status_strings_round_trip() {
     // "partially fulfilled" has a SPACE in Django — the mapping must hold.
-    use rustygod_core::order::OrderStatus;
+    use saleor_rustify_core::order::OrderStatus;
     assert_eq!(OrderStatus::PartiallyFulfilled.as_str(), "partially fulfilled");
     assert_eq!(
         OrderStatus::from_str("partially fulfilled"),

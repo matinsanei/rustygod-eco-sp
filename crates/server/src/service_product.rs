@@ -1,6 +1,6 @@
-use rustygod_core::product::Product;
-use rustygod_db::{catalog, relations};
-use rustygod_proto::product::{
+use saleor_rustify_core::product::Product;
+use saleor_rustify_db::{catalog, relations};
+use saleor_rustify_proto::product::{
     product_service_server::ProductService, CreateProductRequest, CreateProductResponse,
     GetCategoryRequest, GetCategoryResponse, GetCollectionRequest, GetCollectionResponse,
     GetProductAttributesRequest, GetProductAttributesResponse, GetProductRequest,
@@ -26,8 +26,8 @@ impl ProductServiceImpl {
         Self { store, db }
     }
 
-    fn err(code: &str, message: String) -> rustygod_proto::common::Error {
-        rustygod_proto::common::Error {
+    fn err(code: &str, message: String) -> saleor_rustify_proto::common::Error {
+        saleor_rustify_proto::common::Error {
             code: code.into(),
             message,
             field: String::new(),
@@ -95,7 +95,7 @@ impl ProductService for ProductServiceImpl {
                 Ok(products) => {
                     return Ok(Response::new(ListProductsResponse {
                         products: products.iter().map(Product::to_proto).collect(),
-                        page_info: Some(rustygod_proto::common::PageInfo {
+                        page_info: Some(saleor_rustify_proto::common::PageInfo {
                             has_next_page: false,
                             end_cursor: String::new(),
                         }),
@@ -119,7 +119,7 @@ impl ProductService for ProductServiceImpl {
         products.truncate(first);
         Ok(Response::new(ListProductsResponse {
             products,
-            page_info: Some(rustygod_proto::common::PageInfo {
+            page_info: Some(saleor_rustify_proto::common::PageInfo {
                 has_next_page: false,
                 end_cursor: String::new(),
             }),
@@ -138,7 +138,7 @@ impl ProductService for ProductServiceImpl {
             }));
         }
         let price = match req.price {
-            Some(m) => match rustygod_core::money::Money::try_from(m) {
+            Some(m) => match saleor_rustify_core::money::Money::try_from(m) {
                 Ok(p) => p,
                 Err(e) => {
                     return Ok(Response::new(CreateProductResponse {

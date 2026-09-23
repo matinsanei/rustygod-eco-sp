@@ -1,12 +1,12 @@
 //! Auto-complete contract (E10 final): fully-authorized expired checkouts on
 //! opted-in channels complete into orders; everyone else is untouched.
 
-use rustygod_db::{catalog, checkout_store, complete, database_url};
+use saleor_rustify_db::{catalog, checkout_store, complete, database_url};
 use sea_orm::DatabaseConnection;
 use uuid::Uuid;
 
 async fn db() -> DatabaseConnection {
-    rustygod_db::connect(&database_url())
+    saleor_rustify_db::connect(&database_url())
         .await
         .expect("saleor postgres must be up (localhost:5434)")
 }
@@ -25,7 +25,7 @@ mod fs2 {
             let f = std::fs::OpenOptions::new()
                 .create(true)
                 .write(true)
-                .open("/tmp/rustygod-stock.lock")
+                .open("/tmp/rustify-stock.lock")
                 .expect("lock file");
             f.lock_exclusive().expect("stock lock");
             Self { _f: f }
@@ -35,7 +35,7 @@ mod fs2 {
 
 /// Flip the auto-complete flag on default-channel; returns a restore closure.
 async fn set_flag(db: &DatabaseConnection, on: bool) {
-    use rustygod_db::entities::channel_channel;
+    use saleor_rustify_db::entities::channel_channel;
     use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
     // update_many (never a full-model select: channel rows carry INTERVAL
     // columns SeaORM cannot decode).
@@ -52,7 +52,7 @@ async fn set_flag(db: &DatabaseConnection, on: bool) {
 }
 
 async fn any_address_id(db: &DatabaseConnection) -> i32 {
-    use rustygod_db::entities::account_address;
+    use saleor_rustify_db::entities::account_address;
     use sea_orm::EntityTrait;
     account_address::Entity::find()
         .one(db)
@@ -66,7 +66,7 @@ async fn any_address_id(db: &DatabaseConnection) -> i32 {
 /// auto-complete. Returns the token.
 async fn eligible_checkout(db: &DatabaseConnection, email: &str) -> Uuid {
     use chrono::Utc;
-    use rustygod_db::entities::{checkout_checkout, payment_transactionitem};
+    use saleor_rustify_db::entities::{checkout_checkout, payment_transactionitem};
     use sea_orm::{ActiveModelTrait, EntityTrait, Set};
     let (ch_id, currency) = catalog::channel_info(db, "default-channel").await.unwrap();
     let token = checkout_store::create_checkout_row(db, ch_id, &currency, email)
@@ -138,7 +138,7 @@ async fn eligible_checkout(db: &DatabaseConnection, email: &str) -> Uuid {
 }
 
 async fn checkout_gone(db: &DatabaseConnection, token: Uuid) -> bool {
-    use rustygod_db::entities::checkout_checkout;
+    use saleor_rustify_db::entities::checkout_checkout;
     use sea_orm::EntityTrait;
     checkout_checkout::Entity::find_by_id(token).one(db).await.unwrap().is_none()
 }
@@ -157,7 +157,7 @@ async fn auto_complete_mints_order_and_links_money() {
     assert!(checkout_gone(&db, token).await, "checkout must be consumed");
 
     // Order stamped with the token, FULL statuses carried over.
-    use rustygod_db::entities::order_order;
+    use saleor_rustify_db::entities::order_order;
     use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
     let order = order_order::Entity::find()
         .filter(order_order::Column::CheckoutToken.eq(token.to_string()))
@@ -169,7 +169,7 @@ async fn auto_complete_mints_order_and_links_money() {
     assert_eq!(order.charge_status, "full");
 
     // Money trail follows the order (Django payments.update parity).
-    use rustygod_db::entities::payment_transactionitem;
+    use saleor_rustify_db::entities::payment_transactionitem;
     let item = payment_transactionitem::Entity::find()
         .filter(payment_transactionitem::Column::PspReference.eq(format!("auto-{token}")))
         .one(&db)
@@ -197,7 +197,7 @@ async fn auto_complete_skips_opted_out_channel() {
     assert!(!checkout_gone(&db, token).await, "checkout must survive");
 
     checkout_store::delete_checkout_row(&db, token).await.unwrap();
-    use rustygod_db::entities::payment_transactionitem;
+    use saleor_rustify_db::entities::payment_transactionitem;
     use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
     payment_transactionitem::Entity::delete_many()
         .filter(payment_transactionitem::Column::CheckoutId.eq(token))
@@ -213,7 +213,7 @@ async fn auto_complete_skips_partially_authorized() {
     set_flag(&db, true).await;
     let token = eligible_checkout(&db, "partial@example.com").await;
     // Downgrade to partial: selection requires FULL.
-    use rustygod_db::entities::checkout_checkout;
+    use saleor_rustify_db::entities::checkout_checkout;
     use sea_orm::{ActiveModelTrait, EntityTrait, Set};
     let m = checkout_checkout::Entity::find_by_id(token).one(&db).await.unwrap().unwrap();
     let mut am: checkout_checkout::ActiveModel = m.into();
@@ -225,7 +225,7 @@ async fn auto_complete_skips_partially_authorized() {
     assert!(!checkout_gone(&db, token).await, "checkout must survive");
 
     checkout_store::delete_checkout_row(&db, token).await.unwrap();
-    use rustygod_db::entities::payment_transactionitem;
+    use saleor_rustify_db::entities::payment_transactionitem;
     use sea_orm::{ColumnTrait, QueryFilter};
     payment_transactionitem::Entity::delete_many()
         .filter(payment_transactionitem::Column::CheckoutId.eq(token))
@@ -245,7 +245,7 @@ async fn manual_complete_links_payments_to_order() {
     let out = complete::complete_checkout(&db, token).await.unwrap();
     assert!(!out.replayed);
 
-    use rustygod_db::entities::payment_transactionitem;
+    use saleor_rustify_db::entities::payment_transactionitem;
     use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
     let item = payment_transactionitem::Entity::find()
         .filter(payment_transactionitem::Column::PspReference.eq(format!("auto-{token}")))

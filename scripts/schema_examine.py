@@ -23,6 +23,8 @@ import sys
 import glob
 import os
 
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+
 SALEOR_SCHEMA = os.environ.get(
     "SALEOR_SCHEMA",
     # The dashboard's own vendored schema (schema-main.graphql, main-schema
@@ -33,7 +35,7 @@ SALEOR_SCHEMA = os.environ.get(
     "/home/matin/Desktop/dev/saleor/dashboard/schema-main.graphql",
 )
 DASH_SRC = "/home/matin/Desktop/dev/saleor/dashboard/src"
-OUR_GQL = "/home/matin/Desktop/dev/rustygod-saleor/crates/graphql/src"
+OUR_GQL = os.path.join(SCRIPT_DIR, "..", "crates", "graphql", "src")
 
 
 def split_top_level(body):

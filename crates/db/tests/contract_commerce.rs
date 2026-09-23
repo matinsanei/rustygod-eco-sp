@@ -1,9 +1,9 @@
 //! Commerce contract tests: discount, shipping, giftcard, menu, page,
 //! account, channel, tax, warehouse reads must match Django's tables.
 //!
-//! Requires the Saleor database (`RUSTYGOD_DATABASE_URL`).
+//! Requires the Saleor database (`RUSTIFY_DATABASE_URL`).
 
-use rustygod_db::{commerce, database_url};
+use saleor_rustify_db::{commerce, database_url};
 use sea_orm::DatabaseConnection;
 
 
@@ -17,14 +17,14 @@ fn commerce_stock_guard() -> CommerceStockGuard {
     let f = std::fs::OpenOptions::new()
         .create(true)
         .write(true)
-        .open("/tmp/rustygod-stock.lock")
+        .open("/tmp/rustify-stock.lock")
         .expect("lock file");
     f.lock_exclusive().expect("stock lock");
     CommerceStockGuard { _f: f }
 }
 
 async fn db() -> DatabaseConnection {
-    rustygod_db::connect(&database_url())
+    saleor_rustify_db::connect(&database_url())
         .await
         .expect("saleor postgres must be up (localhost:5434)")
 }
@@ -43,7 +43,7 @@ async fn channels_match_django() {
 
 #[tokio::test]
 async fn promotions_and_vouchers_match() {
-    use rustygod_db::entities::discount_vouchercode;
+    use saleor_rustify_db::entities::discount_vouchercode;
     use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
 
     let db = db().await;
@@ -76,7 +76,7 @@ async fn promotions_and_vouchers_match() {
 
 #[tokio::test]
 async fn shipping_methods_match_listings() {
-    use rustygod_db::entities::shipping_shippingmethodchannellisting;
+    use saleor_rustify_db::entities::shipping_shippingmethodchannellisting;
     use sea_orm::{ColumnTrait, EntityTrait, PaginatorTrait, QueryFilter};
 
     let db = db().await;
@@ -96,7 +96,7 @@ async fn shipping_methods_match_listings() {
 
 #[tokio::test]
 async fn giftcard_lookup_matches_row() {
-    use rustygod_db::entities::giftcard_giftcard;
+    use saleor_rustify_db::entities::giftcard_giftcard;
     use sea_orm::EntityTrait;
 
     let db = db().await;
@@ -111,7 +111,7 @@ async fn giftcard_lookup_matches_row() {
 
 #[tokio::test]
 async fn menus_and_pages_match() {
-    use rustygod_db::entities::{menu_menu, page_page};
+    use saleor_rustify_db::entities::{menu_menu, page_page};
     use sea_orm::{EntityTrait, PaginatorTrait};
 
     let db = db().await;
@@ -132,7 +132,7 @@ async fn menus_and_pages_match() {
 
 #[tokio::test]
 async fn customer_lookup_is_safe_and_address_roundtrips() {
-    use rustygod_db::entities::account_user;
+    use saleor_rustify_db::entities::account_user;
     use sea_orm::{EntityTrait, QuerySelect};
 
     let db = db().await;
@@ -166,14 +166,14 @@ async fn customer_lookup_is_safe_and_address_roundtrips() {
     .unwrap();
     assert!(id > 0);
     // Cleanup test row.
-    use rustygod_db::entities::account_address;
+    use saleor_rustify_db::entities::account_address;
     account_address::Entity::delete_by_id(id).exec(&db).await.unwrap();
 }
 
 #[tokio::test]
 async fn warehouses_stocks_and_reservation() {
     let _stock = commerce_stock_guard();
-    use rustygod_db::entities::warehouse_stock;
+    use saleor_rustify_db::entities::warehouse_stock;
     use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
 
     let db = db().await;
@@ -192,7 +192,7 @@ async fn warehouses_stocks_and_reservation() {
     assert!(!stocks.is_empty());
 
     // Reservations FK to checkout_checkoutline: use a real line (like Django).
-    use rustygod_db::{catalog, checkout_store};
+    use saleor_rustify_db::{catalog, checkout_store};
     let (ch_id, currency) = catalog::channel_info(&db, "default-channel").await.unwrap();
     let products = catalog::list_products(&db, "default-channel", None, 10)
         .await
@@ -238,8 +238,8 @@ async fn warehouses_stocks_and_reservation() {
 async fn reserve_is_idempotent_per_line() {
     let _stock = commerce_stock_guard();
     // Retrying a reservation replaces instead of double-booking.
-    use rustygod_db::{catalog, checkout_store};
-    use rustygod_db::entities::warehouse_reservation;
+    use saleor_rustify_db::{catalog, checkout_store};
+    use saleor_rustify_db::entities::warehouse_reservation;
     use sea_orm::{ColumnTrait, EntityTrait, PaginatorTrait, QueryFilter};
 
     let db = db().await;
@@ -276,7 +276,7 @@ async fn reserve_is_idempotent_per_line() {
 
 #[tokio::test]
 async fn tax_classes_match() {
-    use rustygod_db::entities::tax_taxclass;
+    use saleor_rustify_db::entities::tax_taxclass;
     use sea_orm::{EntityTrait, PaginatorTrait};
 
     let db = db().await;

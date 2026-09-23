@@ -1,10 +1,10 @@
 [package]
-name = "rustygod-psp"
+name = "saleor-rustify-psp"
 version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-rustygod-core = { path = "../core" }
+saleor-rustify-core = { path = "../core" }
 reqwest = { workspace = true }
 serde_json = { workspace = true }
 serde = { workspace = true }

@@ -5,21 +5,21 @@
 //! - `saleor/checkout/tests/test_base_calculations.py` (unit price == variant
 //!   channel price)
 //!
-//! Requires the Saleor database: `RUSTYGOD_DATABASE_URL`
+//! Requires the Saleor database: `RUSTIFY_DATABASE_URL`
 //! (default `postgres://saleor:saleor@localhost:5434/saleor`).
 
-use rustygod_db::{catalog, database_url};
+use saleor_rustify_db::{catalog, database_url};
 use sea_orm::DatabaseConnection;
 
 async fn db() -> DatabaseConnection {
-    rustygod_db::connect(&database_url())
+    saleor_rustify_db::connect(&database_url())
         .await
         .expect("saleor postgres must be up (localhost:5434)")
 }
 
 #[tokio::test]
 async fn published_count_matches_django_listings() {
-    use rustygod_db::entities::product_productchannellisting;
+    use saleor_rustify_db::entities::product_productchannellisting;
     use sea_orm::{ColumnTrait, EntityTrait, PaginatorTrait, QueryFilter};
 
     let db = db().await;
@@ -31,11 +31,11 @@ async fn published_count_matches_django_listings() {
     // has an INTERVAL column codegen mistypes).
     let ch_id: i32 = {
         use sea_orm::QuerySelect;
-        rustygod_db::entities::channel_channel::Entity::find()
+        saleor_rustify_db::entities::channel_channel::Entity::find()
             .select_only()
-            .column(rustygod_db::entities::channel_channel::Column::Id)
+            .column(saleor_rustify_db::entities::channel_channel::Column::Id)
             .filter(
-                rustygod_db::entities::channel_channel::Column::Slug.eq("default-channel"),
+                saleor_rustify_db::entities::channel_channel::Column::Slug.eq("default-channel"),
             )
             .into_tuple::<i32>()
             .one(&db)
@@ -61,7 +61,7 @@ async fn published_count_matches_django_listings() {
 
 #[tokio::test]
 async fn variant_prices_match_channel_listings() {
-    use rustygod_db::entities::product_productvariantchannellisting;
+    use saleor_rustify_db::entities::product_productvariantchannellisting;
     use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
 
     let db = db().await;
@@ -97,7 +97,7 @@ async fn variant_prices_match_channel_listings() {
 
 #[tokio::test]
 async fn unpublished_products_are_hidden() {
-    use rustygod_db::entities::{product_product, product_productchannellisting};
+    use saleor_rustify_db::entities::{product_product, product_productchannellisting};
     use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
 
     let db = db().await;

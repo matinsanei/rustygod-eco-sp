@@ -5,13 +5,13 @@
 //! Covers audit R3, E9.
 
 use rust_decimal::Decimal;
-use rustygod_core::psp::{ChallengePsp, PspAction, PspOutcome, ScriptedPsp};
-use rustygod_db::{catalog, checkout_store, database_url, payments};
+use saleor_rustify_core::psp::{ChallengePsp, PspAction, PspOutcome, ScriptedPsp};
+use saleor_rustify_db::{catalog, checkout_store, database_url, payments};
 use sea_orm::DatabaseConnection;
 use uuid::Uuid;
 
 async fn db() -> DatabaseConnection {
-    rustygod_db::connect(&database_url())
+    saleor_rustify_db::connect(&database_url())
         .await
         .expect("saleor postgres must be up (localhost:5434)")
 }
@@ -38,7 +38,7 @@ async fn bare_txn(db: &DatabaseConnection, tag: &str) -> payments::TxnView {
 }
 
 async fn event_count(db: &DatabaseConnection, txn_id: i32) -> usize {
-    use rustygod_db::entities::payment_transactionevent;
+    use saleor_rustify_db::entities::payment_transactionevent;
     use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
     payment_transactionevent::Entity::find()
         .filter(payment_transactionevent::Column::TransactionId.eq(txn_id))
@@ -49,7 +49,7 @@ async fn event_count(db: &DatabaseConnection, txn_id: i32) -> usize {
 }
 
 async fn failures(db: &DatabaseConnection, txn_id: i32) -> Vec<String> {
-    use rustygod_db::entities::payment_transactionevent;
+    use saleor_rustify_db::entities::payment_transactionevent;
     use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
     payment_transactionevent::Entity::find()
         .filter(payment_transactionevent::Column::TransactionId.eq(txn_id))
@@ -64,7 +64,7 @@ async fn failures(db: &DatabaseConnection, txn_id: i32) -> Vec<String> {
 
 /// include_in_calculations flag of the first event of a type (None if absent).
 async fn include_flag(db: &DatabaseConnection, txn_id: i32, t: &str) -> Option<bool> {
-    use rustygod_db::entities::payment_transactionevent;
+    use saleor_rustify_db::entities::payment_transactionevent;
     use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
     payment_transactionevent::Entity::find()
         .filter(payment_transactionevent::Column::TransactionId.eq(txn_id))
@@ -76,7 +76,7 @@ async fn include_flag(db: &DatabaseConnection, txn_id: i32, t: &str) -> Option<b
 }
 
 async fn cleanup(db: &DatabaseConnection, txn_id: i32) {
-    use rustygod_db::entities::{payment_transactionevent, payment_transactionitem};
+    use saleor_rustify_db::entities::{payment_transactionevent, payment_transactionitem};
     use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
     payment_transactionevent::Entity::delete_many()
         .filter(payment_transactionevent::Column::TransactionId.eq(txn_id))
@@ -169,7 +169,7 @@ async fn async_authorize_then_callback_settles() {
     assert_eq!(out.txn.authorize_pending, dec("80.00"));
     assert_eq!(out.txn.authorized, dec("0"));
     // PSP answers late: find its reference from the request event.
-    use rustygod_db::entities::payment_transactionevent;
+    use saleor_rustify_db::entities::payment_transactionevent;
     use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
     let req = payment_transactionevent::Entity::find()
         .filter(payment_transactionevent::Column::TransactionId.eq(t.id))
@@ -197,7 +197,7 @@ async fn callback_replay_and_terminal_conflict() {
     payments::execute_via(&db, t.id, PspAction::Authorize, dec("10.00"), "cb-1", &sim, None, None)
         .await
         .unwrap();
-    use rustygod_db::entities::payment_transactionevent;
+    use saleor_rustify_db::entities::payment_transactionevent;
     use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
     let req = payment_transactionevent::Entity::find()
         .filter(payment_transactionevent::Column::TransactionId.eq(t.id))
@@ -241,7 +241,7 @@ async fn challenge_flow_3ds_settles_once() {
     let url = out.redirect_url.unwrap();
     assert!(url.starts_with("https://3ds.test/3ds/challenge?"), "{url}");
     // The challenge record carries the landing URL (Django external_url).
-    use rustygod_db::entities::payment_transactionevent;
+    use saleor_rustify_db::entities::payment_transactionevent;
     use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
     let chal = payment_transactionevent::Entity::find()
         .filter(payment_transactionevent::Column::TransactionId.eq(t.id))
@@ -355,7 +355,7 @@ async fn r3_second_transaction_blocked_while_inflight() {
         .unwrap_err();
     assert!(err.to_string().contains("ALREADY_IN_PROGRESS"), "{err}");
     // After the callback settles, a new transaction is fine (retry path).
-    use rustygod_db::entities::payment_transactionevent;
+    use saleor_rustify_db::entities::payment_transactionevent;
     use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
     let req = payment_transactionevent::Entity::find()
         .filter(payment_transactionevent::Column::TransactionId.eq(t1.id))

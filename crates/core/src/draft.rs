@@ -1,7 +1,7 @@
 //! Draft-order domain logic, mirroring
 //! `saleor/graphql/order/mutations/draft_order_{create,complete}.py`.
 //!
-//! Pure functions only — persistence lives in `rustygod_db::drafts`.
+//! Pure functions only — persistence lives in `saleor_rustify_db::drafts`.
 
 use rust_decimal::Decimal;
 

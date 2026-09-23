@@ -12,7 +12,7 @@
 
 use chrono::{NaiveDate, Utc};
 use rust_decimal::Decimal;
-use rustygod_core::giftcard as domain;
+use saleor_rustify_core::giftcard as domain;
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, ConnectionTrait, DatabaseConnection, EntityTrait,
     QueryFilter, QueryOrder, QuerySelect, Set, sea_query::LockType,

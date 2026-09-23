@@ -1,7 +1,7 @@
 //! Plugin engine contract: the hand-written WAT reference plugin runs
 //! the raw extism ABI end to end, and capability gating holds.
 
-use rustygod_plugins::{call, PluginManifest, PluginPackage};
+use saleor_rustify_plugins::{call, PluginManifest, PluginPackage};
 use std::collections::HashMap;
 
 fn tax_pkg(caps: &[&str]) -> PluginPackage {
@@ -137,7 +137,7 @@ fn events_capability_gates_host_access() {
 
 #[test]
 fn min_order_validator_passes_and_rejects() {
-    let pkg = rustygod_plugins::reference_validator_plugin().unwrap();
+    let pkg = saleor_rustify_plugins::reference_validator_plugin().unwrap();
     let (out, _) = call(
         &pkg,
         "checkout.validate",
@@ -159,7 +159,7 @@ fn min_order_validator_passes_and_rejects() {
 
 #[test]
 fn order_notifier_emits_slack_message() {
-    let pkg = rustygod_plugins::reference_notifier_plugin().unwrap();
+    let pkg = saleor_rustify_plugins::reference_notifier_plugin().unwrap();
     let (out, events) = call(
         &pkg,
         "order.paid",

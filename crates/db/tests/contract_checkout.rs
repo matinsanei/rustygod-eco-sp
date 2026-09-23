@@ -3,14 +3,14 @@
 //! Mirrors `saleor/checkout/tests/test_checkout.py` (creation/lines) and
 //! `test_base_calculations.py` (price_override precedence).
 //!
-//! Requires the Saleor database (`RUSTYGOD_DATABASE_URL`).
+//! Requires the Saleor database (`RUSTIFY_DATABASE_URL`).
 
 use rust_decimal::Decimal;
-use rustygod_db::{catalog, checkout_store, database_url};
+use saleor_rustify_db::{catalog, checkout_store, database_url};
 use sea_orm::DatabaseConnection;
 
 async fn db() -> DatabaseConnection {
-    rustygod_db::connect(&database_url())
+    saleor_rustify_db::connect(&database_url())
         .await
         .expect("saleor postgres must be up (localhost:5434)")
 }
@@ -154,7 +154,7 @@ async fn delete_removes_checkout_and_lines() {
 async fn same_variant_merges_into_one_row() {
     // Django get_line semantics: adding the same variant twice bumps
     // quantity on ONE row instead of duplicating lines.
-    use rustygod_db::checkout_store::NewLine;
+    use saleor_rustify_db::checkout_store::NewLine;
 
     let db = db().await;
     let (ch_id, currency) = catalog::channel_info(&db, "default-channel").await.unwrap();
@@ -183,7 +183,7 @@ async fn same_variant_merges_into_one_row() {
 
 #[tokio::test]
 async fn denormalized_totals_refresh_for_django_readers() {
-    use rustygod_db::checkout_store::NewLine;
+    use saleor_rustify_db::checkout_store::NewLine;
 
     let db = db().await;
     let (ch_id, currency) = catalog::channel_info(&db, "default-channel").await.unwrap();

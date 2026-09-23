@@ -3,19 +3,19 @@
 //! billing address), pending → success → sent lifecycle, deletion flow,
 //! and the event rows.
 
-use rustygod_db::{database_url, invoices};
+use saleor_rustify_db::{database_url, invoices};
 use sea_orm::DatabaseConnection;
 use uuid::Uuid;
 
 async fn db() -> DatabaseConnection {
-    rustygod_db::connect(&database_url())
+    saleor_rustify_db::connect(&database_url())
         .await
         .expect("saleor postgres must be up (localhost:5434)")
 }
 
 /// A Django order that can legally take an invoice: billed, non-draft.
 async fn billable_order(db: &DatabaseConnection) -> Uuid {
-    use rustygod_db::entities::order_order;
+    use saleor_rustify_db::entities::order_order;
     use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QuerySelect};
     order_order::Entity::find()
         .select_only()
@@ -70,7 +70,7 @@ async fn request_fulfill_send_lifecycle() {
 #[tokio::test]
 async fn request_rejects_draft_and_unbilled_orders() {
     let db = db().await;
-    use rustygod_db::entities::order_order;
+    use saleor_rustify_db::entities::order_order;
     use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QuerySelect};
 
     // Draft order → INVALID_STATUS.

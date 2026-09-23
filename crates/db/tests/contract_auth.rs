@@ -5,8 +5,8 @@
 //! Keys pass explicitly (no env races between parallel tests); the server
 //! layer reads the shared `RSA_PRIVATE_KEY` like Django.
 
-use rustygod_core::auth::{self, PasswordCheck};
-use rustygod_db::{auth as db_auth, database_url};
+use saleor_rustify_core::auth::{self, PasswordCheck};
+use saleor_rustify_db::{auth as db_auth, database_url};
 use sea_orm::DatabaseConnection;
 
 fn test_key() -> String {
@@ -18,7 +18,7 @@ fn test_key() -> String {
 }
 
 async fn db() -> DatabaseConnection {
-    rustygod_db::connect(&database_url())
+    saleor_rustify_db::connect(&database_url())
         .await
         .expect("saleor postgres must be up (localhost:5434)")
 }
@@ -83,7 +83,7 @@ async fn revocation_on_key_rotation() {
 
     // Restore (test hygiene on shared data).
     {
-        use rustygod_db::entities::account_user;
+        use saleor_rustify_db::entities::account_user;
         use sea_orm::{ActiveModelTrait, EntityTrait, Set};
         let row = account_user::Entity::find_by_id(user.id).one(&db).await.unwrap().unwrap();
         let mut am: account_user::ActiveModel = row.into();

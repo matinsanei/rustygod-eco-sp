@@ -1,4 +1,4 @@
-use rustygod_proto::{
+use saleor_rustify_proto::{
     checkout::{
         checkout_service_client::CheckoutServiceClient, AddLinesRequest, CheckoutLine,
         CompleteCheckoutRequest, CreateCheckoutRequest,

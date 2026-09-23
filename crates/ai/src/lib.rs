@@ -20,7 +20,7 @@ pub enum AiError {
     #[error("database error: {0}")]
     Db(#[from] sea_orm::DbErr),
     #[error("store error: {0}")]
-    Store(#[from] rustygod_db::DbError),
+    Store(#[from] saleor_rustify_db::DbError),
     #[error("ai error: {0}")]
     Other(String),
 }

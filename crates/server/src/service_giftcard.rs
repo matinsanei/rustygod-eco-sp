@@ -1,11 +1,11 @@
 //! GiftCardService: issue/attach/redeem over Django's `giftcard_*` tables.
 
 use rust_decimal::Decimal;
-use rustygod_db::{
+use saleor_rustify_db::{
     entities::giftcard_giftcard,
     giftcards::{self, IssueInput},
 };
-use rustygod_proto::giftcard::{
+use saleor_rustify_proto::giftcard::{
     gift_card_service_server::GiftCardService, BalanceMutationRequest, BalanceMutationResponse,
     CheckoutBalanceRequest, CheckoutBalanceResponse, CheckoutGiftCardRequest,
     CheckoutGiftCardResponse, GetGiftCardRequest, GetGiftCardResponse, GiftCardInfo,
@@ -31,8 +31,8 @@ impl GiftCardServiceImpl {
             .ok_or_else(|| Status::unavailable("postgres unavailable"))
     }
 
-    fn err(code: &str, message: String) -> rustygod_proto::common::Error {
-        rustygod_proto::common::Error {
+    fn err(code: &str, message: String) -> saleor_rustify_proto::common::Error {
+        saleor_rustify_proto::common::Error {
             code: code.into(),
             message,
             field: String::new(),
@@ -62,8 +62,8 @@ impl GiftCardServiceImpl {
     }
 }
 
-fn db_err(e: rustygod_db::DbError) -> rustygod_proto::common::Error {
-    use rustygod_db::DbError as E;
+fn db_err(e: saleor_rustify_db::DbError) -> saleor_rustify_proto::common::Error {
+    use saleor_rustify_db::DbError as E;
     let code = match e {
         E::GiftCardNotFound(_) => "NOT_FOUND",
         E::GiftCardNotApplicable(_) => "NOT_APPLICABLE",
@@ -145,7 +145,7 @@ impl GiftCardService for GiftCardServiceImpl {
         let r = req.into_inner();
         let token = Self::token(&r.checkout_id)?;
         // Currency comes from the checkout row itself.
-        let currency = rustygod_db::checkout_store::load_checkout(db, token)
+        let currency = saleor_rustify_db::checkout_store::load_checkout(db, token)
             .await
             .map_err(|e| Status::internal(e.to_string()))?
             .map(|(co, _)| co.currency)
@@ -187,7 +187,7 @@ impl GiftCardService for GiftCardServiceImpl {
     ) -> Result<Response<CheckoutBalanceResponse>, Status> {
         let db = self.db()?;
         let token = Self::token(&req.into_inner().checkout_id)?;
-        let currency = rustygod_db::checkout_store::load_checkout(db, token)
+        let currency = saleor_rustify_db::checkout_store::load_checkout(db, token)
             .await
             .map_err(|e| Status::internal(e.to_string()))?
             .map(|(co, _)| co.currency)

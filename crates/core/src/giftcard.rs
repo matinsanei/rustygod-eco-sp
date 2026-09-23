@@ -1,6 +1,6 @@
 //! Gift-card domain logic, mirroring `saleor/giftcard/`.
 //!
-//! Pure functions only — persistence lives in `rustygod_db::giftcards`.
+//! Pure functions only — persistence lives in `saleor_rustify_db::giftcards`.
 //! Money stays `Decimal`-exact; the wire format (string) is a server concern.
 
 use chrono::NaiveDate;

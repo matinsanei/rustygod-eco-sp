@@ -1,4 +1,4 @@
-use rustygod_proto::{
+use saleor_rustify_proto::{
     ai::{
         chat_agent_server::ChatAgentServer, recommender_server::RecommenderServer,
         semantic_search_server::SemanticSearchServer,
@@ -22,7 +22,7 @@ use rustygod_proto::{
     webhook::webhook_service_server::WebhookServiceServer,
     product::product_service_server::ProductServiceServer,
 };
-use rustygod_server::{
+use saleor_rustify_server::{
     service_ai::{ChatAgentImpl, RecommenderImpl, SemanticSearchImpl},
     service_auth::AuthServiceImpl,
     service_checkout::CheckoutServiceImpl,
@@ -51,39 +51,39 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Runtime modes mirroring Saleor's processes (uvicorn / celery worker /
     // celery beat) plus Saleor's own Django management. Default `api`
     // preserves the historical no-arg behavior.
-    match rustygod_server::modes::Mode::parse() {
-        (rustygod_server::modes::Mode::Worker, _) => {
-            let db = rustygod_server::modes::require_db().await?;
-            return rustygod_server::modes::run_worker(db).await;
+    match saleor_rustify_server::modes::Mode::parse() {
+        (saleor_rustify_server::modes::Mode::Worker, _) => {
+            let db = saleor_rustify_server::modes::require_db().await?;
+            return saleor_rustify_server::modes::run_worker(db).await;
         }
-        (rustygod_server::modes::Mode::Beat, _) => {
-            let db = rustygod_server::modes::require_db().await?;
-            return rustygod_server::modes::run_beat(db).await;
+        (saleor_rustify_server::modes::Mode::Beat, _) => {
+            let db = saleor_rustify_server::modes::require_db().await?;
+            return saleor_rustify_server::modes::run_beat(db).await;
         }
-        (rustygod_server::modes::Mode::Check, _) => {
-            let db = rustygod_server::modes::require_db().await?;
-            return rustygod_server::modes::run_check(db).await;
+        (saleor_rustify_server::modes::Mode::Check, _) => {
+            let db = saleor_rustify_server::modes::require_db().await?;
+            return saleor_rustify_server::modes::run_check(db).await;
         }
-        (rustygod_server::modes::Mode::Manage(cmd), extra) => {
-            use rustygod_server::modes::ManageCmd;
+        (saleor_rustify_server::modes::Mode::Manage(cmd), extra) => {
+            use saleor_rustify_server::modes::ManageCmd;
             return match cmd {
-                ManageCmd::Migrate => rustygod_server::modes::run_migrate(&extra).await,
-                ManageCmd::Seed => rustygod_server::modes::run_seed(&extra).await,
+                ManageCmd::Migrate => saleor_rustify_server::modes::run_migrate(&extra).await,
+                ManageCmd::Seed => saleor_rustify_server::modes::run_seed(&extra).await,
                 ManageCmd::CreateSuperuser => {
-                    rustygod_server::modes::run_createsuperuser(&extra).await
+                    saleor_rustify_server::modes::run_createsuperuser(&extra).await
                 }
             };
         }
-        (rustygod_server::modes::Mode::Api, _) => {}
+        (saleor_rustify_server::modes::Mode::Api, _) => {}
     }
 
-    let addr = std::env::var("RUSTYGOD_ADDR")
+    let addr = std::env::var("RUSTIFY_ADDR")
         .unwrap_or_else(|_| "127.0.0.1:50051".to_string())
         .parse()?;
 
-    // Zero-friction mode: same PostgreSQL Django uses. Unset RUSTYGOD_DATABASE_URL
+    // Zero-friction mode: same PostgreSQL Django uses. Unset RUSTIFY_DATABASE_URL
     // for the offline in-memory demo.
-    let db = match rustygod_db::connect(&rustygod_db::database_url()).await {
+    let db = match saleor_rustify_db::connect(&saleor_rustify_db::database_url()).await {
         Ok(pool) => {
             tracing::info!("connected to Saleor PostgreSQL");
             Some(pool)
@@ -111,12 +111,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Background sweeper (reservations expiry + webhook outbox sender).
     if let Some(pool) = db.clone() {
-        rustygod_server::sweeper::spawn(pool);
+        saleor_rustify_server::sweeper::spawn(pool);
     }
 
     // Prometheus scrape endpoint (Phase 2 observability). Serves
     // grpc_requests_total + grpc_request_duration_seconds.
-    let metrics_addr: std::net::SocketAddr = std::env::var("RUSTYGOD_METRICS_ADDR")
+    let metrics_addr: std::net::SocketAddr = std::env::var("RUSTIFY_METRICS_ADDR")
         .unwrap_or_else(|_| "127.0.0.1:9000".to_string())
         .parse()?;
     metrics_exporter_prometheus::PrometheusBuilder::new()
@@ -128,16 +128,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // GraphQL BFF (enterprise): same Postgres + same domain logic, thin
     // translation for the existing Dashboard (Apollo). Saleor's
     // `API_URL=http://localhost:8000/graphql/` points here.
-    let gql_addr: std::net::SocketAddr = std::env::var("RUSTYGOD_GRAPHQL_ADDR")
+    let gql_addr: std::net::SocketAddr = std::env::var("RUSTIFY_GRAPHQL_ADDR")
         .unwrap_or_else(|_| "127.0.0.1:8000".to_string())
         .parse()?;
-    let gql_schema = rustygod_graphql::build_schema(db.clone());
+    let gql_schema = saleor_rustify_graphql::build_schema(db.clone());
     let gql_app = {
         use axum::{routing::get, Router, Extension, Json};
         use async_graphql::http::GraphiQLSource;
         use tower_http::cors::{AllowHeaders, AllowMethods, AllowOrigin, CorsLayer};
         async fn handler(
-            Extension(schema): Extension<rustygod_graphql::AppSchema>,
+            Extension(schema): Extension<saleor_rustify_graphql::AppSchema>,
             headers: axum::http::HeaderMap,
             Json(mut req): Json<async_graphql::Request>,
         ) -> Json<async_graphql::Response> {
@@ -157,7 +157,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     .and_then(|s| s.strip_prefix("Bearer ").or_else(|| s.strip_prefix("bearer ")))
                     .map(|s| s.to_string()))
             {
-                req = req.data(rustygod_graphql::context::Bearer(bearer));
+                req = req.data(saleor_rustify_graphql::context::Bearer(bearer));
             }
             Json({
                 let resp = schema.execute(req).await;
@@ -202,7 +202,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     tonic::transport::Server::builder()
         .layer(tower_http::trace::TraceLayer::new_for_grpc())
-        .layer(rustygod_server::telemetry::MetricsLayer::default())
+        .layer(saleor_rustify_server::telemetry::MetricsLayer::default())
         .add_service(ProductServiceServer::new(ProductServiceImpl::new(
             store.clone(),
             db.clone(),

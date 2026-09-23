@@ -4,7 +4,7 @@
 //! `postgres:15-alpine` ships no `vector` extension), so this module
 //! deliberately avoids any extension dependency: embeddings live in a plain
 //! cosine scoring happens in Rust over the full product set
-//! (`rustygod_ai::traits::cosine` — the same function the in-memory store
+//! (`saleor_rustify_ai::traits::cosine` — the same function the in-memory store
 //! uses). The catalog is hundreds of rows; a full scan is microseconds.
 //! When pgvector (or Qdrant) lands, only `load_all`/`cosine_sql` change —
 //! the table shape (`product_id`, `embedding`, `dim`, `source`, `updated_at`)

@@ -8,7 +8,7 @@
 //! - money math is decimal, never float.
 
 use rust_decimal::Decimal;
-use rustygod_core::{checkout::Checkout, money::Money};
+use saleor_rustify_core::{checkout::Checkout, money::Money};
 
 fn usd(amount: &str) -> Money {
     Money::new(amount.parse::<Decimal>().unwrap(), "USD")

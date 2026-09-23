@@ -437,7 +437,7 @@ impl TranslationQuery {
     ) -> Result<Option<gen::TranslatableItem>> {
         let g = ctx.data::<GqlContext>()?;
         let db = g.db()?;
-        let Some(eid) = rustygod_db::catalog::parse_gid(&id.0) else { return Ok(None) };
+        let Some(eid) = saleor_rustify_db::catalog::parse_gid(&id.0) else { return Ok(None) };
         Ok(content_for(db, &kind, eid).await)
     }
 }
@@ -532,7 +532,7 @@ async fn upsert_tr(
 }
 
 fn gid_of(id: &ID) -> Option<i32> {
-    rustygod_db::catalog::parse_gid(&id.0)
+    saleor_rustify_db::catalog::parse_gid(&id.0)
 }
 
 #[Object]

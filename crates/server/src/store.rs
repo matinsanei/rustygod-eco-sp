@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, MutexGuard};
 
-use rustygod_core::{checkout::Checkout, money::Money, order::Order, product::Product};
+use saleor_rustify_core::{checkout::Checkout, money::Money, order::Order, product::Product};
 use tonic::Status;
 
 /// Shared in-memory store. Tonight's stand-in for Postgres —
@@ -51,7 +51,7 @@ pub fn seed(store: &SharedStore) {
         category_id: Some("cat_apparel".into()),
         is_published: true,
         default_price: usd(rust_decimal::Decimal::new(2999, 2)),
-        variants: vec![rustygod_core::product::ProductVariant {
+        variants: vec![saleor_rustify_core::product::ProductVariant {
             id: "var_1".into(),
             product_id: "prod_1".into(),
             name: "M / Black".into(),
@@ -69,7 +69,7 @@ pub fn seed(store: &SharedStore) {
         category_id: Some("cat_merch".into()),
         is_published: true,
         default_price: usd(rust_decimal::Decimal::new(1450, 2)),
-        variants: vec![rustygod_core::product::ProductVariant {
+        variants: vec![saleor_rustify_core::product::ProductVariant {
             id: "var_2".into(),
             product_id: "prod_2".into(),
             name: "Standard".into(),

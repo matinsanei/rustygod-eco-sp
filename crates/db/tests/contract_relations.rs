@@ -3,20 +3,20 @@
 //! `saleor/product/tests/test_category.py`,
 //! `test_collections_availability.py` and attribute-assignment tests.
 //!
-//! Requires the Saleor database (`RUSTYGOD_DATABASE_URL`).
+//! Requires the Saleor database (`RUSTIFY_DATABASE_URL`).
 
-use rustygod_db::{database_url, relations};
+use saleor_rustify_db::{database_url, relations};
 use sea_orm::DatabaseConnection;
 
 async fn db() -> DatabaseConnection {
-    rustygod_db::connect(&database_url())
+    saleor_rustify_db::connect(&database_url())
         .await
         .expect("saleor postgres must be up (localhost:5434)")
 }
 
 #[tokio::test]
 async fn category_tree_matches_django() {
-    use rustygod_db::entities::product_category;
+    use saleor_rustify_db::entities::product_category;
     use sea_orm::{EntityTrait, PaginatorTrait};
 
     let db = db().await;
@@ -52,7 +52,7 @@ async fn category_tree_matches_django() {
 
 #[tokio::test]
 async fn category_product_count_matches() {
-    use rustygod_db::entities::product_product;
+    use saleor_rustify_db::entities::product_product;
     use sea_orm::{ColumnTrait, EntityTrait, PaginatorTrait, QueryFilter};
 
     let db = db().await;
@@ -72,7 +72,7 @@ async fn category_product_count_matches() {
 
 #[tokio::test]
 async fn collections_match_django() {
-    use rustygod_db::entities::{product_collection, product_collectionchannellisting};
+    use saleor_rustify_db::entities::{product_collection, product_collectionchannellisting};
     use sea_orm::{ColumnTrait, EntityTrait, PaginatorTrait, QueryFilter};
 
     let db = db().await;
@@ -102,7 +102,7 @@ async fn collections_match_django() {
 
 #[tokio::test]
 async fn product_type_matches_django() {
-    use rustygod_db::entities::{product_product, product_producttype};
+    use saleor_rustify_db::entities::{product_product, product_producttype};
     use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QuerySelect};
 
     let db = db().await;
@@ -139,7 +139,7 @@ async fn product_type_matches_django() {
 
 #[tokio::test]
 async fn attributes_match_assignments() {
-    use rustygod_db::entities::attribute_assignedproductattributevalue;
+    use saleor_rustify_db::entities::attribute_assignedproductattributevalue;
     use sea_orm::EntityTrait;
 
     let db = db().await;
@@ -163,7 +163,7 @@ async fn attributes_match_assignments() {
 
 #[tokio::test]
 async fn media_matches_django_rows() {
-    use rustygod_db::entities::product_productmedia;
+    use saleor_rustify_db::entities::product_productmedia;
     use sea_orm::{ColumnTrait, EntityTrait, PaginatorTrait, QueryFilter};
 
     let db = db().await;

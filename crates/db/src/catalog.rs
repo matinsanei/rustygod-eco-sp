@@ -12,7 +12,7 @@
 //! We always project the columns we need.
 
 use rust_decimal::Decimal;
-use rustygod_core::{
+use saleor_rustify_core::{
     money::Money,
     product::{Category, Product, ProductVariant},
 };

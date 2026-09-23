@@ -9,7 +9,7 @@
 //!   decides whether math happens at all and in which direction.
 
 use rust_decimal::Decimal;
-use rustygod_core::tax as domain;
+use saleor_rustify_core::tax as domain;
 use sea_orm::{
     ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter, QuerySelect,
 };

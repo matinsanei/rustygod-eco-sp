@@ -1,10 +1,10 @@
 //! gRPC layer for `rustygod-ai`: SemanticSearch, Recommender, ChatAgent
 //! (server-streaming).
 
-use rustygod_ai::{chat, recommend, search};
-use rustygod_ai::embed::HashingEmbedder;
-use rustygod_db::catalog;
-use rustygod_proto::ai::{
+use saleor_rustify_ai::{chat, recommend, search};
+use saleor_rustify_ai::embed::HashingEmbedder;
+use saleor_rustify_db::catalog;
+use saleor_rustify_proto::ai::{
     chat_agent_server::ChatAgent, recommender_server::Recommender,
     semantic_search_server::SemanticSearch, ChatChunk, ChatRequest, ProductHit,
     RecommendProductsRequest, RecommendProductsResponse, SearchProductsRequest,

@@ -3,11 +3,11 @@
 //! Mirrors `saleor/payment/tests/test_transaction_item.py` flows.
 
 use rust_decimal::Decimal;
-use rustygod_db::{database_url, payments};
+use saleor_rustify_db::{database_url, payments};
 use sea_orm::DatabaseConnection;
 
 async fn db() -> DatabaseConnection {
-    rustygod_db::connect(&database_url())
+    saleor_rustify_db::connect(&database_url())
         .await
         .expect("saleor postgres must be up (localhost:5434)")
 }
@@ -17,7 +17,7 @@ fn dec(s: &str) -> Decimal {
 }
 
 async fn cleanup(db: &DatabaseConnection, id: i32) {
-    use rustygod_db::entities::{payment_transactionevent, payment_transactionitem};
+    use saleor_rustify_db::entities::{payment_transactionevent, payment_transactionitem};
     use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
     payment_transactionevent::Entity::delete_many()
         .filter(payment_transactionevent::Column::TransactionId.eq(id))
@@ -96,7 +96,7 @@ async fn manual_authorize_charge_refund_flow() {
 
 #[tokio::test]
 async fn order_statuses_refresh_from_coverage() {
-    use rustygod_db::{catalog, checkout_store, order_store};
+    use saleor_rustify_db::{catalog, checkout_store, order_store};
 
     let db = db().await;
     // Mint a real order through checkout, then pay it in full.
@@ -152,7 +152,7 @@ async fn order_statuses_refresh_from_coverage() {
     // Re-read statuses with explicit projection (never SELECT * on tsvector tables).
     {
         use sea_orm::{EntityTrait, QuerySelect};
-        use rustygod_db::entities::order_order;
+        use saleor_rustify_db::entities::order_order;
         let (auth, charge): (String, String) = order_order::Entity::find_by_id(oid)
             .select_only()
             .column(order_order::Column::AuthorizeStatus)
@@ -167,7 +167,7 @@ async fn order_statuses_refresh_from_coverage() {
     }
 
     cleanup(&db, t.id).await;
-    use rustygod_db::entities::{order_orderline, order_order as oo};
+    use saleor_rustify_db::entities::{order_orderline, order_order as oo};
     use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
     order_orderline::Entity::delete_many()
         .filter(order_orderline::Column::OrderId.eq(oid))

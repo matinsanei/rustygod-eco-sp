@@ -4,7 +4,7 @@
 //! the "not draft" guards, stock allocation on complete, and event rows.
 
 use rust_decimal::Decimal;
-use rustygod_db::{catalog, database_url, drafts, order_store};
+use saleor_rustify_db::{catalog, database_url, drafts, order_store};
 use sea_orm::DatabaseConnection;
 
 /// Cross-process stock lock: allocations touch shared Django stock rows,
@@ -18,14 +18,14 @@ fn stock_guard() -> StockGuard {
     let f = std::fs::OpenOptions::new()
         .create(true)
         .write(true)
-        .open("/tmp/rustygod-stock.lock")
+        .open("/tmp/rustify-stock.lock")
         .expect("lock file");
     f.lock_exclusive().expect("stock lock");
     StockGuard { _f: f }
 }
 
 async fn db() -> DatabaseConnection {
-    rustygod_db::connect(&database_url())
+    saleor_rustify_db::connect(&database_url())
         .await
         .expect("saleor postgres must be up (localhost:5434)")
 }
@@ -154,7 +154,7 @@ async fn set_quantity_and_remove_line_recalc() {
     assert_eq!(view.total_gross, p1 * Decimal::from(4));
 
     let err = drafts::set_line_quantity(&db, view.id, lines[0].id, 0).await.unwrap_err();
-    assert!(matches!(err, rustygod_db::DbError::Draft(_)));
+    assert!(matches!(err, saleor_rustify_db::DbError::Draft(_)));
 
     drafts::delete_draft(&db, view.id).await.unwrap();
 }
@@ -180,7 +180,7 @@ async fn completed_draft_rejects_edits_and_delete() {
 
     // Completed order still readable; clean up the row directly
     // (allocations, then lines, then events — all reference the order).
-    use rustygod_db::entities::{
+    use saleor_rustify_db::entities::{
         order_order, order_orderevent, order_orderline, warehouse_allocation,
     };
     use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
@@ -208,7 +208,7 @@ async fn complete_allocates_stock_and_writes_event() {
     let sv = stocked_variants(&db).await;
     let (v1, _) = sv[0];
 
-    let free_before: i32 = rustygod_db::commerce::stocks_for_variant(&db, v1)
+    let free_before: i32 = saleor_rustify_db::commerce::stocks_for_variant(&db, v1)
         .await
         .unwrap()
         .iter()
@@ -222,7 +222,7 @@ async fn complete_allocates_stock_and_writes_event() {
     assert!(header.status == "unfulfilled" || header.status == "unconfirmed", "{}", header.status);
 
     // Allocation consumed exactly the ordered quantity (tracked variants).
-    let free_after: i32 = rustygod_db::commerce::stocks_for_variant(&db, v1)
+    let free_after: i32 = saleor_rustify_db::commerce::stocks_for_variant(&db, v1)
         .await
         .unwrap()
         .iter()
@@ -231,7 +231,7 @@ async fn complete_allocates_stock_and_writes_event() {
     assert!(free_before - free_after == 0 || free_before - free_after == 2,
         "before={free_before} after={free_after}");
 
-    use rustygod_db::entities::order_orderevent;
+    use saleor_rustify_db::entities::order_orderevent;
     use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
     let placed = order_orderevent::Entity::find()
         .filter(order_orderevent::Column::OrderId.eq(view.id))
@@ -242,7 +242,7 @@ async fn complete_allocates_stock_and_writes_event() {
     assert!(placed.is_some(), "PLACED_FROM_DRAFT event must exist");
 
     // Cleanup via direct deletes (completed orders are not deletable by design).
-    use rustygod_db::entities::{order_order, order_orderline, warehouse_allocation};
+    use saleor_rustify_db::entities::{order_order, order_orderline, warehouse_allocation};
     let (_, lines) = order_store::get_order_rows(&db, view.id).await.unwrap().unwrap();
     for l in &lines {
         let allocs = warehouse_allocation::Entity::find()
@@ -290,7 +290,7 @@ async fn draft_created_event_exists() {
     let view = drafts::create_draft(&db, "default-channel", "e@example.com", None, vec![line(sv[0].0, 1)], None)
         .await
         .unwrap();
-    use rustygod_db::entities::order_orderevent;
+    use saleor_rustify_db::entities::order_orderevent;
     use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
     let ev = order_orderevent::Entity::find()
         .filter(order_orderevent::Column::OrderId.eq(view.id))

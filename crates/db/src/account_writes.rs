@@ -1205,7 +1205,7 @@ pub async fn issue_token(
             B[rand_index(B.len())] as char
         })
         .collect();
-    let hash = rustygod_core::auth::hash_password(&raw);
+    let hash = saleor_rustify_core::auth::hash_password(&raw);
     db.execute(sea_orm::Statement::from_sql_and_values(
         sea_orm::DatabaseBackend::Postgres,
         "INSERT INTO rustygod_account_token (token_hash, user_id, kind, payload, expires_at) \
@@ -1235,7 +1235,7 @@ pub async fn consume_token(db: &DatabaseConnection, kind: &str, raw: &str) -> Re
     for r in rows {
         let hash: String = r.try_get("", "token_hash")?;
         // PBKDF2 verify per candidate (table stays tiny; TTL prunes it).
-        if matches!(rustygod_core::auth::verify_password(raw, &hash), rustygod_core::auth::PasswordCheck::Ok) {
+        if matches!(saleor_rustify_core::auth::verify_password(raw, &hash), saleor_rustify_core::auth::PasswordCheck::Ok) {
             hit = Some((hash, r.try_get("", "user_id")?, r.try_get("", "payload")?));
             break;
         }
@@ -1364,7 +1364,7 @@ pub async fn set_password(db: &impl ConnectionTrait, user_id: i32, raw: &str) ->
     if raw.len() < 8 {
         return Err(fail("password must be at least 8 characters"));
     }
-    let hash = rustygod_core::auth::hash_password(raw);
+    let hash = saleor_rustify_core::auth::hash_password(raw);
     let Some(u) = account_user::Entity::find_by_id(user_id).one(db).await? else {
         return Err(fail("user not found"));
     };

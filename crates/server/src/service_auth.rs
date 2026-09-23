@@ -2,9 +2,9 @@
 //! RS256 tokens from the shared RSA_PRIVATE_KEY, refresh + verify with
 //! jwt_token_key revocation checks, staff permission resolution.
 
-use rustygod_core::auth::{self, PasswordCheck};
-use rustygod_db::{apps, auth as db_auth};
-use rustygod_proto::auth::{
+use saleor_rustify_core::auth::{self, PasswordCheck};
+use saleor_rustify_db::{apps, auth as db_auth};
+use saleor_rustify_proto::auth::{
     auth_service_server::AuthService, CheckPermissionRequest, CheckPermissionResponse,
     CreateAppTokenRequest, CreateAppTokenResponse, LoginRequest, LoginResponse,
     RefreshTokenRequest, RefreshTokenResponse, RevokeAppTokenRequest, RevokeAppTokenResponse,
@@ -28,15 +28,15 @@ impl AuthServiceImpl {
             .ok_or_else(|| Status::unavailable("postgres unavailable"))
     }
 
-    fn err(code: &str, message: String) -> rustygod_proto::common::Error {
-        rustygod_proto::common::Error {
+    fn err(code: &str, message: String) -> saleor_rustify_proto::common::Error {
+        saleor_rustify_proto::common::Error {
             code: code.into(),
             message,
             field: String::new(),
         }
     }
 
-    fn invalid_login() -> Vec<rustygod_proto::common::Error> {
+    fn invalid_login() -> Vec<saleor_rustify_proto::common::Error> {
         // Django returns the same error for bad email and bad password
         // (no user enumeration).
         vec![Self::err(

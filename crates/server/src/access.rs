@@ -9,8 +9,8 @@
 //! Customer-facing flows (checkout, attach/redeem gift cards) stay open —
 //! exactly the mutations Django leaves permission-free.
 
-use rustygod_core::auth as core_auth;
-use rustygod_db::{apps, auth as db_auth};
+use saleor_rustify_core::auth as core_auth;
+use saleor_rustify_db::{apps, auth as db_auth};
 use sea_orm::DatabaseConnection;
 use tonic::{metadata::MetadataMap, Status};
 

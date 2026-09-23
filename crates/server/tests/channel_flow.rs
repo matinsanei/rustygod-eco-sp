@@ -1,12 +1,12 @@
 //! ChannelService writes over gRPC: create/update/delete, listings,
 //! prices — staff-gated, on real tables.
 
-use rustygod_db::database_url;
-use rustygod_proto::commerce::{
+use saleor_rustify_db::database_url;
+use saleor_rustify_proto::commerce::{
     channel_service_server::ChannelService, CreateChannelRequest, DeleteChannelRequest,
     SetProductListingRequest, SetVariantPriceRequest, UpdateChannelRequest,
 };
-use rustygod_server::service_commerce::ChannelServiceImpl;
+use saleor_rustify_server::service_commerce::ChannelServiceImpl;
 use tonic::Request;
 use uuid::Uuid;
 
@@ -20,12 +20,12 @@ fn test_key() -> String {
 
 async fn staff_req<T>(msg: T) -> Request<T> {
     std::env::set_var("RSA_PRIVATE_KEY", test_key());
-    let db = rustygod_db::connect(&database_url()).await.unwrap();
-    let (user, _) = rustygod_db::auth::find_for_login(&db, "admin@example.com")
+    let db = saleor_rustify_db::connect(&database_url()).await.unwrap();
+    let (user, _) = saleor_rustify_db::auth::find_for_login(&db, "admin@example.com")
         .await
         .unwrap()
         .unwrap();
-    let pair = rustygod_core::auth::mint_tokens_with_key(
+    let pair = saleor_rustify_core::auth::mint_tokens_with_key(
         &test_key(),
         "test",
         &user.email,
@@ -43,7 +43,7 @@ async fn staff_req<T>(msg: T) -> Request<T> {
 }
 
 async fn svc() -> ChannelServiceImpl {
-    let db = rustygod_db::connect(&database_url()).await.unwrap();
+    let db = saleor_rustify_db::connect(&database_url()).await.unwrap();
     ChannelServiceImpl::new(Some(db))
 }
 
@@ -106,8 +106,8 @@ async fn grpc_channel_lifecycle() {
     assert!(!upd.is_active);
 
     // Listings on the live channel (use a non-353 variant; restore after).
-    let db = rustygod_db::connect(&database_url()).await.unwrap();
-    let products = rustygod_db::catalog::list_products(&db, "default-channel", None, 50)
+    let db = saleor_rustify_db::connect(&database_url()).await.unwrap();
+    let products = saleor_rustify_db::catalog::list_products(&db, "default-channel", None, 50)
         .await
         .unwrap();
     let (pid, vid, orig) = products
@@ -146,7 +146,7 @@ async fn grpc_channel_lifecycle() {
         .unwrap()
         .into_inner();
     assert!(res.errors.is_empty());
-    let pricing = rustygod_db::catalog::checkout_pricing(&db, "default-channel", &[vid])
+    let pricing = saleor_rustify_db::catalog::checkout_pricing(&db, "default-channel", &[vid])
         .await
         .unwrap();
     assert_eq!(
@@ -154,7 +154,7 @@ async fn grpc_channel_lifecycle() {
         "11.11".parse::<rust_decimal::Decimal>().unwrap()
     );
     // Restore shared data.
-    rustygod_db::channels::set_variant_price(&db, "default-channel", vid, Some(orig), None)
+    saleor_rustify_db::channels::set_variant_price(&db, "default-channel", vid, Some(orig), None)
         .await
         .unwrap();
 

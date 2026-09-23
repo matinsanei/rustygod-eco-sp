@@ -1,14 +1,14 @@
 //! TaxService over gRPC: rate lookup + taxed lines on real data.
 
-use rustygod_db::database_url;
-use rustygod_proto::commerce::{
+use saleor_rustify_db::database_url;
+use saleor_rustify_proto::commerce::{
     tax_service_server::TaxService, CalculateTaxesRequest, GetTaxRateRequest, TaxLineInput,
 };
-use rustygod_server::service_commerce::TaxServiceImpl;
+use saleor_rustify_server::service_commerce::TaxServiceImpl;
 use tonic::Request;
 
 async fn svc() -> TaxServiceImpl {
-    let db = rustygod_db::connect(&database_url()).await.unwrap();
+    let db = saleor_rustify_db::connect(&database_url()).await.unwrap();
     TaxServiceImpl::new(Some(db))
 }
 
@@ -41,12 +41,12 @@ async fn grpc_tax_rate_and_calculation() {
     assert_eq!(unknown.rate, "0");
 
     // Tax a real listed variant: 2 × unit @ 19% DE.
-    let db = rustygod_db::connect(&database_url()).await.unwrap();
-    let products = rustygod_db::catalog::list_products(&db, "default-channel", None, 5)
+    let db = saleor_rustify_db::connect(&database_url()).await.unwrap();
+    let products = saleor_rustify_db::catalog::list_products(&db, "default-channel", None, 5)
         .await
         .unwrap();
     let vid: i32 = products.iter().flat_map(|p| &p.variants).next().unwrap().id.parse().unwrap();
-    let pricing = rustygod_db::catalog::checkout_pricing(&db, "default-channel", &[vid])
+    let pricing = saleor_rustify_db::catalog::checkout_pricing(&db, "default-channel", &[vid])
         .await
         .unwrap();
     let unit = pricing[&vid].0.amount.to_string();

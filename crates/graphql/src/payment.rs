@@ -44,7 +44,7 @@ fn money(amount: rust_decimal::Decimal, currency: &str) -> crate::common::Money 
     crate::common::Money { amount: amount.to_string(), currency: currency.to_string(), fraction_digits: None }
 }
 
-fn payment_node(m: &rustygod_db::entities::payment_payment::Model) -> gen::Payment {
+fn payment_node(m: &saleor_rustify_db::entities::payment_payment::Model) -> gen::Payment {
     let avail_capture = (m.total - m.captured_amount).max(rust_decimal::Decimal::ZERO);
     gen::Payment {
         id: Some(ID(crate::common::gid("Payment", m.id))),
@@ -71,7 +71,7 @@ impl PaymentQuery {
     async fn transaction(&self, ctx: &Context<'_>, id: ID) -> Result<Option<GqlTransaction>> {
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
         let tid: i32 = id.0.parse().map_err(|_| Error::new("id must be int"))?;
-        match rustygod_db::payments::view(db, tid).await {
+        match saleor_rustify_db::payments::view(db, tid).await {
             Ok(v) => Ok(Some(GqlTransaction { id: ID(crate::common::gid("TransactionItem", v.id)), currency: v.currency, authorized: v.authorized.to_string(), charged: v.charged.to_string(), refunded: v.refunded.to_string(), canceled: v.canceled.to_string() })),
             Err(_) => Ok(None),
         }
@@ -81,9 +81,9 @@ impl PaymentQuery {
     async fn payment(&self, ctx: &Context<'_>, id: ID) -> Result<Option<gen::Payment>> {
         crate::account::require_perm(ctx, "manage_orders").await?;
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
-        let Some(pid) = rustygod_db::catalog::parse_gid(&id.0) else { return Ok(None) };
+        let Some(pid) = saleor_rustify_db::catalog::parse_gid(&id.0) else { return Ok(None) };
         use sea_orm::EntityTrait;
-        Ok(rustygod_db::entities::payment_payment::Entity::find_by_id(pid)
+        Ok(saleor_rustify_db::entities::payment_payment::Entity::find_by_id(pid)
             .one(db).await.map_err(|e| Error::new(e.to_string()))?.map(|m| payment_node(&m)))
     }
 
@@ -98,7 +98,7 @@ impl PaymentQuery {
         let off = after.and_then(|c| crate::common::decode_cursor(&c)).unwrap_or(0);
         let lim = first.unwrap_or(20).clamp(1, 100) as usize;
         use sea_orm::{ColumnTrait, Condition, EntityTrait, QueryFilter, QueryOrder};
-        use rustygod_db::entities::payment_payment::{Column as PCol, Entity as PEnt};
+        use saleor_rustify_db::entities::payment_payment::{Column as PCol, Entity as PEnt};
         let mut cond = Condition::all();
         if let Some(f) = filter.as_ref() {
             let ids = crate::catalog::gid_vec(f.ids.clone());
@@ -133,7 +133,7 @@ impl PaymentQuery {
         let off = after.and_then(|c| crate::common::decode_cursor(&c)).unwrap_or(0);
         let lim = first.unwrap_or(20).clamp(1, 100) as usize;
         use sea_orm::{ColumnTrait, Condition, EntityTrait, QueryFilter, QueryOrder, QuerySelect};
-        use rustygod_db::entities::payment_transactionitem::{Column as TCol, Entity as TEnt};
+        use saleor_rustify_db::entities::payment_transactionitem::{Column as TCol, Entity as TEnt};
         fn apply_where(cond: Condition, w: &gen::TransactionWhereInput) -> Condition {
             let mut c = cond;
             let ids = crate::catalog::gid_vec(w.ids.clone());
@@ -192,7 +192,7 @@ impl PaymentMutation {
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
         let tid: i32 = transaction_id.0.parse().map_err(|_| Error::new("transactionId must be int"))?;
         let amt: rust_decimal::Decimal = amount.parse().map_err(|_| Error::new("amount must be decimal"))?;
-        let v = rustygod_db::payments::authorize(db, tid, amt, &idempotency_key).await.map_err(|e| Error::new(e.to_string()))?;
+        let v = saleor_rustify_db::payments::authorize(db, tid, amt, &idempotency_key).await.map_err(|e| Error::new(e.to_string()))?;
         Ok(GqlTransaction { id: ID(crate::common::gid("TransactionItem", v.id)), currency: v.currency, authorized: v.authorized.to_string(), charged: v.charged.to_string(), refunded: v.refunded.to_string(), canceled: v.canceled.to_string() })
     }
     async fn transaction_charge(&self, ctx: &Context<'_>, transaction_id: ID, amount: String, idempotency_key: String) -> Result<GqlTransaction> {
@@ -200,7 +200,7 @@ impl PaymentMutation {
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
         let tid: i32 = transaction_id.0.parse().map_err(|_| Error::new("transactionId must be int"))?;
         let amt: rust_decimal::Decimal = amount.parse().map_err(|_| Error::new("amount must be decimal"))?;
-        let v = rustygod_db::payments::charge(db, tid, amt, &idempotency_key).await.map_err(|e| Error::new(e.to_string()))?;
+        let v = saleor_rustify_db::payments::charge(db, tid, amt, &idempotency_key).await.map_err(|e| Error::new(e.to_string()))?;
         Ok(GqlTransaction { id: ID(crate::common::gid("TransactionItem", v.id)), currency: v.currency, authorized: v.authorized.to_string(), charged: v.charged.to_string(), refunded: v.refunded.to_string(), canceled: v.canceled.to_string() })
     }
 }

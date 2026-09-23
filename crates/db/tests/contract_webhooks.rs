@@ -3,12 +3,12 @@
 //! tables. Creates its own app+webhook rows and removes them after.
 
 use chrono::Utc;
-use rustygod_db::{database_url, webhooks};
+use saleor_rustify_db::{database_url, webhooks};
 use sea_orm::{ActiveModelTrait, ConnectionTrait, DatabaseConnection, Set};
 use serde_json::json;
 
 async fn db() -> DatabaseConnection {
-    rustygod_db::connect(&database_url())
+    saleor_rustify_db::connect(&database_url())
         .await
         .expect("saleor postgres must be up (localhost:5434)")
 }
@@ -19,7 +19,7 @@ struct Fixture {
 }
 
 async fn fixture(db: &DatabaseConnection, event: &str, channels: Vec<String>) -> Fixture {
-    use rustygod_db::entities::{app_app, webhook_webhook, webhook_webhookevent};
+    use saleor_rustify_db::entities::{app_app, webhook_webhook, webhook_webhookevent};
     let app = app_app::ActiveModel {
         name: Set("rustygod-test".into()),
         identifier: Set(format!("test.{}", uuid::Uuid::new_v4())),
@@ -59,7 +59,7 @@ async fn fixture(db: &DatabaseConnection, event: &str, channels: Vec<String>) ->
 }
 
 async fn cleanup(db: &DatabaseConnection, f: &Fixture, deliveries: &[i32]) {
-    use rustygod_db::entities::{
+    use saleor_rustify_db::entities::{
         app_app, core_eventdelivery, core_eventdeliveryattempt, core_eventpayload,
         webhook_webhook, webhook_webhookevent,
     };
@@ -113,7 +113,7 @@ async fn cleanup(db: &DatabaseConnection, f: &Fixture, deliveries: &[i32]) {
 
 /// Remove test fixtures leaked by earlier interrupted runs.
 async fn purge_leftover_fixtures(db: &DatabaseConnection) {
-    use rustygod_db::entities::{app_app, webhook_webhook};
+    use saleor_rustify_db::entities::{app_app, webhook_webhook};
     use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QuerySelect};
     let apps: Vec<(i32, String)> = app_app::Entity::find()
         .select_only()
@@ -201,7 +201,7 @@ async fn signature_headers_match_python_hmac() {
     // Secret "test-secret", body {} — verifiable against Python hmac.
     let headers = webhooks::signed_headers("example.com", "order_created", "{}", "test-secret");
     let sig = headers.iter().find(|(k, _)| k == "Saleor-Signature").unwrap().1.clone();
-    assert!(rustygod_core::webhooks::verify_signature(b"{}", "test-secret", &sig));
+    assert!(saleor_rustify_core::webhooks::verify_signature(b"{}", "test-secret", &sig));
     assert!(headers.iter().any(|(k, v)| k == "Saleor-Event" && v == "order_created"));
 }
 

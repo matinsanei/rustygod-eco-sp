@@ -1,4 +1,4 @@
-use rustygod_graphql::build_schema;
+use saleor_rustify_graphql::build_schema;
 
 #[tokio::test]
 async fn sdl_contains_core_sections() {

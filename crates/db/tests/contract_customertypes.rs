@@ -1,10 +1,10 @@
 //! Customer types, tax configuration updates, notification recipients.
 
-use rustygod_db::{account_writes, customer_types::*, database_url};
+use saleor_rustify_db::{account_writes, customer_types::*, database_url};
 use sea_orm::DatabaseConnection;
 
 async fn db() -> DatabaseConnection {
-    rustygod_db::connect(&database_url())
+    saleor_rustify_db::connect(&database_url())
         .await
         .expect("saleor postgres must be up (localhost:5434)")
 }
@@ -17,7 +17,7 @@ fn tag(p: &str) -> String {
 async fn customer_type_crud_guards() {
     let db = db().await;
     // Default type cannot be deleted.
-    use rustygod_db::entities::account_customertype;
+    use saleor_rustify_db::entities::account_customertype;
     use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QuerySelect};
     let default_id: i32 = account_customertype::Entity::find()
         .select_only()
@@ -73,7 +73,7 @@ async fn customer_type_attribute_assignment() {
     .await
     .unwrap();
     // A product-kind attribute must be refused.
-    use rustygod_db::entities::attribute_attribute;
+    use saleor_rustify_db::entities::attribute_attribute;
     use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QuerySelect};
     let prod_attr: i32 = attribute_attribute::Entity::find()
         .select_only()
@@ -93,20 +93,20 @@ async fn customer_type_attribute_assignment() {
 #[tokio::test]
 async fn tax_configuration_update_persists() {
     let db = db().await;
-    use rustygod_db::entities::tax_taxconfiguration;
+    use saleor_rustify_db::entities::tax_taxconfiguration;
     use sea_orm::EntityTrait;
     let before = tax_taxconfiguration::Entity::find_by_id(1).one(&db).await.unwrap().unwrap();
-    rustygod_db::taxes::update_tax_configuration(
+    saleor_rustify_db::taxes::update_tax_configuration(
         &db,
         1,
-        &rustygod_db::taxes::TaxConfigPatch {
+        &saleor_rustify_db::taxes::TaxConfigPatch {
             charge_taxes: Some(!before.charge_taxes),
             strategy: Some("TAX_APP".into()),
             display_gross: None,
             prices_entered_with_tax: None,
             use_weighted_tax_for_shipping: None,
             tax_app_id: None,
-            upsert_countries: vec![rustygod_db::taxes::CountryOverride {
+            upsert_countries: vec![saleor_rustify_db::taxes::CountryOverride {
                 country_code: "ZZ".into(),
                 charge_taxes: true,
                 strategy: None,
@@ -123,7 +123,7 @@ async fn tax_configuration_update_persists() {
     assert_eq!(after.charge_taxes, !before.charge_taxes);
     assert_eq!(after.tax_calculation_strategy.as_deref(), Some("TAX_APP"));
     // Country row written; remove it again + restore.
-    use rustygod_db::entities::tax_taxconfigurationpercountry;
+    use saleor_rustify_db::entities::tax_taxconfigurationpercountry;
     use sea_orm::{ColumnTrait, QueryFilter, QuerySelect};
     let row: Option<i32> = tax_taxconfigurationpercountry::Entity::find()
         .select_only()
@@ -135,10 +135,10 @@ async fn tax_configuration_update_persists() {
         .await
         .unwrap();
     assert!(row.is_some(), "ZZ override must exist");
-    rustygod_db::taxes::update_tax_configuration(
+    saleor_rustify_db::taxes::update_tax_configuration(
         &db,
         1,
-        &rustygod_db::taxes::TaxConfigPatch {
+        &saleor_rustify_db::taxes::TaxConfigPatch {
             charge_taxes: Some(before.charge_taxes),
             strategy: Some(before.tax_calculation_strategy.clone().unwrap_or_else(|| "FLAT_RATES".into())),
             ..Default::default()
@@ -147,7 +147,7 @@ async fn tax_configuration_update_persists() {
     .await
     .unwrap();
     // Unknown config refused.
-    assert!(rustygod_db::taxes::update_tax_configuration(&db, -7, &Default::default()).await.is_err());
+    assert!(saleor_rustify_db::taxes::update_tax_configuration(&db, -7, &Default::default()).await.is_err());
     // Cleanup ZZ row.
     tax_taxconfigurationpercountry::Entity::delete_many()
         .filter(tax_taxconfigurationpercountry::Column::TaxConfigurationId.eq(1))
@@ -168,7 +168,7 @@ async fn notification_recipients() {
     assert!(account_writes::create_notification_recipient(&db, None, Some("x@y.zz".into()), true).await.is_ok());
     assert!(account_writes::delete_notification_recipient(&db, -7).await.is_err());
     // Non-staff user refused.
-    use rustygod_db::entities::account_user;
+    use saleor_rustify_db::entities::account_user;
     use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QuerySelect};
     let customer: Option<i32> = account_user::Entity::find()
         .select_only()
@@ -182,6 +182,6 @@ async fn notification_recipients() {
         assert!(account_writes::create_notification_recipient(&db, Some(cid), None, true).await.is_err());
     }
     account_writes::delete_notification_recipient(&db, r1).await.unwrap();
-    use rustygod_db::entities::account_staffnotificationrecipient;
+    use saleor_rustify_db::entities::account_staffnotificationrecipient;
     assert!(account_staffnotificationrecipient::Entity::find_by_id(r1).one(&db).await.unwrap().is_none());
 }

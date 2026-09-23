@@ -1,4 +1,4 @@
-use rustygod_proto::ai::{
+use saleor_rustify_proto::ai::{
     chat_agent_client::ChatAgentClient, recommender_client::RecommenderClient,
     semantic_search_client::SemanticSearchClient, ChatRequest, RecommendProductsRequest,
     SearchProductsRequest,

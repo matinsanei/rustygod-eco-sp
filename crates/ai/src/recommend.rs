@@ -26,7 +26,7 @@ pub async fn recommend_v2(
     channel_slug: &str,
     limit: u64,
 ) -> Result<Vec<RecoHitV2>> {
-    let (ch_id, _) = rustygod_db::catalog::channel_info(db, channel_slug).await?;
+    let (ch_id, _) = saleor_rustify_db::catalog::channel_info(db, channel_slug).await?;
     let co = recommend_for_variant(db, variant_id, channel_slug, limit).await?;
     let mut out: Vec<RecoHitV2> = co
         .into_iter()
@@ -57,7 +57,7 @@ pub async fn recommend_v2(
     let pids: Vec<i32> = sims.iter().map(|(p, _)| *p).collect();
     let rep = vectors::representative_variants(db, ch_id, &pids).await?;
     let vids: Vec<i32> = rep.values().copied().collect();
-    let pricing = rustygod_db::catalog::checkout_pricing(db, channel_slug, &vids).await?;
+    let pricing = saleor_rustify_db::catalog::checkout_pricing(db, channel_slug, &vids).await?;
     let seen: HashSet<i32> = out.iter().map(|r| r.variant_id).collect();
     for (p, s) in sims {
         if out.len() >= limit as usize {
@@ -115,7 +115,7 @@ pub async fn recommend_for_variant(
         .map(|r| r.try_get("", "vid"))
         .collect::<std::result::Result<_, _>>()?;
     let pricing =
-        rustygod_db::catalog::checkout_pricing(db, channel_slug, &vids).await?;
+        saleor_rustify_db::catalog::checkout_pricing(db, channel_slug, &vids).await?;
     let mut out = Vec::new();
     for r in rows {
         let vid: i32 = r.try_get("", "vid")?;

@@ -73,8 +73,8 @@ pub struct Money {
     pub fraction_digits: Option<i32>,
 }
 
-impl From<rustygod_core::money::Money> for Money {
-    fn from(m: rustygod_core::money::Money) -> Self {
+impl From<saleor_rustify_core::money::Money> for Money {
+    fn from(m: saleor_rustify_core::money::Money) -> Self {
         Self { amount: m.amount.to_string(), currency: m.currency, fraction_digits: None }
     }
 }

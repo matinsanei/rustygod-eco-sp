@@ -2,11 +2,11 @@
 //! unit → cancel the rest. Money, stock, and status stay consistent and
 //! reconcile green at every step.
 
-use rustygod_db::{catalog, checkout_store, complete, database_url, fulfillment, order_store, payments};
-use rustygod_proto::order::{
+use saleor_rustify_db::{catalog, checkout_store, complete, database_url, fulfillment, order_store, payments};
+use saleor_rustify_proto::order::{
     order_service_server::OrderService, CancelOrderRequest, ReturnLineInput, ReturnOrderLinesRequest,
 };
-use rustygod_server::service_order::OrderServiceImpl;
+use saleor_rustify_server::service_order::OrderServiceImpl;
 use tonic::Request;
 
 fn test_key() -> String {
@@ -19,12 +19,12 @@ fn test_key() -> String {
 
 async fn staff_req<T>(msg: T) -> Request<T> {
     std::env::set_var("RSA_PRIVATE_KEY", test_key());
-    let db = rustygod_db::connect(&database_url()).await.unwrap();
-    let (user, _) = rustygod_db::auth::find_for_login(&db, "admin@example.com")
+    let db = saleor_rustify_db::connect(&database_url()).await.unwrap();
+    let (user, _) = saleor_rustify_db::auth::find_for_login(&db, "admin@example.com")
         .await
         .unwrap()
         .unwrap();
-    let pair = rustygod_core::auth::mint_tokens_with_key(
+    let pair = saleor_rustify_core::auth::mint_tokens_with_key(
         &test_key(),
         "test",
         &user.email,
@@ -43,8 +43,8 @@ async fn staff_req<T>(msg: T) -> Request<T> {
 
 #[tokio::test]
 async fn return_then_cancel_refused_then_full_return_over_rpc() {
-    let db = rustygod_db::connect(&database_url()).await.unwrap();
-    let store = rustygod_server::store::new_store();
+    let db = saleor_rustify_db::connect(&database_url()).await.unwrap();
+    let store = saleor_rustify_server::store::new_store();
     let svc = OrderServiceImpl::with_db(store, db.clone());
 
     // Buy 2 tracked units.
@@ -53,7 +53,7 @@ async fn return_then_cancel_refused_then_full_return_over_rpc() {
         .await
         .unwrap();
     let products = catalog::list_products(&db, "default-channel", None, 100).await.unwrap();
-    use rustygod_db::entities::product_productvariant;
+    use saleor_rustify_db::entities::product_productvariant;
     use sea_orm::EntityTrait;
     let mut vid = 0;
     for p in products.iter().flat_map(|p| &p.variants) {
@@ -161,6 +161,6 @@ async fn return_then_cancel_refused_then_full_return_over_rpc() {
     let v = payments::view(&db, txn.id).await.unwrap();
     assert_eq!(v.refunded, header.total_gross_amount);
     assert_eq!(unit_back + ret2.amount.parse::<rust_decimal::Decimal>().unwrap(), header.total_gross_amount);
-    let checks = rustygod_db::reconcile::reconcile_order(&db, done.order_id).await.unwrap();
+    let checks = saleor_rustify_db::reconcile::reconcile_order(&db, done.order_id).await.unwrap();
     assert!(checks.iter().all(|c| c.ok), "{checks:?}");
 }

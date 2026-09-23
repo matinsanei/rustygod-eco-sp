@@ -3,12 +3,12 @@
 //! cc options are closed, stocked warehouses refuse deletion, stock
 //! upserts respect the allocated floor, zone links round-trip.
 
-use rustygod_db::{database_url, warehouses};
+use saleor_rustify_db::{database_url, warehouses};
 use sea_orm::DatabaseConnection;
 use uuid::Uuid;
 
 async fn db() -> DatabaseConnection {
-    rustygod_db::connect(&database_url())
+    saleor_rustify_db::connect(&database_url())
         .await
         .expect("saleor postgres must be up (localhost:5434)")
 }
@@ -37,7 +37,7 @@ async fn create_update_delete_lifecycle() {
 
     // Slug conflict is a clean error, not a 500.
     let err = warehouses::create_warehouse(&db, new_warehouse(&slug)).await.unwrap_err();
-    assert!(matches!(err, rustygod_db::DbError::Warehouse(_)));
+    assert!(matches!(err, saleor_rustify_db::DbError::Warehouse(_)));
 
     // Bad cc option rejected.
     let mut bad = new_warehouse(&format!("{slug}-x"));
@@ -76,7 +76,7 @@ async fn stocked_warehouse_refuses_delete_and_stock_floors() {
     let wh = warehouses::create_warehouse(&db, new_warehouse(&slug)).await.unwrap();
 
     // A variant id that exists (any product variant works for the FK-free row).
-    use rustygod_db::entities::product_productvariant;
+    use saleor_rustify_db::entities::product_productvariant;
     use sea_orm::{EntityTrait, QuerySelect};
     let vid: i32 = product_productvariant::Entity::find()
         .select_only()

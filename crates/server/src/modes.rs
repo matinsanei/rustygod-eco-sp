@@ -12,8 +12,8 @@
 //!   location (default `../saleor/saleor-core` next to this repo).
 //!
 //! No CLI dependency: `rustygod-server [MODE] [extra args...]`.
-//! `RUSTYGOD_BEAT_SCALE` (float, default 1.0) multiplies every beat interval,
-//! so daily jobs can be exercised in dev (`RUSTYGOD_BEAT_SCALE=0.01`).
+//! `RUSTIFY_BEAT_SCALE` (float, default 1.0) multiplies every beat interval,
+//! so daily jobs can be exercised in dev (`RUSTIFY_BEAT_SCALE=0.01`).
 
 use sea_orm::DatabaseConnection;
 
@@ -81,16 +81,16 @@ fn print_help() {
          seed [args]               manage.py populatedb (e.g. --createsuperuser\n                                   --superuser_password=admin --withoutimages)\n  \
          createsuperuser [args]    manage.py createsuperuser\n\
          \n\
-         Env: RUSTYGOD_DATABASE_URL (mapped to DATABASE_URL for manage.py),\n  \
-         SALEOR_CORE_DIR (default ../saleor/saleor-core), RUSTYGOD_ADDR,\n  \
-         RUSTYGOD_GRAPHQL_ADDR, RUSTYGOD_METRICS_ADDR, RUSTYGOD_DOMAIN,\n  \
-         RUSTYGOD_SWEEP_SECS, RUSTYGOD_WORKER_SECS (default 10),\n  \
-         RUSTYGOD_BEAT_SCALE (default 1.0)"
+         Env: RUSTIFY_DATABASE_URL (mapped to DATABASE_URL for manage.py),\n  \
+         SALEOR_CORE_DIR (default ../saleor/saleor-core), RUSTIFY_ADDR,\n  \
+         RUSTIFY_GRAPHQL_ADDR, RUSTIFY_METRICS_ADDR, RUSTIFY_DOMAIN,\n  \
+         RUSTIFY_SWEEP_SECS, RUSTIFY_WORKER_SECS (default 10),\n  \
+         RUSTIFY_BEAT_SCALE (default 1.0)"
     );
 }
 
 fn beat_scale() -> f64 {
-    std::env::var("RUSTYGOD_BEAT_SCALE")
+    std::env::var("RUSTIFY_BEAT_SCALE")
         .ok()
         .and_then(|s| s.parse().ok())
         .filter(|f: &f64| f.is_finite() && *f > 0.0)
@@ -100,7 +100,7 @@ fn beat_scale() -> f64 {
 /// Connect to the shared Saleor PostgreSQL. Worker/beat/check refuse to run
 /// without it (Saleor's worker/beat are meaningless without a database).
 pub async fn require_db() -> Result<DatabaseConnection, Box<dyn std::error::Error>> {
-    let pool = rustygod_db::connect(&rustygod_db::database_url()).await?;
+    let pool = saleor_rustify_db::connect(&saleor_rustify_db::database_url()).await?;
     tracing::info!("connected to Saleor PostgreSQL");
     Ok(pool)
 }
@@ -112,11 +112,11 @@ pub async fn require_db() -> Result<DatabaseConnection, Box<dyn std::error::Erro
 /// Foreground delivery loop. Same `tick` the embedded sweeper uses
 /// (single-flight via `claim_delivery`), so api+worker can run side by side.
 pub async fn run_worker(db: DatabaseConnection) -> Result<(), Box<dyn std::error::Error>> {
-    let secs: u64 = std::env::var("RUSTYGOD_WORKER_SECS")
+    let secs: u64 = std::env::var("RUSTIFY_WORKER_SECS")
         .ok()
         .and_then(|s| s.parse().ok())
         .unwrap_or(10);
-    let domain = std::env::var("RUSTYGOD_DOMAIN").unwrap_or_else(|_| "localhost".into());
+    let domain = std::env::var("RUSTIFY_DOMAIN").unwrap_or_else(|_| "localhost".into());
     tracing::info!("worker: webhook outbox delivery every {secs}s (celery-worker equivalent)");
     let mut interval = tokio::time::interval(std::time::Duration::from_secs(secs.max(1)));
     loop {
@@ -161,7 +161,7 @@ fn beat_entries() -> Vec<BeatEntry> {
         db: &DatabaseConnection,
     ) -> std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send + '_>> {
         Box::pin(async move {
-            match rustygod_db::commerce::sweep_expired_reservations(db).await {
+            match saleor_rustify_db::commerce::sweep_expired_reservations(db).await {
                 Ok(0) => {}
                 Ok(n) => tracing::info!("beat[delete-expired-reservations]: dropped {n}"),
                 Err(e) => tracing::warn!("beat[delete-expired-reservations] failed: {e}"),
@@ -172,7 +172,7 @@ fn beat_entries() -> Vec<BeatEntry> {
         db: &DatabaseConnection,
     ) -> std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send + '_>> {
         Box::pin(async move {
-            match rustygod_db::checkout_store::auto_complete_expired_checkouts(db).await {
+            match saleor_rustify_db::checkout_store::auto_complete_expired_checkouts(db).await {
                 Ok(r) if r.attempted == 0 => {}
                 Ok(r) => tracing::info!(
                     "beat[checkout-automatic-completion]: attempted {} completed {} failed {}",
@@ -186,7 +186,7 @@ fn beat_entries() -> Vec<BeatEntry> {
         db: &DatabaseConnection,
     ) -> std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send + '_>> {
         Box::pin(async move {
-            match rustygod_db::checkout_store::sweep_expired_checkouts(db).await {
+            match saleor_rustify_db::checkout_store::sweep_expired_checkouts(db).await {
                 Ok(0) => {}
                 Ok(n) => tracing::info!("beat[delete-expired-checkouts]: dropped {n}"),
                 Err(e) => tracing::warn!("beat[delete-expired-checkouts] failed: {e}"),
@@ -197,8 +197,8 @@ fn beat_entries() -> Vec<BeatEntry> {
         db: &DatabaseConnection,
     ) -> std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send + '_>> {
         Box::pin(async move {
-            let e = rustygod_ai::embed::HashingEmbedder::default();
-            match rustygod_ai::vectors::refresh_product_embeddings(db, &e).await {
+            let e = saleor_rustify_ai::embed::HashingEmbedder::default();
+            match saleor_rustify_ai::vectors::refresh_product_embeddings(db, &e).await {
                 Ok(r) if r.embedded == 0 => {}
                 Ok(r) => tracing::info!(
                     "beat[refresh-product-embeddings]: scanned {} embedded {} skipped {}",
@@ -212,7 +212,7 @@ fn beat_entries() -> Vec<BeatEntry> {
         db: &DatabaseConnection,
     ) -> std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send + '_>> {
         Box::pin(async move {
-            match rustygod_db::account_writes::prune_security_tables(db).await {
+            match saleor_rustify_db::account_writes::prune_security_tables(db).await {
                 Ok(0) => {}
                 Ok(n) => tracing::info!("beat[prune-security-tables]: dropped {n}"),
                 Err(e) => tracing::warn!("beat[prune-security-tables] failed: {e}"),
@@ -399,7 +399,7 @@ async fn manage_py(extra: &[String], cmd: &[&str]) -> Result<(), Box<dyn std::er
         .env(
             "DATABASE_URL",
             std::env::var("DATABASE_URL")
-                .or_else(|_| std::env::var("RUSTYGOD_DATABASE_URL"))
+                .or_else(|_| std::env::var("RUSTIFY_DATABASE_URL"))
                 .unwrap_or_default(),
         )
         .stdin(std::process::Stdio::inherit())

@@ -95,7 +95,7 @@ pub async fn connect(database_url: &str) -> Result<DatabaseConnection> {
 }
 
 pub fn database_url() -> String {
-    std::env::var("RUSTYGOD_DATABASE_URL").unwrap_or_else(|_| {
+    std::env::var("RUSTIFY_DATABASE_URL").unwrap_or_else(|_| {
         "postgres://saleor:saleor@localhost:5434/saleor".to_string()
     })
 }

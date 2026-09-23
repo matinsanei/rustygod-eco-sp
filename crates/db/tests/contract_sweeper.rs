@@ -1,11 +1,11 @@
 //! Sweeper contract: expired reservations rot away, live ones survive,
 //! delivery claiming is single-flight.
 
-use rustygod_db::{catalog, checkout_store, database_url};
+use saleor_rustify_db::{catalog, checkout_store, database_url};
 use sea_orm::DatabaseConnection;
 
 async fn db() -> DatabaseConnection {
-    rustygod_db::connect(&database_url())
+    saleor_rustify_db::connect(&database_url())
         .await
         .expect("saleor postgres must be up (localhost:5434)")
 }
@@ -20,7 +20,7 @@ async fn expired_reservations_swept_live_ones_kept() {
     let products = catalog::list_products(&db, "default-channel", None, 100)
         .await
         .unwrap();
-    let v: &rustygod_core::product::ProductVariant = products
+    let v: &saleor_rustify_core::product::ProductVariant = products
         .iter()
         .flat_map(|p| &p.variants)
         .find(|v| v.quantity_available >= 2)
@@ -39,17 +39,17 @@ async fn expired_reservations_swept_live_ones_kept() {
     )
     .await
     .unwrap();
-    let stocks = rustygod_db::commerce::stocks_for_variant(&db, vid).await.unwrap();
+    let stocks = saleor_rustify_db::commerce::stocks_for_variant(&db, vid).await.unwrap();
     let wh: uuid::Uuid = stocks[0].warehouse_id.parse().unwrap();
 
     // One already-expired reservation, one live.
-    rustygod_db::commerce::reserve_stock(&db, vid, wh, 1, lid1, -60).await.unwrap();
-    rustygod_db::commerce::reserve_stock(&db, vid, wh, 1, lid2, 3600).await.unwrap();
+    saleor_rustify_db::commerce::reserve_stock(&db, vid, wh, 1, lid1, -60).await.unwrap();
+    saleor_rustify_db::commerce::reserve_stock(&db, vid, wh, 1, lid2, 3600).await.unwrap();
 
-    let swept = rustygod_db::commerce::sweep_expired_reservations(&db).await.unwrap();
+    let swept = saleor_rustify_db::commerce::sweep_expired_reservations(&db).await.unwrap();
     assert!(swept >= 1, "must drop the expired row");
 
-    use rustygod_db::entities::warehouse_reservation;
+    use saleor_rustify_db::entities::warehouse_reservation;
     use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
     assert!(warehouse_reservation::Entity::find()
         .filter(warehouse_reservation::Column::CheckoutLineId.eq(lid1))
@@ -71,13 +71,13 @@ async fn expired_reservations_swept_live_ones_kept() {
 async fn delivery_claim_is_single_flight() {
     let db = db().await;
     // Unknown id: nobody wins.
-    assert!(!rustygod_db::webhooks::claim_delivery(&db, i32::MAX).await.unwrap());
+    assert!(!saleor_rustify_db::webhooks::claim_delivery(&db, i32::MAX).await.unwrap());
 }
 
 #[tokio::test]
 async fn expired_checkouts_swept_per_saleor_buckets() {
     use chrono::Utc;
-    use rustygod_db::entities::{checkout_checkout, payment_transactionitem};
+    use saleor_rustify_db::entities::{checkout_checkout, payment_transactionitem};
     use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, Set};
     let db = db().await;
     let (ch_id, currency) = catalog::channel_info(&db, "default-channel").await.unwrap();

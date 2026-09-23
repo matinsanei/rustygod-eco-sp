@@ -1,5 +1,5 @@
 //! Background sweeper (reviewer priority #1): expired reservations +
-//! pending webhook deliveries, every `RUSTYGOD_SWEEP_SECS` (default 60,
+//! pending webhook deliveries, every `RUSTIFY_SWEEP_SECS` (default 60,
 //! `0` disables).
 //!
 //! Multi-instance answer (the reviewer's question): `tokio::spawn` inside
@@ -38,15 +38,15 @@ async fn ensure_indexes(db: &DatabaseConnection) {
 /// One sweep tick: expired reservations + due webhook deliveries.
 /// Public so `worker` mode runs the exact same logic in the foreground.
 pub async fn tick_once(db: &DatabaseConnection, domain: &str) {
-    match rustygod_db::commerce::sweep_expired_reservations(db).await {
+    match saleor_rustify_db::commerce::sweep_expired_reservations(db).await {
         Ok(0) => {}
         Ok(n) => tracing::info!("sweeper: dropped {n} expired reservations"),
         Err(e) => tracing::warn!("sweeper reservations failed: {e}"),
     }
-    let due = rustygod_db::webhooks::due_deliveries(db, 100).await.unwrap_or_default();
+    let due = saleor_rustify_db::webhooks::due_deliveries(db, 100).await.unwrap_or_default();
     let mut sent = 0u64;
     for id in due {
-        match rustygod_db::webhooks::claim_delivery(db, id).await {
+        match saleor_rustify_db::webhooks::claim_delivery(db, id).await {
             Ok(true) => {}
             Ok(false) => continue, // another instance won it
             Err(e) => {
@@ -70,15 +70,15 @@ pub async fn tick_once(db: &DatabaseConnection, domain: &str) {
 
 /// Spawn the sweep loop. Returns immediately; the task lives with the server.
 pub fn spawn(db: DatabaseConnection) {
-    let secs: u64 = std::env::var("RUSTYGOD_SWEEP_SECS")
+    let secs: u64 = std::env::var("RUSTIFY_SWEEP_SECS")
         .ok()
         .and_then(|s| s.parse().ok())
         .unwrap_or(60);
     if secs == 0 {
-        tracing::info!("sweeper disabled (RUSTYGOD_SWEEP_SECS=0)");
+        tracing::info!("sweeper disabled (RUSTIFY_SWEEP_SECS=0)");
         return;
     }
-    let domain = std::env::var("RUSTYGOD_DOMAIN").unwrap_or_else(|_| "localhost".into());
+    let domain = std::env::var("RUSTIFY_DOMAIN").unwrap_or_else(|_| "localhost".into());
     tokio::spawn(async move {
         ensure_indexes(&db).await;
         tracing::info!("sweeper every {secs}s (reservations + webhook outbox)");

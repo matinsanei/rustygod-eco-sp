@@ -3,7 +3,7 @@
 //! `prices/discount.py` + `prices/money.py` quantization.
 
 use rust_decimal::Decimal;
-use rustygod_core::discount::*;
+use saleor_rustify_core::discount::*;
 use serde_json::json;
 
 fn dec(s: &str) -> Decimal {
@@ -95,7 +95,7 @@ fn currency_precision_table() {
 
 #[test]
 fn order_predicate_money_gates() {
-    use rustygod_core::discount::order_predicate_matches;
+    use saleor_rustify_core::discount::order_predicate_matches;
     let d = |s: &str| s.parse::<rust_decimal::Decimal>().unwrap();
     // range gte/lte, number and string bounds.
     let p = json!({"discountedObjectPredicate": {"baseSubtotalPrice": {"range": {"gte": 50}}}});

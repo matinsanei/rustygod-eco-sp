@@ -1,21 +1,21 @@
 //! DB-mode draft-order flow over gRPC handlers: create → add →
 //! complete → guarded edits, against real Postgres.
 
-use rustygod_db::{catalog, database_url};
-use rustygod_proto::draft::{
+use saleor_rustify_db::{catalog, database_url};
+use saleor_rustify_proto::draft::{
     draft_order_service_server::DraftOrderService, CreateDraftOrderRequest, DraftLineInput,
     DraftOrderIdRequest, DraftOrderLinesRequest,
 };
-use rustygod_server::service_draft::DraftOrderServiceImpl;
+use saleor_rustify_server::service_draft::DraftOrderServiceImpl;
 use tonic::Request;
 
 async fn svc() -> DraftOrderServiceImpl {
-    let db = rustygod_db::connect(&database_url()).await.unwrap();
+    let db = saleor_rustify_db::connect(&database_url()).await.unwrap();
     DraftOrderServiceImpl::new(Some(db))
 }
 
 async fn stocked_variant() -> String {
-    let db = rustygod_db::connect(&database_url()).await.unwrap();
+    let db = saleor_rustify_db::connect(&database_url()).await.unwrap();
     let products = catalog::list_products(&db, "default-channel", None, 100)
         .await
         .unwrap();
@@ -40,12 +40,12 @@ fn test_key() -> String {
 /// Staff request: populatedb admin JWT in metadata.
 async fn staff_req<T>(msg: T) -> Request<T> {
     std::env::set_var("RSA_PRIVATE_KEY", test_key());
-    let db = rustygod_db::connect(&rustygod_db::database_url()).await.unwrap();
-    let (user, _) = rustygod_db::auth::find_for_login(&db, "admin@example.com")
+    let db = saleor_rustify_db::connect(&saleor_rustify_db::database_url()).await.unwrap();
+    let (user, _) = saleor_rustify_db::auth::find_for_login(&db, "admin@example.com")
         .await
         .unwrap()
         .unwrap();
-    let pair = rustygod_core::auth::mint_tokens_with_key(
+    let pair = saleor_rustify_core::auth::mint_tokens_with_key(
         &test_key(),
         "test",
         &user.email,
@@ -68,7 +68,7 @@ async fn grpc_draft_lifecycle() {
     let _lock = std::fs::OpenOptions::new()
         .create(true)
         .write(true)
-        .open("/tmp/rustygod-stock.lock")
+        .open("/tmp/rustify-stock.lock")
         .unwrap();
     _lock.lock_exclusive().unwrap();
 
@@ -149,9 +149,9 @@ async fn grpc_draft_lifecycle() {
     assert!(!denied.errors.is_empty());
 
     // Cleanup the completed order directly (test-only).
-    let db = rustygod_db::connect(&database_url()).await.unwrap();
+    let db = saleor_rustify_db::connect(&database_url()).await.unwrap();
     let oid: uuid::Uuid = order.id.parse().unwrap();
-    use rustygod_db::entities::{
+    use saleor_rustify_db::entities::{
         order_order, order_orderevent, order_orderline, warehouse_allocation,
     };
     use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};

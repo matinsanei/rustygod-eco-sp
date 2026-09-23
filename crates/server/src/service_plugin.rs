@@ -7,7 +7,7 @@
 //!
 //! Auth: register/list/unregister demand `manage_apps`. `CallPlugin` (and
 //! the `CalculateTax` convenience) is open **only** for extension points
-//! named in `RUSTYGOD_PUBLIC_POINTS` (comma-separated, e.g.
+//! named in `RUSTIFY_PUBLIC_POINTS` (comma-separated, e.g.
 //! `calculate_tax,checkout.validate`) — the storefront path. Everything
 //! else stays staff-only.
 
@@ -16,9 +16,9 @@ use std::{
     sync::{atomic::{AtomicBool, Ordering}, Arc, RwLock},
 };
 
-use rustygod_db::plugin_store;
-use rustygod_plugins::{PluginManifest, PluginPackage};
-use rustygod_proto::plugin::{
+use saleor_rustify_db::plugin_store;
+use saleor_rustify_plugins::{PluginManifest, PluginPackage};
+use saleor_rustify_proto::plugin::{
     plugin_service_server::PluginService, CalculateTaxRequest, CalculateTaxResponse,
     CallPluginRequest, CallPluginResponse, ListPluginsRequest, ListPluginsResponse,
     PluginManifestInfo, RegisterPluginRequest, RegisterPluginResponse, UnregisterPluginRequest,
@@ -41,9 +41,9 @@ pub struct PluginServiceImpl {
 
 fn builtin_plugins() -> Vec<PluginPackage> {
     [
-        rustygod_plugins::reference_tax_plugin(),
-        rustygod_plugins::reference_validator_plugin(),
-        rustygod_plugins::reference_notifier_plugin(),
+        saleor_rustify_plugins::reference_tax_plugin(),
+        saleor_rustify_plugins::reference_validator_plugin(),
+        saleor_rustify_plugins::reference_notifier_plugin(),
     ]
     .into_iter()
     .filter_map(|r| r.ok())
@@ -65,7 +65,7 @@ fn to_package(name: String, m: PluginManifestInfo, config: HashMap<String, Strin
 
 impl PluginServiceImpl {
     pub fn new(db: Option<DatabaseConnection>) -> Self {
-        let public_points: HashSet<String> = std::env::var("RUSTYGOD_PUBLIC_POINTS")
+        let public_points: HashSet<String> = std::env::var("RUSTIFY_PUBLIC_POINTS")
             .unwrap_or_default()
             .split(',')
             .map(|s| s.trim().to_string())
@@ -84,8 +84,8 @@ impl PluginServiceImpl {
             .ok_or_else(|| Status::unavailable("postgres unavailable"))
     }
 
-    fn err(code: &str, message: String) -> rustygod_proto::common::Error {
-        rustygod_proto::common::Error {
+    fn err(code: &str, message: String) -> saleor_rustify_proto::common::Error {
+        saleor_rustify_proto::common::Error {
             code: code.into(),
             message,
             field: String::new(),
@@ -189,7 +189,7 @@ impl PluginService for PluginServiceImpl {
         let pkg = to_package(m.name.clone(), m, r.config.into_iter().collect(), r.wasm);
         let probe = pkg.clone();
         let valid = tokio::task::spawn_blocking(move || {
-            rustygod_plugins::validate_package(&probe)
+            saleor_rustify_plugins::validate_package(&probe)
         })
         .await
         .map_err(|e| Status::internal(e.to_string()))?;
@@ -257,7 +257,7 @@ impl PluginService for PluginServiceImpl {
         let payload: serde_json::Value = serde_json::from_str(&r.payload_json)
             .unwrap_or(serde_json::Value::Null);
         let out = tokio::task::spawn_blocking(move || {
-            rustygod_plugins::call(&pkg, &function, &payload)
+            saleor_rustify_plugins::call(&pkg, &function, &payload)
         })
         .await
         .map_err(|e| Status::internal(e.to_string()))?;
@@ -309,7 +309,7 @@ impl PluginService for PluginServiceImpl {
             "rate_bps": r.rate_bps,
         });
         let out = tokio::task::spawn_blocking(move || {
-            rustygod_plugins::call(&tax, "calculate_tax", &payload)
+            saleor_rustify_plugins::call(&tax, "calculate_tax", &payload)
         })
         .await
         .map_err(|e| Status::internal(e.to_string()))?;

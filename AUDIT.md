@@ -1,4 +1,4 @@
-# 📋 Audit Report — rustygod-saleor vs the E-Commerce Engine Checklist
+# 📋 Audit Report — saleor-rustify vs the E-Commerce Engine Checklist
 
 Date: 2026-09-18 · Last update: T3 order promotions (gifts + discounts).
 Method: every item verified against code + green tests (no vibes).

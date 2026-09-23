@@ -1,17 +1,17 @@
 //! Account security contract: guards (self/superuser/scope/last-manageable),
 //! user CRUD, addresses, groups, one-time tokens, throttling.
 
-use rustygod_db::{account_writes::*, database_url};
+use saleor_rustify_db::{account_writes::*, database_url};
 use sea_orm::DatabaseConnection;
 
 async fn db() -> DatabaseConnection {
-    rustygod_db::connect(&database_url())
+    saleor_rustify_db::connect(&database_url())
         .await
         .expect("saleor postgres must be up (localhost:5434)")
 }
 
 async fn admin_id(db: &DatabaseConnection) -> i32 {
-    use rustygod_db::entities::account_user;
+    use saleor_rustify_db::entities::account_user;
     use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QuerySelect};
     account_user::Entity::find()
         .select_only()
@@ -103,7 +103,7 @@ async fn addresses_crud_and_defaults() {
     assert!(set_default_address(&db, admin, DefaultKind::Shipping, a1).await.is_err());
     // Delete clears defaults + orphans the row.
     delete_address(&db, cid, a1).await.unwrap();
-    use rustygod_db::entities::{account_address, account_user};
+    use saleor_rustify_db::entities::{account_address, account_user};
     use sea_orm::EntityTrait;
     assert!(account_address::Entity::find_by_id(a1).one(&db).await.unwrap().is_none());
     let u = account_user::Entity::find_by_id(cid).one(&db).await.unwrap().unwrap();
@@ -136,7 +136,7 @@ async fn password_set_rotates_key() {
     set_password(&db, sid, "new-strong-password").await.unwrap();
     assert!(set_password(&db, sid, "short").await.is_err());
     // Key rotated: fetch and compare against a fresh rotation.
-    use rustygod_db::entities::account_user;
+    use saleor_rustify_db::entities::account_user;
     use sea_orm::EntityTrait;
     let k1 = account_user::Entity::find_by_id(sid).one(&db).await.unwrap().unwrap().jwt_token_key;
     rotate_key(&db, sid).await.unwrap();
@@ -215,7 +215,7 @@ async fn own_account_delete_guarded() {
     let sid = create_staff(&db, admin, &nu("selfdelstaff")).await.unwrap();
     assert!(delete_own_account(&db, sid).await.is_err());
     delete_own_account(&db, cid).await.unwrap();
-    use rustygod_db::entities::account_user;
+    use saleor_rustify_db::entities::account_user;
     use sea_orm::EntityTrait;
     assert!(account_user::Entity::find_by_id(cid).one(&db).await.unwrap().is_none());
     delete_user(&db, admin, sid, true).await.unwrap();

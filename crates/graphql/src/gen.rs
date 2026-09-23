@@ -19477,7 +19477,7 @@ impl Attribute {
             Some(d) => d.clone(),
             None => return None,
         };
-        let eid: i32 = self.id.as_ref().and_then(|i| rustygod_db::catalog::parse_gid(&i.0)).unwrap_or(-1);
+        let eid: i32 = self.id.as_ref().and_then(|i| saleor_rustify_db::catalog::parse_gid(&i.0)).unwrap_or(-1);
         let lang = crate::gen::language_code_value(&_arg_language_code);
         crate::translations::attribute_translation(&db, eid, lang).await
     }
@@ -19648,7 +19648,7 @@ impl AttributeTranslatableContent {
             Some(d) => d.clone(),
             None => return None,
         };
-        let eid: i32 = self.attribute.as_ref().and_then(|e| e.id.as_ref()).and_then(|i| rustygod_db::catalog::parse_gid(&i.0)).unwrap_or(-1);
+        let eid: i32 = self.attribute.as_ref().and_then(|e| e.id.as_ref()).and_then(|i| saleor_rustify_db::catalog::parse_gid(&i.0)).unwrap_or(-1);
         let lang = crate::gen::language_code_value(&_arg_language_code);
         crate::translations::attribute_translation(&db, eid, lang).await
     }
@@ -19757,7 +19757,7 @@ impl AttributeValue {
             Some(d) => d.clone(),
             None => return None,
         };
-        let eid: i32 = self.id.as_ref().and_then(|i| rustygod_db::catalog::parse_gid(&i.0)).unwrap_or(-1);
+        let eid: i32 = self.id.as_ref().and_then(|i| saleor_rustify_db::catalog::parse_gid(&i.0)).unwrap_or(-1);
         let lang = crate::gen::language_code_value(&_arg_language_code);
         crate::translations::attribute_value_translation(&db, eid, lang).await
     }
@@ -19874,7 +19874,7 @@ impl AttributeValueTranslatableContent {
             Some(d) => d.clone(),
             None => return None,
         };
-        let eid: i32 = self.attribute_value.as_ref().and_then(|e| e.id.as_ref()).and_then(|i| rustygod_db::catalog::parse_gid(&i.0)).unwrap_or(-1);
+        let eid: i32 = self.attribute_value.as_ref().and_then(|e| e.id.as_ref()).and_then(|i| saleor_rustify_db::catalog::parse_gid(&i.0)).unwrap_or(-1);
         let lang = crate::gen::language_code_value(&_arg_language_code);
         crate::translations::attribute_value_translation(&db, eid, lang).await
     }
@@ -20123,7 +20123,7 @@ impl Category {
             Some(d) => d.clone(),
             None => return None,
         };
-        let eid: i32 = self.id.as_ref().and_then(|i| rustygod_db::catalog::parse_gid(&i.0)).unwrap_or(-1);
+        let eid: i32 = self.id.as_ref().and_then(|i| saleor_rustify_db::catalog::parse_gid(&i.0)).unwrap_or(-1);
         let lang = crate::gen::language_code_value(&_arg_language_code);
         crate::translations::category_translation(&db, eid, lang).await
     }
@@ -20234,7 +20234,7 @@ impl CategoryTranslatableContent {
             Some(d) => d.clone(),
             None => return None,
         };
-        let eid: i32 = self.category.as_ref().and_then(|e| e.id.as_ref()).and_then(|i| rustygod_db::catalog::parse_gid(&i.0)).unwrap_or(-1);
+        let eid: i32 = self.category.as_ref().and_then(|e| e.id.as_ref()).and_then(|i| saleor_rustify_db::catalog::parse_gid(&i.0)).unwrap_or(-1);
         let lang = crate::gen::language_code_value(&_arg_language_code);
         crate::translations::category_translation(&db, eid, lang).await
     }
@@ -20615,7 +20615,7 @@ impl Collection {
             Some(d) => d.clone(),
             None => return None,
         };
-        let eid: i32 = self.id.as_ref().and_then(|i| rustygod_db::catalog::parse_gid(&i.0)).unwrap_or(-1);
+        let eid: i32 = self.id.as_ref().and_then(|i| saleor_rustify_db::catalog::parse_gid(&i.0)).unwrap_or(-1);
         let lang = crate::gen::language_code_value(&_arg_language_code);
         crate::translations::collection_translation(&db, eid, lang).await
     }
@@ -20823,7 +20823,7 @@ impl CollectionTranslatableContent {
             Some(d) => d.clone(),
             None => return None,
         };
-        let eid: i32 = self.collection.as_ref().and_then(|e| e.id.as_ref()).and_then(|i| rustygod_db::catalog::parse_gid(&i.0)).unwrap_or(-1);
+        let eid: i32 = self.collection.as_ref().and_then(|e| e.id.as_ref()).and_then(|i| saleor_rustify_db::catalog::parse_gid(&i.0)).unwrap_or(-1);
         let lang = crate::gen::language_code_value(&_arg_language_code);
         crate::translations::collection_translation(&db, eid, lang).await
     }
@@ -22647,7 +22647,7 @@ impl MenuItem {
             Some(d) => d.clone(),
             None => return None,
         };
-        let eid: i32 = self.id.as_ref().and_then(|i| rustygod_db::catalog::parse_gid(&i.0)).unwrap_or(-1);
+        let eid: i32 = self.id.as_ref().and_then(|i| saleor_rustify_db::catalog::parse_gid(&i.0)).unwrap_or(-1);
         let lang = crate::gen::language_code_value(&_arg_language_code);
         crate::translations::menu_item_translation(&db, eid, lang).await
     }
@@ -22732,7 +22732,7 @@ impl MenuItemTranslatableContent {
             Some(d) => d.clone(),
             None => return None,
         };
-        let eid: i32 = self.menu_item.as_ref().and_then(|e| e.id.as_ref()).and_then(|i| rustygod_db::catalog::parse_gid(&i.0)).unwrap_or(-1);
+        let eid: i32 = self.menu_item.as_ref().and_then(|e| e.id.as_ref()).and_then(|i| saleor_rustify_db::catalog::parse_gid(&i.0)).unwrap_or(-1);
         let lang = crate::gen::language_code_value(&_arg_language_code);
         crate::translations::menu_item_translation(&db, eid, lang).await
     }
@@ -23607,10 +23607,10 @@ impl OrderLine {
         let line_id = self.id.as_ref().map(|i| i.0.clone()).unwrap_or_default();
         // OrderLine ids are Saleor globals ("OrderLine:<uuid>") or bare UUIDs.
         let variant_id: Option<i32> = match crate::common::parse_uuid_gid(&line_id) {
-            Some(u) => rustygod_db::entities::order_orderline::Entity::find()
+            Some(u) => saleor_rustify_db::entities::order_orderline::Entity::find()
                 .select_only()
-                .column(rustygod_db::entities::order_orderline::Column::VariantId)
-                .filter(rustygod_db::entities::order_orderline::Column::Id.eq(u))
+                .column(saleor_rustify_db::entities::order_orderline::Column::VariantId)
+                .filter(saleor_rustify_db::entities::order_orderline::Column::Id.eq(u))
                 .into_tuple::<Option<i32>>()
                 .one(&db)
                 .await
@@ -23619,7 +23619,7 @@ impl OrderLine {
             None => None,
         };
         let pid: i32 = match variant_id {
-            Some(vid) => rustygod_db::entities::product_productvariant::Entity::find_by_id(vid)
+            Some(vid) => saleor_rustify_db::entities::product_productvariant::Entity::find_by_id(vid)
                 .one(&db)
                 .await
                 .unwrap_or(None)
@@ -23627,12 +23627,12 @@ impl OrderLine {
                 .unwrap_or(-1),
             None => -1,
         };
-        let img: Option<(String, String)> = rustygod_db::entities::product_productmedia::Entity::find()
+        let img: Option<(String, String)> = saleor_rustify_db::entities::product_productmedia::Entity::find()
             .select_only()
-            .column(rustygod_db::entities::product_productmedia::Column::Image)
-            .column(rustygod_db::entities::product_productmedia::Column::Alt)
-            .filter(rustygod_db::entities::product_productmedia::Column::ProductId.eq(pid))
-            .order_by_asc(rustygod_db::entities::product_productmedia::Column::SortOrder)
+            .column(saleor_rustify_db::entities::product_productmedia::Column::Image)
+            .column(saleor_rustify_db::entities::product_productmedia::Column::Alt)
+            .filter(saleor_rustify_db::entities::product_productmedia::Column::ProductId.eq(pid))
+            .order_by_asc(saleor_rustify_db::entities::product_productmedia::Column::SortOrder)
             .into_tuple()
             .all(&db)
             .await
@@ -24149,7 +24149,7 @@ impl PageTranslatableContent {
             Some(d) => d.clone(),
             None => return None,
         };
-        let eid: i32 = self.page.as_ref().and_then(|e| e.id.as_ref()).and_then(|i| rustygod_db::catalog::parse_gid(&i.0)).unwrap_or(-1);
+        let eid: i32 = self.page.as_ref().and_then(|e| e.id.as_ref()).and_then(|i| saleor_rustify_db::catalog::parse_gid(&i.0)).unwrap_or(-1);
         let lang = crate::gen::language_code_value(&_arg_language_code);
         crate::translations::page_translation(&db, eid, lang).await
     }
@@ -24698,17 +24698,17 @@ impl Product {
 
         {
         use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QueryOrder, QuerySelect};
-        let pid: i32 = self.id.as_ref().and_then(|i| rustygod_db::catalog::parse_gid(&i.0)).unwrap_or(-1);
+        let pid: i32 = self.id.as_ref().and_then(|i| saleor_rustify_db::catalog::parse_gid(&i.0)).unwrap_or(-1);
         let db = match ctx.data_opt::<crate::context::GqlContext>().and_then(|g| g.db().ok()) {
             Some(d) => d.clone(),
             None => return None,
         };
-        let img: Option<(String, String)> = rustygod_db::entities::product_productmedia::Entity::find()
+        let img: Option<(String, String)> = saleor_rustify_db::entities::product_productmedia::Entity::find()
             .select_only()
-            .column(rustygod_db::entities::product_productmedia::Column::Image)
-            .column(rustygod_db::entities::product_productmedia::Column::Alt)
-            .filter(rustygod_db::entities::product_productmedia::Column::ProductId.eq(pid))
-            .order_by_asc(rustygod_db::entities::product_productmedia::Column::SortOrder)
+            .column(saleor_rustify_db::entities::product_productmedia::Column::Image)
+            .column(saleor_rustify_db::entities::product_productmedia::Column::Alt)
+            .filter(saleor_rustify_db::entities::product_productmedia::Column::ProductId.eq(pid))
+            .order_by_asc(saleor_rustify_db::entities::product_productmedia::Column::SortOrder)
             .into_tuple()
             .all(&db)
             .await
@@ -24745,7 +24745,7 @@ impl Product {
             Some(d) => d.clone(),
             None => return None,
         };
-        let pid: i32 = self.id.as_ref().and_then(|i| rustygod_db::catalog::parse_gid(&i.0)).unwrap_or(-1);
+        let pid: i32 = self.id.as_ref().and_then(|i| saleor_rustify_db::catalog::parse_gid(&i.0)).unwrap_or(-1);
         let search = _arg_filter.as_ref().and_then(|f| f.search.clone());
         crate::catalog::product_variants_page(&db, pid, search, _arg_first.clone(), _arg_after.clone()).await.unwrap_or(None)
     }
@@ -24760,7 +24760,7 @@ impl Product {
             Some(d) => d.clone(),
             None => return None,
         };
-        let eid: i32 = self.id.as_ref().and_then(|i| rustygod_db::catalog::parse_gid(&i.0)).unwrap_or(-1);
+        let eid: i32 = self.id.as_ref().and_then(|i| saleor_rustify_db::catalog::parse_gid(&i.0)).unwrap_or(-1);
         let lang = crate::gen::language_code_value(&_arg_language_code);
         crate::translations::product_translation(&db, eid, lang).await
     }
@@ -25003,10 +25003,10 @@ impl ProductMedia {
             Some(d) => d.clone(),
             None => return None,
         };
-        let mid: i32 = self.id.as_ref().and_then(|i| rustygod_db::catalog::parse_gid(&i.0)).unwrap_or(-1);
+        let mid: i32 = self.id.as_ref().and_then(|i| saleor_rustify_db::catalog::parse_gid(&i.0)).unwrap_or(-1);
         use sea_orm::{EntityTrait, QuerySelect};
-        let path: Option<String> = rustygod_db::entities::product_productmedia::Entity::find_by_id(mid)
-            .select_only().column(rustygod_db::entities::product_productmedia::Column::Image)
+        let path: Option<String> = saleor_rustify_db::entities::product_productmedia::Entity::find_by_id(mid)
+            .select_only().column(saleor_rustify_db::entities::product_productmedia::Column::Image)
             .into_tuple::<Option<String>>().one(&db).await.unwrap_or(None).flatten();
         path.map(|pp| crate::common::media_url(&pp))
     }
@@ -25139,7 +25139,7 @@ impl ProductTranslatableContent {
             Some(d) => d.clone(),
             None => return None,
         };
-        let eid: i32 = self.product.as_ref().and_then(|e| e.id.as_ref()).and_then(|i| rustygod_db::catalog::parse_gid(&i.0)).unwrap_or(-1);
+        let eid: i32 = self.product.as_ref().and_then(|e| e.id.as_ref()).and_then(|i| saleor_rustify_db::catalog::parse_gid(&i.0)).unwrap_or(-1);
         let lang = crate::gen::language_code_value(&_arg_language_code);
         crate::translations::product_translation(&db, eid, lang).await
     }
@@ -25453,7 +25453,7 @@ impl ProductVariant {
             Some(d) => d.clone(),
             None => return None,
         };
-        let eid: i32 = self.id.as_ref().and_then(|i| rustygod_db::catalog::parse_gid(&i.0)).unwrap_or(-1);
+        let eid: i32 = self.id.as_ref().and_then(|i| saleor_rustify_db::catalog::parse_gid(&i.0)).unwrap_or(-1);
         let lang = crate::gen::language_code_value(&_arg_language_code);
         crate::translations::product_variant_translation(&db, eid, lang).await
     }
@@ -25746,7 +25746,7 @@ impl ProductVariantTranslatableContent {
             Some(d) => d.clone(),
             None => return None,
         };
-        let eid: i32 = self.product_variant.as_ref().and_then(|e| e.id.as_ref()).and_then(|i| rustygod_db::catalog::parse_gid(&i.0)).unwrap_or(-1);
+        let eid: i32 = self.product_variant.as_ref().and_then(|e| e.id.as_ref()).and_then(|i| saleor_rustify_db::catalog::parse_gid(&i.0)).unwrap_or(-1);
         let lang = crate::gen::language_code_value(&_arg_language_code);
         crate::translations::product_variant_translation(&db, eid, lang).await
     }
@@ -26632,7 +26632,7 @@ impl ShippingMethodTranslatableContent {
             Some(d) => d.clone(),
             None => return None,
         };
-        let eid: i32 = self.shipping_method.as_ref().and_then(|e| e.id.as_ref()).and_then(|i| rustygod_db::catalog::parse_gid(&i.0)).unwrap_or(-1);
+        let eid: i32 = self.shipping_method.as_ref().and_then(|e| e.id.as_ref()).and_then(|i| saleor_rustify_db::catalog::parse_gid(&i.0)).unwrap_or(-1);
         let lang = crate::gen::language_code_value(&_arg_language_code);
         crate::translations::shipping_method_translation(&db, eid, lang).await
     }
@@ -26724,7 +26724,7 @@ impl ShippingMethodType {
             Some(d) => d.clone(),
             None => return None,
         };
-        let eid: i32 = self.id.as_ref().and_then(|i| rustygod_db::catalog::parse_gid(&i.0)).unwrap_or(-1);
+        let eid: i32 = self.id.as_ref().and_then(|i| saleor_rustify_db::catalog::parse_gid(&i.0)).unwrap_or(-1);
         let lang = crate::gen::language_code_value(&_arg_language_code);
         crate::translations::shipping_method_translation(&db, eid, lang).await
     }
@@ -28079,15 +28079,15 @@ impl User {
 
         {
         use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QuerySelect};
-        let uid: i32 = self.id.as_ref().and_then(|i| rustygod_db::catalog::parse_gid(&i.0)).unwrap_or(-1);
+        let uid: i32 = self.id.as_ref().and_then(|i| saleor_rustify_db::catalog::parse_gid(&i.0)).unwrap_or(-1);
         let db = match ctx.data_opt::<crate::context::GqlContext>().and_then(|g| g.db().ok()) {
             Some(d) => d.clone(),
             None => return None,
         };
-        let n = rustygod_db::entities::order_order::Entity::find()
+        let n = saleor_rustify_db::entities::order_order::Entity::find()
             .select_only()
-            .column(rustygod_db::entities::order_order::Column::Id)
-            .filter(rustygod_db::entities::order_order::Column::UserId.eq(uid))
+            .column(saleor_rustify_db::entities::order_order::Column::Id)
+            .filter(saleor_rustify_db::entities::order_order::Column::UserId.eq(uid))
             .into_tuple::<uuid::Uuid>()
             .all(&db)
             .await
@@ -28339,7 +28339,7 @@ impl Voucher {
             Some(d) => d.clone(),
             None => return None,
         };
-        let eid: i32 = self.id.as_ref().and_then(|i| rustygod_db::catalog::parse_gid(&i.0)).unwrap_or(-1);
+        let eid: i32 = self.id.as_ref().and_then(|i| saleor_rustify_db::catalog::parse_gid(&i.0)).unwrap_or(-1);
         let lang = crate::gen::language_code_value(&_arg_language_code);
         crate::translations::voucher_translation(&db, eid, lang).await
     }
@@ -28585,7 +28585,7 @@ impl VoucherTranslatableContent {
             Some(d) => d.clone(),
             None => return None,
         };
-        let eid: i32 = self.voucher.as_ref().and_then(|e| e.id.as_ref()).and_then(|i| rustygod_db::catalog::parse_gid(&i.0)).unwrap_or(-1);
+        let eid: i32 = self.voucher.as_ref().and_then(|e| e.id.as_ref()).and_then(|i| saleor_rustify_db::catalog::parse_gid(&i.0)).unwrap_or(-1);
         let lang = crate::gen::language_code_value(&_arg_language_code);
         crate::translations::voucher_translation(&db, eid, lang).await
     }

@@ -33,7 +33,7 @@ SCHEMA = os.environ.get(
     "/home/matin/Desktop/dev/saleor/dashboard/schema-main.graphql",
 )
 DASH_SRC = "/home/matin/Desktop/dev/saleor/dashboard/src"
-OUT = "/home/matin/Desktop/dev/rustygod-saleor/crates/graphql/src/gen.rs"
+OUT = os.path.join(SCRIPT_DIR, "..", "crates", "graphql", "src", "gen.rs")
 
 # Hand-written GraphQL types that are COMPLETE for dashboard selections
 # (verified vs usage) — codegen must not redefine these names.

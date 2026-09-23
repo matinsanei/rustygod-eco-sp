@@ -1,4 +1,4 @@
-# 📊 rustygod-saleor Benchmarks
+# 📊 saleor-rustify Benchmarks
 
 Numbers or it didn't happen. All figures below are reproducible with the
 `bench` example or the k6 suite (`bench/k6-grpc.js`) against a local Saleor
@@ -58,7 +58,7 @@ Same machine, same PostgreSQL, same query — `products(first: 20, channel:
 | Server | Throughput | p50 | p95 | Notes |
 |---|---|---|---|---|
 | Saleor (uvicorn, 2 workers, `DEBUG=False`) | ~133 rps | ~144ms | ~207ms | stock Django+graphene, same DB |
-| rustygod-server (release LTO) | **~2,592 rps** | **~7.4ms** | **~9.9ms** | RSS ~43MB under load |
+| saleor-rustify-server (release LTO) | **~2,592 rps** | **~7.4ms** | **~9.9ms** | RSS ~43MB under load |
 
 ≈**20× throughput, ≈19× latency** on this read workload. Honest caveats:
 same-machine/shared resources; Django ran its Dockerfile-default 2 workers;
@@ -119,14 +119,14 @@ Debug-build reference (same machine, pre-fix): ~400 rps @ p50 ~150ms.
 - Every RPC emits a trace span (`TraceLayer::new_for_grpc`) and Prometheus
   metrics: `grpc_requests_total{service,method}`,
   `grpc_request_duration_seconds{service,method}` (with quantiles).
-- Scrape: `RUSTYGOD_METRICS_ADDR` (default `127.0.0.1:9000`).
+- Scrape: `RUSTIFY_METRICS_ADDR` (default `127.0.0.1:9000`).
 - Honest limit: tonic puts the RPC status in trailers, so the tower layer
   labels transport-level signals only — business errors stay explicit in
   each response's `errors` field.
 
 ## Docker (Phase 2)
 
-- `docker build -t rustygod-saleor .` → **busybox:glibc + stripped binary**
+- `docker build -t saleor-rustify .` → **busybox:glibc + stripped binary**
   (was 23.6MB before wasmtime/aws-lc/codegen deps; current image tracks the
   60.5MB LTO binary — rebuild with `docker build` to get the current figure).
 - `docker compose up --build` → Postgres + server (:50051 gRPC, :9000 metrics)
@@ -142,8 +142,8 @@ Debug-build reference (same machine, pre-fix): ~400 rps @ p50 ~150ms.
 ## Reproduce
 
 ```bash
-cargo build --release -p rustygod-server --bin rustygod-server --example bench
-./target/release/rustygod-server &          # needs RUSTYGOD_DATABASE_URL
+cargo build --release -p saleor-rustify-server --bin saleor-rustify-server --example bench
+./target/release/saleor-rustify-server &          # needs RUSTIFY_DATABASE_URL
 ./target/release/examples/bench load 200 20
 ./target/release/examples/bench spike 1000 20
 k6 run bench/k6-grpc.js                     # 200 VU load, p99<50ms threshold

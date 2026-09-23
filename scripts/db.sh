@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Backup / restore the Saleor PostgreSQL that rustygod-saleor shares with Django.
+# Backup / restore the Saleor PostgreSQL that saleor-rustify shares with Django.
 # Learned the hard way: database processes die, snapshots save weekends.
 #
 # The live DB is reached over TCP (default 127.0.0.1:5434 — override with

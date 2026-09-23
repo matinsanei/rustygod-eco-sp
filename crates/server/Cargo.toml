@@ -1,10 +1,10 @@
 [package]
-name = "rustygod-server"
+name = "saleor-rustify-server"
 version = "0.1.0"
 edition = "2021"
 
 [[bin]]
-name = "rustygod-server"
+name = "saleor-rustify"
 path = "src/main.rs"
 
 [dependencies]
@@ -14,13 +14,13 @@ rust_decimal = { workspace = true }
 uuid = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
-rustygod-proto = { path = "../proto" }
-rustygod-core = { path = "../core" }
-rustygod-db = { path = "../db" }
-rustygod-ai = { path = "../ai" }
-rustygod-plugins = { path = "../plugins" }
-rustygod-graphql = { path = "../graphql" }
-rustygod-psp = { path = "../psp" }
+saleor-rustify-proto = { path = "../proto" }
+saleor-rustify-core = { path = "../core" }
+saleor-rustify-db = { path = "../db" }
+saleor-rustify-ai = { path = "../ai" }
+saleor-rustify-plugins = { path = "../plugins" }
+saleor-rustify-graphql = { path = "../graphql" }
+saleor-rustify-psp = { path = "../psp" }
 async-graphql = { version = "7", features = ["chrono", "uuid", "decimal"] }
 async-graphql-axum = "7"
 axum = { version = "0.7", features = ["json"] }

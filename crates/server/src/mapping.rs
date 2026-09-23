@@ -1,10 +1,10 @@
 //! View → protobuf mapping (transport belongs to the server crate,
 //! never to `core` or `db`).
 
-use rustygod_db::relations::{
+use saleor_rustify_db::relations::{
     AttributeView, CategoryDetail, CollectionView, MediaView, ProductTypeView,
 };
-use rustygod_proto::product as pb;
+use saleor_rustify_proto::product as pb;
 
 pub fn category_to_proto(c: &CategoryDetail) -> pb::CategoryDetail {
     pb::CategoryDetail {

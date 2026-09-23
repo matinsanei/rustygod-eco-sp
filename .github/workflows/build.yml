@@ -1,4 +1,4 @@
-# Build, test and publish rustygod-saleor to GHCR.
+# Build, test and publish saleor-rustify to GHCR.
 #
 # - `test`: PG-free checks (workspace check + unit/SDL/PSP tests with cargo caching).
 # - `publish`: multi-layer-cached docker build, pushed to GHCR on master/tags.
@@ -30,9 +30,9 @@ jobs:
         run: cargo check --workspace --all-targets
       - name: PG-free tests
         run: |
-          cargo test -p rustygod-graphql --test schema_sdl
-          cargo test -p rustygod-psp
-          cargo test -p rustygod-core
+          cargo test -p saleor-rustify-graphql --test schema_sdl
+          cargo test -p saleor-rustify-psp
+          cargo test -p saleor-rustify-core
 
   publish:
     needs: test
@@ -58,7 +58,7 @@ jobs:
             type=sha,prefix=master-,enable={{is_default_branch}}
             type=ref,event=tag
           labels: |
-            org.opencontainers.image.title=rustygod-saleor
+            org.opencontainers.image.title=saleor-rustify
             org.opencontainers.image.description=Saleor commerce engine rewritten in Rust (same PostgreSQL, zero migration)
       - uses: docker/build-push-action@v6
         with:

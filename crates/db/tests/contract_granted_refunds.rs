@@ -4,14 +4,14 @@
 //! linked back to the decision and flips status to success. Covers T1a.
 
 use rust_decimal::Decimal;
-use rustygod_db::{
+use saleor_rustify_db::{
     catalog, checkout_store, complete, database_url, granted_refunds, order_store, payments,
 };
 use sea_orm::DatabaseConnection;
 use uuid::Uuid;
 
 async fn db() -> DatabaseConnection {
-    rustygod_db::connect(&database_url())
+    saleor_rustify_db::connect(&database_url())
         .await
         .expect("saleor postgres must be up (localhost:5434)")
 }
@@ -30,7 +30,7 @@ mod fs2 {
             let f = std::fs::OpenOptions::new()
                 .create(true)
                 .write(true)
-                .open("/tmp/rustygod-stock.lock")
+                .open("/tmp/rustify-stock.lock")
                 .expect("stock lock");
             f.lock_exclusive().expect("stock lock");
             Self { _f: f }
@@ -109,7 +109,7 @@ async fn paid_order(db: &DatabaseConnection, tag: &str) -> PaidOrder {
 }
 
 async fn cleanup(db: &DatabaseConnection, g: &granted_refunds::GrantView, txn_id: i32) {
-    use rustygod_db::entities::{
+    use saleor_rustify_db::entities::{
         order_ordergrantedrefund, order_ordergrantedrefundline, payment_transactionevent,
         payment_transactionitem,
     };
@@ -189,7 +189,7 @@ async fn create_rejects_amount_above_charged() {
     .unwrap_err();
     assert!(err.to_string().contains("only"), "must cite charged coverage: {err}");
     // No row left behind.
-    use rustygod_db::entities::order_ordergrantedrefund;
+    use saleor_rustify_db::entities::order_ordergrantedrefund;
     use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
     let n = order_ordergrantedrefund::Entity::find()
         .filter(order_ordergrantedrefund::Column::OrderId.eq(o.order_id))
@@ -199,7 +199,7 @@ async fn create_rejects_amount_above_charged() {
         .len();
     assert_eq!(n, 0);
     // Cleanup bare transaction.
-    use rustygod_db::entities::{payment_transactionevent, payment_transactionitem};
+    use saleor_rustify_db::entities::{payment_transactionevent, payment_transactionitem};
     payment_transactionevent::Entity::delete_many()
         .filter(payment_transactionevent::Column::TransactionId.eq(o.txn_id))
         .exec(&db)
@@ -239,7 +239,7 @@ async fn execute_moves_money_and_flips_status() {
     let v = payments::view(&db, o.txn_id).await.unwrap();
     assert_eq!(v.refunded, o.total, "money actually moved");
     // The money event links back to the decision.
-    use rustygod_db::entities::payment_transactionevent;
+    use saleor_rustify_db::entities::payment_transactionevent;
     use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
     let linked = payment_transactionevent::Entity::find()
         .filter(payment_transactionevent::Column::TransactionId.eq(o.txn_id))
@@ -249,7 +249,7 @@ async fn execute_moves_money_and_flips_status() {
         .unwrap();
     assert!(!linked.is_empty(), "refund events must reference the grant");
     // RC2 live: decision vs money parity holds after execute.
-    let checks = rustygod_db::reconcile::reconcile_order(&db, o.order_id)
+    let checks = saleor_rustify_db::reconcile::reconcile_order(&db, o.order_id)
         .await
         .unwrap();
     let rc2 = checks.iter().find(|c| c.name == "refunded_within_charged").unwrap();
@@ -318,7 +318,7 @@ async fn create_rejects_foreign_line() {
     .unwrap_err();
     assert!(err.to_string().contains("does not belong"), "{err}");
     // Cleanup both bare setups.
-    use rustygod_db::entities::{payment_transactionevent, payment_transactionitem};
+    use saleor_rustify_db::entities::{payment_transactionevent, payment_transactionitem};
     use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
     for t in [a.txn_id, b.txn_id] {
         payment_transactionevent::Entity::delete_many()

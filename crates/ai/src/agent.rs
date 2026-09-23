@@ -153,7 +153,7 @@ async fn first_priced_variant(
     if vids.is_empty() {
         return Ok(None);
     }
-    let pricing = rustygod_db::catalog::checkout_pricing(db, channel_slug, &vids).await?;
+    let pricing = saleor_rustify_db::catalog::checkout_pricing(db, channel_slug, &vids).await?;
     Ok(vids.into_iter().find(|v| pricing.contains_key(v)))
 }
 
@@ -164,7 +164,7 @@ pub async fn plan_checkout(
     channel_slug: &str,
     message: &str,
 ) -> Result<AgentPlan> {
-    let (channel_id, currency) = rustygod_db::catalog::channel_info(db, channel_slug).await?;
+    let (channel_id, currency) = saleor_rustify_db::catalog::channel_info(db, channel_slug).await?;
     let mut plan = AgentPlan { lines: vec![], notes: vec![], questions: vec![] };
     // Batch the pricing lookup across all matched variants at the end is
     // overkill here; per-phrase resolution keeps the flow obvious and the

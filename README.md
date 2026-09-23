@@ -1,6 +1,11 @@
-# ⚡ rustygod-saleor
+# ⚡ saleor-rustify
 
 **[Saleor](https://github.com/saleor/saleor), rewritten in Rust. Same PostgreSQL. Zero data migration. Just swap the image.**
+
+> **Trademark note:** saleor-rustify is an independent community project and is
+> not affiliated with, endorsed by, or sponsored by Saleor Ltd. / Mirumee.
+> "Saleor" is a trademark of its respective owner; it is used here solely to
+> describe compatibility with the Saleor API and database schema.
 
 [![Rust](https://img.shields.io/badge/rust-1.93-orange?logo=rust&logoColor=white)](https://www.rust-lang.org)
 [![gRPC](https://img.shields.io/badge/api-gRPC%20%2B%20GraphQL-blue.svg)](https://github.com/hyperium/tonic)
@@ -10,7 +15,7 @@
 [![Dashboard](https://img.shields.io/badge/dashboard_ops-457%2F457-brightgreen.svg)](#graphql-bff-enterprise)
 
 [Saleor](https://github.com/saleor/saleor) is a great commerce engine trapped in a slow body: Python/Django, gigabytes of RAM,
-GraphQL overhead on every hot path. **rustygod-saleor** is a ground-up Rust rewrite that runs
+GraphQL overhead on every hot path. **saleor-rustify** is a ground-up Rust rewrite that runs
 against **the exact same PostgreSQL schema Django created** — 145 tables, same constraints,
 same rows. Migration friction for operators: **zero**. Point the binary at your database URL
 and go.
@@ -36,7 +41,7 @@ Because the ceiling is structural: GIL-bound request handling, ORM-per-row overh
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│                    rustygod-saleor                       │
+│                    saleor-rustify                       │
 │                                                          │
 │  crates/proto   Protobuf contracts (tonic build)         │
 │    common · product · checkout · order                   │
@@ -58,7 +63,7 @@ Because the ceiling is structural: GIL-bound request handling, ORM-per-row overh
 │    gRPC :50051 · GraphQL :8000 · metrics :9000            │
 │    modes: api · worker · beat · check · migrate · seed    │
 └──────────────────────┬──────────────────────────────────┘
-                       │  RUSTYGOD_DATABASE_URL
+                       │  RUSTIFY_DATABASE_URL
                        ▼
               PostgreSQL (Django-managed)
               145 tables · populatedb-compatible
@@ -128,11 +133,11 @@ The stock Saleor Dashboard runs against `/graphql` with zero schema errors
 # 1. You already have this (Saleor's database, migrated + populated):
 psql $DATABASE_URL -c "select count(*) from product_product;"
 # 2. Point Rust at it — no dump, no ETL, no downtime window:
-export RUSTYGOD_DATABASE_URL="postgres://saleor:saleor@db:5432/saleor"
-./rustygod-server   # gRPC on 127.0.0.1:50051 + GraphQL on http://127.0.0.1:8000/graphql
+export RUSTIFY_DATABASE_URL="postgres://saleor:saleor@db:5432/saleor"
+./saleor-rustify-server   # gRPC on 127.0.0.1:50051 + GraphQL on http://127.0.0.1:8000/graphql
 ```
 
-Unset `RUSTYGOD_DATABASE_URL` and the server runs the offline in-memory demo instead.
+Unset `RUSTIFY_DATABASE_URL` and the server runs the offline in-memory demo instead.
 Django keeps working throughout — both read the same rows.
 
 ## Docker / GHCR
@@ -143,17 +148,17 @@ Every push to `master` builds and publishes a versioned image
 ```bash
 # Run the published image against your Saleor PostgreSQL (same schema, zero migration):
 docker run --rm -p 50051:50051 -p 8000:8000 \
-  -e RUSTYGOD_DATABASE_URL="postgres://saleor:saleor@host.docker.internal:5432/saleor" \
-  -e RUSTYGOD_ADDR="0.0.0.0:50051" \
-  -e RUSTYGOD_GRAPHQL_ADDR="0.0.0.0:8000" \
-  ghcr.io/matinsanei/rustygod-eco-sp:latest
+  -e RUSTIFY_DATABASE_URL="postgres://saleor:saleor@host.docker.internal:5432/saleor" \
+  -e RUSTIFY_ADDR="0.0.0.0:50051" \
+  -e RUSTIFY_GRAPHQL_ADDR="0.0.0.0:8000" \
+  ghcr.io/matinsanei/saleor-rustify:latest
 # gRPC :50051 · GraphQL http://localhost:8000/graphql · metrics :9000
-# Modes: docker run ... ghcr.io/matinsanei/rustygod-eco-sp:latest worker|beat|check|migrate
+# Modes: docker run ... ghcr.io/matinsanei/saleor-rustify:latest worker|beat|check|migrate
 ```
 
 Tags: `latest` (master HEAD) and `master-<sha>` per commit. Images carry the
 `org.opencontainers.image.*` labels (revision, source, created). No secrets
-are baked in — configuration is environment-only (`RUSTYGOD_*`,
+are baked in — configuration is environment-only (`RUSTIFY_*`,
 `STRIPE_SECRET_KEY`, `SALEOR_MEDIA_*`).
 
 ## Quickstart
@@ -162,18 +167,18 @@ are baked in — configuration is environment-only (`RUSTYGOD_*`,
 # Prerequisites: Rust 1.93+, a Saleor PostgreSQL (see below for the dev one)
 cargo build
 # Run tests per package with -j2 (full-workspace parallel builds can OOM small machines):
-cargo test -j2 -p rustygod-graphql --test schema_sdl   # 3/3 green, no DB needed
-cargo test -j2 -p rustygod-db --test contract_guest    # DB contract smoke vs live rows
+cargo test -j2 -p saleor-rustify-graphql --test schema_sdl   # 3/3 green, no DB needed
+cargo test -j2 -p saleor-rustify-db --test contract_guest    # DB contract smoke vs live rows
 # Totals: 215 tests (119 DB contracts vs Django rows + unit + flow + SDL)
 
 # Against the real database:
-export RUSTYGOD_DATABASE_URL="postgres://saleor:saleor@localhost:5432/saleor"
-./target/debug/rustygod-server          # api: gRPC :50051 + GraphQL :8000 + metrics :9000
-./target/debug/rustygod-server worker   # webhook outbox delivery (celery-worker equivalent)
-./target/debug/rustygod-server beat     # periodic scheduler (celery-beat equivalent, 20 entries)
-./target/debug/rustygod-server check    # readiness probe (DB + key tables)
-./target/debug/rustygod-server migrate  # Saleor's own Django DDL (manage.py migrate)
-./target/debug/rustygod-server seed --createsuperuser  # Saleor's own populatedb mock data
+export RUSTIFY_DATABASE_URL="postgres://saleor:saleor@localhost:5432/saleor"
+./target/debug/saleor-rustify-server          # api: gRPC :50051 + GraphQL :8000 + metrics :9000
+./target/debug/saleor-rustify-server worker   # webhook outbox delivery (celery-worker equivalent)
+./target/debug/saleor-rustify-server beat     # periodic scheduler (celery-beat equivalent, 20 entries)
+./target/debug/saleor-rustify-server check    # readiness probe (DB + key tables)
+./target/debug/saleor-rustify-server migrate  # Saleor's own Django DDL (manage.py migrate)
+./target/debug/saleor-rustify-server seed --createsuperuser  # Saleor's own populatedb mock data
 # Dashboard (existing Saleor Dashboard): API_URL=http://localhost:8000/graphql pnpm --filter dashboard dev
 ```
 
@@ -274,7 +279,7 @@ the byte): **flat-rate-tax** (`calculate_tax`), **min-order-validator**
 webhook path). `PluginService` registers/calls/lists/unregisters modules
 (staff: `manage_apps`; builtins pinned); the registry persists in the
 `rustygod_plugin` table (ours — Django ignores it). Extension points named
-in `RUSTYGOD_PUBLIC_POINTS` are callable without auth (the storefront path).
+in `RUSTIFY_PUBLIC_POINTS` are callable without auth (the storefront path).
 `sdk/plugin.mjs` is the JS client sketch.
 
 ## TypeScript SDK (generated, single source of truth)
@@ -296,7 +301,7 @@ order #522 minted live during development). Known edge, documented in
 - [x] Order persistence on Django tables (`order_order`/`orderline`: same sequence, exact status strings, variant-detail lines, user + addresses from checkout)
 - [x] Product relations (MPTT category tree, channel-aware collections, types, attributes, media)
 - [x] Commerce services (discount/shipping/giftcard/menu/page/account/channel/tax/warehouse) — now also via GraphQL `channels/warehouses/taxClasses/shippingMethods/pages/promotions/menu`
-- [x] AI layer v1 (`rustygod-ai`): `Embedder`/`VectorStore` traits with deterministic local backends, pg_trgm search, co-occurrence recommender, streaming grounded chat
+- [x] AI layer v1 (`saleor-rustify-ai`): `Embedder`/`VectorStore` traits with deterministic local backends, pg_trgm search, co-occurrence recommender, streaming grounded chat
 - [x] 119 contract tests green (unit + comparative vs Django rows + service flow + audit + GraphQL SDL)
 - [x] Promotion engine (catalogue + **order promotions**: gift XOR discount, max-saving winner, voucher precedence, `is_gift` carry + allocation)
 - [x] Payments (TransactionItem event-group recalc + PSP dedup/async/3DS per-checkout R3 guard, `adjust_authorization`)

@@ -1,7 +1,7 @@
 //! Minimal gRPC load/spike bench over the live server.
 //! Usage: bench [load|spike]  — prints ~10 summary lines, nothing else.
 
-use rustygod_proto::{
+use saleor_rustify_proto::{
     ai::{semantic_search_client::SemanticSearchClient, SearchProductsRequest},
     product::{product_service_client::ProductServiceClient, GetProductRequest, ListProductsRequest},
 };

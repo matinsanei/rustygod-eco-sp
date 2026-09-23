@@ -1,6 +1,6 @@
-use rustygod_core::order::Order;
-use rustygod_db::{catalog, checkout_store};
-use rustygod_proto::checkout::{
+use saleor_rustify_core::order::Order;
+use saleor_rustify_db::{catalog, checkout_store};
+use saleor_rustify_proto::checkout::{
     checkout_service_server::CheckoutService, AddLinesRequest, AddLinesResponse,
     ApplyVoucherRequest, ApplyVoucherResponse, CompleteCheckoutRequest, CompleteCheckoutResponse,
     RefreshOrderPromotionRequest, RefreshOrderPromotionResponse,
@@ -29,8 +29,8 @@ impl CheckoutServiceImpl {
         }
     }
 
-    fn err(code: &str, message: String) -> rustygod_proto::common::Error {
-        rustygod_proto::common::Error {
+    fn err(code: &str, message: String) -> saleor_rustify_proto::common::Error {
+        saleor_rustify_proto::common::Error {
             code: code.into(),
             message,
             field: String::new(),
@@ -58,14 +58,14 @@ fn not_found_checkout() -> AddLinesResponse {
 /// Build the wire Checkout with the **discounted** total from the refreshed
 /// Django row (Django's `checkout.total`), not the undiscounted line sum.
 fn checkout_proto(
-    co: &rustygod_db::entities::checkout_checkout::Model,
-    lines: &[rustygod_db::entities::checkout_checkoutline::Model],
+    co: &saleor_rustify_db::entities::checkout_checkout::Model,
+    lines: &[saleor_rustify_db::entities::checkout_checkoutline::Model],
     channel: &str,
-) -> rustygod_proto::checkout::Checkout {
+) -> saleor_rustify_proto::checkout::Checkout {
     let domain = checkout_store::to_domain(co, lines, channel);
     let mut proto = domain.to_proto();
     proto.total = Some(
-        rustygod_core::money::Money::new(co.total_gross_amount, co.currency.clone()).into(),
+        saleor_rustify_core::money::Money::new(co.total_gross_amount, co.currency.clone()).into(),
     );
     proto
 }
@@ -102,7 +102,7 @@ impl CheckoutService for CheckoutServiceImpl {
             }));
         }
         // Offline memory mode.
-        let checkout = rustygod_core::checkout::Checkout::new(channel, req.email, "USD");
+        let checkout = saleor_rustify_core::checkout::Checkout::new(channel, req.email, "USD");
         let proto = checkout.to_proto();
         lock(&self.store)?
             .checkouts
@@ -247,7 +247,7 @@ impl CheckoutService for CheckoutServiceImpl {
             }));
         }
         // Offline memory mode.
-        let prices: Vec<(String, rustygod_core::money::Money)> = {
+        let prices: Vec<(String, saleor_rustify_core::money::Money)> = {
             let store = lock(&self.store)?;
             let mut out = Vec::new();
             for line in &req.lines {
@@ -313,7 +313,7 @@ impl CheckoutService for CheckoutServiceImpl {
         use sea_orm::TransactionTrait;
         // Validate + write discount rows + refresh totals atomically.
         let txn = db.begin().await.map_err(|e| Status::internal(e.to_string()))?;
-        let applied = rustygod_db::promotions::apply_voucher(&txn, token, &req.code, "default-channel")
+        let applied = saleor_rustify_db::promotions::apply_voucher(&txn, token, &req.code, "default-channel")
             .await
             .map_err(|e| Status::internal(e.to_string()));
         let applied = match applied {
@@ -368,14 +368,14 @@ impl CheckoutService for CheckoutServiceImpl {
             // The atomic pipeline (db::complete): idempotent replay, locked
             // validation, mint, voucher, gift cards, allocation, events,
             // checkout delete — then webhooks after commit.
-            return match rustygod_db::complete::complete_checkout(db, token).await {
+            return match saleor_rustify_db::complete::complete_checkout(db, token).await {
                 Ok(out) => {
                     // Post-commit fast path (R8): fire outbox deliveries without
                     // blocking the response; failures stay pending for the
                     // sweeper. Never touches the committed transaction.
                     if !out.delivery_ids.is_empty() {
                         let dbc = db.clone();
-                        let domain = std::env::var("RUSTYGOD_DOMAIN")
+                        let domain = std::env::var("RUSTIFY_DOMAIN")
                             .unwrap_or_else(|_| "localhost".into());
                         let ids = out.delivery_ids.clone();
                         tokio::spawn(async move {
@@ -471,8 +471,8 @@ impl CheckoutService for CheckoutServiceImpl {
         let Some(token) = parse_token(&request.into_inner().checkout_id) else {
             return Ok(fail("NOT_FOUND", "checkout not found".into()));
         };
-        match rustygod_db::order_promotions::refresh_order_promotion(db, token).await {
-            Ok(rustygod_db::order_promotions::RefreshOutcome::Cleared) => {
+        match saleor_rustify_db::order_promotions::refresh_order_promotion(db, token).await {
+            Ok(saleor_rustify_db::order_promotions::RefreshOutcome::Cleared) => {
                 Ok(Response::new(RefreshOrderPromotionResponse {
                     applied: "none".into(),
                     rule_id: String::new(),
@@ -481,7 +481,7 @@ impl CheckoutService for CheckoutServiceImpl {
                     errors: vec![],
                 }))
             }
-            Ok(rustygod_db::order_promotions::RefreshOutcome::Discount { rule_id, amount }) => {
+            Ok(saleor_rustify_db::order_promotions::RefreshOutcome::Discount { rule_id, amount }) => {
                 Ok(Response::new(RefreshOrderPromotionResponse {
                     applied: "discount".into(),
                     rule_id: rule_id.to_string(),
@@ -490,7 +490,7 @@ impl CheckoutService for CheckoutServiceImpl {
                     errors: vec![],
                 }))
             }
-            Ok(rustygod_db::order_promotions::RefreshOutcome::Gift { rule_id, variant_id, .. }) => {
+            Ok(saleor_rustify_db::order_promotions::RefreshOutcome::Gift { rule_id, variant_id, .. }) => {
                 Ok(Response::new(RefreshOrderPromotionResponse {
                     applied: "gift".into(),
                     rule_id: rule_id.to_string(),

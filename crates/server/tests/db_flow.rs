@@ -3,22 +3,22 @@
 //! (second complete is a clean NOT_FOUND, never a second order), and
 //! same-variant line merging.
 
-use rustygod_db::{catalog, database_url};
-use rustygod_proto::{
+use saleor_rustify_db::{catalog, database_url};
+use saleor_rustify_proto::{
     checkout::{
         checkout_service_server::CheckoutService, AddLinesRequest, CheckoutLine,
         CompleteCheckoutRequest, CreateCheckoutRequest,
     },
     order::{order_service_server::OrderService, GetOrderRequest, ListOrdersRequest},
 };
-use rustygod_server::{
+use saleor_rustify_server::{
     service_checkout::CheckoutServiceImpl, service_order::OrderServiceImpl,
     store::new_store,
 };
 use tonic::Request;
 
 async fn services() -> (CheckoutServiceImpl, OrderServiceImpl) {
-    let db = rustygod_db::connect(&database_url()).await.unwrap();
+    let db = saleor_rustify_db::connect(&database_url()).await.unwrap();
     let store = new_store();
     (
         CheckoutServiceImpl::with_db(store.clone(), db.clone()),
@@ -27,7 +27,7 @@ async fn services() -> (CheckoutServiceImpl, OrderServiceImpl) {
 }
 
 async fn variant_id() -> String {
-    let db = rustygod_db::connect(&database_url()).await.unwrap();
+    let db = saleor_rustify_db::connect(&database_url()).await.unwrap();
     let products = catalog::list_products(&db, "default-channel", None, 100)
         .await
         .unwrap();
@@ -77,7 +77,7 @@ async fn db_complete_mints_order_then_deletes_checkout() {
         assert!(got.lines.len() == 1, "lines must merge, got {}", got.lines.len());
     }
     let got = checkout_svc
-        .get_checkout(Request::new(rustygod_proto::checkout::GetCheckoutRequest {
+        .get_checkout(Request::new(saleor_rustify_proto::checkout::GetCheckoutRequest {
             id: co.id.clone(),
         }))
         .await
@@ -144,11 +144,11 @@ async fn db_complete_mints_order_then_deletes_checkout() {
 
     // Cleanup minted order row (test data only): allocations, events,
     // lines, then the order — FK order respected.
-    use rustygod_db::entities::{
+    use saleor_rustify_db::entities::{
         order_order, order_orderevent, order_orderline, warehouse_allocation,
     };
     use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QuerySelect};
-    let db = rustygod_db::connect(&database_url()).await.unwrap();
+    let db = saleor_rustify_db::connect(&database_url()).await.unwrap();
     let oid: uuid::Uuid = done.order_id.parse().unwrap();
     let line_ids: Vec<uuid::Uuid> = order_orderline::Entity::find()
         .select_only()

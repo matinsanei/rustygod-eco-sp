@@ -3,14 +3,14 @@
 //! search must surface what Django indexed, recommendations must reflect
 //! real co-purchases, chat must stay grounded in catalog rows.
 
-use rustygod_ai::{agent, chat, recommend, search};
-use rustygod_ai::embed::HashingEmbedder;
-use rustygod_ai::vectors;
-use rustygod_db::{catalog, database_url};
+use saleor_rustify_ai::{agent, chat, recommend, search};
+use saleor_rustify_ai::embed::HashingEmbedder;
+use saleor_rustify_ai::vectors;
+use saleor_rustify_db::{catalog, database_url};
 use sea_orm::DatabaseConnection;
 
 async fn db() -> DatabaseConnection {
-    rustygod_db::connect(&database_url())
+    saleor_rustify_db::connect(&database_url())
         .await
         .expect("saleor postgres must be up (localhost:5434)")
 }
@@ -57,7 +57,7 @@ async fn gibberish_search_returns_empty_without_error() {
 
 #[tokio::test]
 async fn recommendations_reflect_real_copurchases() {
-    use rustygod_db::entities::order_orderline;
+    use saleor_rustify_db::entities::order_orderline;
     use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QuerySelect};
 
     let db = db().await;
@@ -131,7 +131,7 @@ async fn semantic_search_ranks_exact_name_top() {
 
 #[tokio::test]
 async fn recommender_v2_backfills_beyond_copurchase() {
-    use rustygod_db::entities::order_orderline;
+    use saleor_rustify_db::entities::order_orderline;
     use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QuerySelect};
     let db = db().await;
     let e = HashingEmbedder::default();

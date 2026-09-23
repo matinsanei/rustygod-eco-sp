@@ -2,12 +2,12 @@
 //! mint+voucher+giftcard+allocate+event+delete, and full rollback on
 //! insufficient stock. Covers audit R1–R7, E1, E13, RC3, RC8.
 
-use rustygod_db::{catalog, checkout_store, complete, database_url};
+use saleor_rustify_db::{catalog, checkout_store, complete, database_url};
 use sea_orm::DatabaseConnection;
 use uuid::Uuid;
 
 async fn db() -> DatabaseConnection {
-    rustygod_db::connect(&database_url())
+    saleor_rustify_db::connect(&database_url())
         .await
         .expect("saleor postgres must be up (localhost:5434)")
 }
@@ -53,7 +53,7 @@ mod fs2 {
             let f = std::fs::OpenOptions::new()
                 .create(true)
                 .write(true)
-                .open("/tmp/rustygod-stock.lock")
+                .open("/tmp/rustify-stock.lock")
                 .expect("lock file");
             f.lock_exclusive().expect("stock lock");
             Self { _f: f }
@@ -75,13 +75,13 @@ async fn complete_mints_allocates_events_and_replays() {
     assert!(checkout_store::load_checkout(&db, token).await.unwrap().is_none());
 
     // Order stamped with the token + PLACED event.
-    let (header, lines) = rustygod_db::order_store::get_order_rows(&db, out.order_id)
+    let (header, lines) = saleor_rustify_db::order_store::get_order_rows(&db, out.order_id)
         .await
         .unwrap()
         .unwrap();
     assert_eq!(header.id, out.order_id);
     assert!(!lines.is_empty());
-    use rustygod_db::entities::order_orderevent;
+    use saleor_rustify_db::entities::order_orderevent;
     use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
     let placed = order_orderevent::Entity::find()
         .filter(order_orderevent::Column::OrderId.eq(out.order_id))
@@ -92,7 +92,7 @@ async fn complete_mints_allocates_events_and_replays() {
     assert!(placed.is_some(), "PLACED event must exist");
 
     // Allocations cover tracked lines (RC3).
-    use rustygod_db::entities::warehouse_allocation;
+    use saleor_rustify_db::entities::warehouse_allocation;
     for l in &lines {
         if l.variant_id.is_none() {
             continue;
@@ -130,7 +130,7 @@ async fn complete_mints_allocates_events_and_replays() {
     assert_eq!(placed_count, 1, "replay must not duplicate PLACED");
 
     // Reconciliation: a fresh atomic completion is fully consistent.
-    let checks = rustygod_db::reconcile::reconcile_order(&db, out.order_id)
+    let checks = saleor_rustify_db::reconcile::reconcile_order(&db, out.order_id)
         .await
         .unwrap();
     assert_eq!(checks.len(), 9);
@@ -148,7 +148,7 @@ async fn complete_rolls_back_on_insufficient_stock() {
     // checkout must survive untouched (all-or-nothing).
     let (_, lines) = checkout_store::load_checkout(&db, token).await.unwrap().unwrap();
     // Bump line qty to absurd via direct update of the checkout line.
-    use rustygod_db::entities::checkout_checkoutline;
+    use saleor_rustify_db::entities::checkout_checkoutline;
     use sea_orm::{ActiveModelTrait, EntityTrait, Set};
     let line = checkout_checkoutline::Entity::find_by_id(lines[0].id)
         .one(&db)
@@ -166,7 +166,7 @@ async fn complete_rolls_back_on_insufficient_stock() {
     let (co, lines) = checkout_store::load_checkout(&db, token).await.unwrap().unwrap();
     assert_eq!(lines.len(), 1);
     assert_eq!(co.token, token);
-    use rustygod_db::entities::order_order;
+    use saleor_rustify_db::entities::order_order;
     use sea_orm::{ColumnTrait, QueryFilter};
     let orphan = order_order::Entity::find()
         .filter(order_order::Column::CheckoutToken.eq(token.to_string()))

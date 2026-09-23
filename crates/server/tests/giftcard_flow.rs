@@ -2,13 +2,13 @@
 //! balance → redeem → refund, all against real Postgres, mirroring
 //! `saleor/giftcard/tests/` checkout/order integration.
 
-use rustygod_db::{catalog, checkout_store, database_url};
-use rustygod_proto::giftcard::{
+use saleor_rustify_db::{catalog, checkout_store, database_url};
+use saleor_rustify_proto::giftcard::{
     gift_card_service_server::GiftCardService, BalanceMutationRequest, CheckoutBalanceRequest,
     CheckoutGiftCardRequest, GetGiftCardRequest, IssueGiftCardRequest, RedeemGiftCardRequest,
     SetActiveRequest,
 };
-use rustygod_server::service_giftcard::GiftCardServiceImpl;
+use saleor_rustify_server::service_giftcard::GiftCardServiceImpl;
 use tonic::Request;
 
 fn test_key() -> String {
@@ -23,12 +23,12 @@ fn test_key() -> String {
 /// MANAGE_GIFT_CARD since access control landed).
 async fn staff_req<T>(msg: T) -> Request<T> {
     std::env::set_var("RSA_PRIVATE_KEY", test_key());
-    let db = rustygod_db::connect(&database_url()).await.unwrap();
-    let (user, _) = rustygod_db::auth::find_for_login(&db, "admin@example.com")
+    let db = saleor_rustify_db::connect(&database_url()).await.unwrap();
+    let (user, _) = saleor_rustify_db::auth::find_for_login(&db, "admin@example.com")
         .await
         .unwrap()
         .unwrap();
-    let pair = rustygod_core::auth::mint_tokens_with_key(
+    let pair = saleor_rustify_core::auth::mint_tokens_with_key(
         &test_key(),
         "test",
         &user.email,
@@ -46,12 +46,12 @@ async fn staff_req<T>(msg: T) -> Request<T> {
 }
 
 async fn svc() -> GiftCardServiceImpl {
-    let db = rustygod_db::connect(&database_url()).await.unwrap();
+    let db = saleor_rustify_db::connect(&database_url()).await.unwrap();
     GiftCardServiceImpl::new(Some(db))
 }
 
 async fn fresh_checkout() -> String {
-    let db = rustygod_db::connect(&database_url()).await.unwrap();
+    let db = saleor_rustify_db::connect(&database_url()).await.unwrap();
     let (ch_id, currency) = catalog::channel_info(&db, "default-channel").await.unwrap();
     checkout_store::create_checkout_row(&db, ch_id, &currency, "gc-buyer@example.com")
         .await

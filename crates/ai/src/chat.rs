@@ -63,7 +63,7 @@ async fn top_variant_for(
     db: &DatabaseConnection,
     product_id: i32,
 ) -> Result<Option<i32>> {
-    use rustygod_db::entities::product_productvariant;
+    use saleor_rustify_db::entities::product_productvariant;
     use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QuerySelect};
     Ok(product_productvariant::Entity::find()
         .select_only()

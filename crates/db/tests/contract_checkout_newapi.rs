@@ -1,11 +1,11 @@
 //! New-checkout-API row writers: lines update/delete, setters, promo remove.
 
-use rustygod_db::{catalog, checkout_store, database_url};
+use saleor_rustify_db::{catalog, checkout_store, database_url};
 use sea_orm::DatabaseConnection;
 use uuid::Uuid;
 
 async fn db() -> DatabaseConnection {
-    rustygod_db::connect(&database_url())
+    saleor_rustify_db::connect(&database_url())
         .await
         .expect("saleor postgres must be up (localhost:5434)")
 }

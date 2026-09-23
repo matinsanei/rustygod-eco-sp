@@ -119,5 +119,5 @@ pub async fn has_permission(
 }
 
 pub async fn issuer() -> String {
-    std::env::var("RUSTYGOD_JWT_ISSUER").unwrap_or_else(|_| "localhost".to_string())
+    std::env::var("RUSTIFY_JWT_ISSUER").unwrap_or_else(|_| "localhost".to_string())
 }

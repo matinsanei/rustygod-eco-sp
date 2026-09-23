@@ -4,11 +4,11 @@
 
 use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
-use rustygod_db::{catalog, database_url, taxes};
+use saleor_rustify_db::{catalog, database_url, taxes};
 use sea_orm::DatabaseConnection;
 
 async fn db() -> DatabaseConnection {
-    rustygod_db::connect(&database_url())
+    saleor_rustify_db::connect(&database_url())
         .await
         .expect("saleor postgres must be up (localhost:5434)")
 }
@@ -38,7 +38,7 @@ async fn default_rate_falls_back_by_country() {
 #[tokio::test]
 async fn class_rate_beats_default_when_present() {
     let db = db().await;
-    use rustygod_db::entities::tax_taxclasscountryrate;
+    use saleor_rustify_db::entities::tax_taxclasscountryrate;
     use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
     let specific = tax_taxclasscountryrate::Entity::find()
         .filter(tax_taxclasscountryrate::Column::TaxClassId.is_not_null())
@@ -81,6 +81,6 @@ async fn lines_tax_like_django_flat_rates() {
     // No class on populatedb products -> default DE 19%.
     assert_eq!(l.tax_rate, dec!(19));
     assert_eq!(l.unit_net, unit);
-    assert_eq!(l.unit_gross, rustygod_core::tax::flat_rate_tax(unit, dec!(19), false).1);
+    assert_eq!(l.unit_gross, saleor_rustify_core::tax::flat_rate_tax(unit, dec!(19), false).1);
     assert_eq!(l.total_gross - l.total_net, l.unit_gross * Decimal::from(2) - l.unit_net * Decimal::from(2));
 }

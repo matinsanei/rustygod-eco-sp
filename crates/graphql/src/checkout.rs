@@ -27,11 +27,11 @@ pub struct GqlCheckout {
 }
 
 fn to_gql_checkout(
-    co: &rustygod_db::entities::checkout_checkout::Model,
-    lines: &[rustygod_db::entities::checkout_checkoutline::Model],
+    co: &saleor_rustify_db::entities::checkout_checkout::Model,
+    lines: &[saleor_rustify_db::entities::checkout_checkoutline::Model],
     channel: &str,
 ) -> GqlCheckout {
-    let d = rustygod_db::checkout_store::to_domain(co, lines, channel);
+    let d = saleor_rustify_db::checkout_store::to_domain(co, lines, channel);
     let total = Money { amount: co.total_gross_amount.to_string(), currency: co.currency.clone(), fraction_digits: None };
     GqlCheckout {
         id: ID(crate::common::gid("Checkout", &d.id)),
@@ -155,13 +155,13 @@ async fn load_gql(    db: &sea_orm::DatabaseConnection,
     token: Uuid,
     ch: &str,
 ) -> Result<GqlCheckout> {
-    let (co, lines) = rustygod_db::checkout_store::load_checkout(db, token)
+    let (co, lines) = saleor_rustify_db::checkout_store::load_checkout(db, token)
         .await.map_err(|e| Error::new(e.to_string()))?
         .ok_or_else(|| Error::new("checkout not found"))?;
     Ok(to_gql_checkout(&co, &lines, ch))
 }
 
-fn channel_of(co: &rustygod_db::entities::checkout_checkout::Model) -> String {
+fn channel_of(co: &saleor_rustify_db::entities::checkout_checkout::Model) -> String {
     match co.channel_id { 2 => "channel-pln".to_string(), _ => "default-channel".to_string() }
 }
 
@@ -179,7 +179,7 @@ async fn save_checkout_address(
     ) else {
         return Err("first name, last name, street, city, postal code and country are required".into());
     };
-    rustygod_db::checkout_store::set_checkout_address(db, token, billing, &first, &last, &street, &city, &postal, &country)
+    saleor_rustify_db::checkout_store::set_checkout_address(db, token, billing, &first, &last, &street, &city, &postal, &country)
         .await
         .map(|_| ())
         .map_err(|e| e.to_string())
@@ -194,7 +194,7 @@ async fn unit_prices(
     items: &[(i32, Option<rust_decimal::Decimal>)],
 ) -> Result<std::collections::HashMap<i32, rust_decimal::Decimal>> {
     let vids: Vec<i32> = items.iter().map(|(v, _)| *v).collect();
-    let pricing = rustygod_db::catalog::checkout_pricing(db, ch, &vids).await.map_err(|e| Error::new(e.to_string()))?;
+    let pricing = saleor_rustify_db::catalog::checkout_pricing(db, ch, &vids).await.map_err(|e| Error::new(e.to_string()))?;
     let can_override = crate::account::require_perm(ctx, "handle_checkouts").await.is_ok();
     Ok(items.iter().map(|(vid, ov)| {
         let unit = match (can_override, ov) {
@@ -213,7 +213,7 @@ impl CheckoutQuery {
     async fn checkout(&self, ctx: &Context<'_>, id: ID) -> Result<Option<GqlCheckout>> {        let g = ctx.data::<GqlContext>()?;
         let db = g.db()?;
         let token: Uuid = crate::common::parse_uuid_gid(&id.0).ok_or_else(|| Error::new("id must be UUID"))?;
-        let Some((co, lines)) = rustygod_db::checkout_store::load_checkout(db, token).await.map_err(|e| Error::new(e.to_string()))? else { return Ok(None) };
+        let Some((co, lines)) = saleor_rustify_db::checkout_store::load_checkout(db, token).await.map_err(|e| Error::new(e.to_string()))? else { return Ok(None) };
         // Channel slug round-trip via channel_id (v1 ids 1/2 as in server).
         let ch = match co.channel_id { 2 => "channel-pln", _ => "default-channel" };
         Ok(Some(to_gql_checkout(&co, &lines, ch)))
@@ -267,9 +267,9 @@ impl CheckoutMutation {
         let g = ctx.data::<GqlContext>()?;
         let db = g.db()?;
         let ch = channel.unwrap_or_else(|| "default-channel".into());
-        let (ch_id, currency) = rustygod_db::catalog::channel_info(db, &ch).await.map_err(|e| Error::new(e.to_string()))?;
-        let token = rustygod_db::checkout_store::create_checkout_row(db, ch_id, &currency, &email).await.map_err(|e| Error::new(e.to_string()))?;
-        let (co, lines) = rustygod_db::checkout_store::load_checkout(db, token).await.map_err(|e| Error::new(e.to_string()))?.ok_or_else(|| Error::new("just-inserted checkout missing"))?;
+        let (ch_id, currency) = saleor_rustify_db::catalog::channel_info(db, &ch).await.map_err(|e| Error::new(e.to_string()))?;
+        let token = saleor_rustify_db::checkout_store::create_checkout_row(db, ch_id, &currency, &email).await.map_err(|e| Error::new(e.to_string()))?;
+        let (co, lines) = saleor_rustify_db::checkout_store::load_checkout(db, token).await.map_err(|e| Error::new(e.to_string()))?.ok_or_else(|| Error::new("just-inserted checkout missing"))?;
         Ok(to_gql_checkout(&co, &lines, &ch))
     }
 
@@ -277,19 +277,19 @@ impl CheckoutMutation {
         let g = ctx.data::<GqlContext>()?;
         let db = g.db()?;
         let token: Uuid = crate::common::parse_uuid_gid(&checkout_id.0).ok_or_else(|| Error::new("checkoutId must be UUID"))?;
-        let Some((co, _)) = rustygod_db::checkout_store::load_checkout(db, token).await.map_err(|e| Error::new(e.to_string()))? else { return Err(Error::new("checkout not found")) };
+        let Some((co, _)) = saleor_rustify_db::checkout_store::load_checkout(db, token).await.map_err(|e| Error::new(e.to_string()))? else { return Err(Error::new("checkout not found")) };
         let ch = match co.channel_id { 2 => "channel-pln", _ => "default-channel" };
-        let (ch_id, currency) = rustygod_db::catalog::channel_info(db, &ch).await.map_err(|e| Error::new(e.to_string()))?;
+        let (ch_id, currency) = saleor_rustify_db::catalog::channel_info(db, &ch).await.map_err(|e| Error::new(e.to_string()))?;
         // Price from channel listings (same as gRPC AddLines).
-        let vids: Vec<i32> = lines.iter().filter_map(|l| rustygod_db::catalog::parse_gid(&l.variant_id.0)).collect();
-        let pricing = rustygod_db::catalog::checkout_pricing(db, &ch, &vids).await.map_err(|e| Error::new(e.to_string()))?;
-        let items: Vec<rustygod_db::checkout_store::NewLine> = lines.into_iter().map(|l| {
-            let vid: i32 = rustygod_db::catalog::parse_gid(&l.variant_id.0).unwrap_or(0);
+        let vids: Vec<i32> = lines.iter().filter_map(|l| saleor_rustify_db::catalog::parse_gid(&l.variant_id.0)).collect();
+        let pricing = saleor_rustify_db::catalog::checkout_pricing(db, &ch, &vids).await.map_err(|e| Error::new(e.to_string()))?;
+        let items: Vec<saleor_rustify_db::checkout_store::NewLine> = lines.into_iter().map(|l| {
+            let vid: i32 = saleor_rustify_db::catalog::parse_gid(&l.variant_id.0).unwrap_or(0);
             let unit = pricing.get(&vid).map(|(m, _)| m.amount).unwrap_or(rust_decimal::Decimal::ZERO);
-            rustygod_db::checkout_store::NewLine { variant_id: vid, quantity: l.quantity, unit_price: unit, price_override: None }
+            saleor_rustify_db::checkout_store::NewLine { variant_id: vid, quantity: l.quantity, unit_price: unit, price_override: None }
         }).collect();
-        rustygod_db::checkout_store::add_lines_tx(db, token, ch_id, &currency, &items).await.map_err(|e| Error::new(e.to_string()))?;
-        let (co2, ls2) = rustygod_db::checkout_store::load_checkout(db, token).await.map_err(|e| Error::new(e.to_string()))?.ok_or_else(|| Error::new("checkout vanished"))?;
+        saleor_rustify_db::checkout_store::add_lines_tx(db, token, ch_id, &currency, &items).await.map_err(|e| Error::new(e.to_string()))?;
+        let (co2, ls2) = saleor_rustify_db::checkout_store::load_checkout(db, token).await.map_err(|e| Error::new(e.to_string()))?.ok_or_else(|| Error::new("checkout vanished"))?;
         Ok(to_gql_checkout(&co2, &ls2, &ch))
     }
 
@@ -297,7 +297,7 @@ impl CheckoutMutation {
         let g = ctx.data::<GqlContext>()?;
         let db = g.db()?;
         let token: Uuid = crate::common::parse_uuid_gid(&checkout_id.0).ok_or_else(|| Error::new("checkoutId must be UUID"))?;
-        let out = rustygod_db::complete::complete_checkout(db, token).await.map_err(|e| Error::new(e.to_string()))?;
+        let out = saleor_rustify_db::complete::complete_checkout(db, token).await.map_err(|e| Error::new(e.to_string()))?;
         Ok(ID(crate::common::gid("Order", out.order_id)))
     }
 
@@ -306,12 +306,12 @@ impl CheckoutMutation {
         let db = g.db()?;
         let token: Uuid = crate::common::parse_uuid_gid(&checkout_id.0).ok_or_else(|| Error::new("checkoutId must be UUID"))?;
         let ch = {
-            let (co, _) = rustygod_db::checkout_store::load_checkout(db, token).await.map_err(|e| Error::new(e.to_string()))?.ok_or_else(|| Error::new("checkout not found"))?;
+            let (co, _) = saleor_rustify_db::checkout_store::load_checkout(db, token).await.map_err(|e| Error::new(e.to_string()))?.ok_or_else(|| Error::new("checkout not found"))?;
             match co.channel_id { 2 => "channel-pln".to_string(), _ => "default-channel".to_string() }
         };
-        rustygod_db::promotions::apply_voucher(db, token, &code, &ch).await.map_err(|e| Error::new(e.to_string()))?;
-        rustygod_db::checkout_store::refresh_totals(db, token).await.map_err(|e| Error::new(e.to_string()))?;
-        let (co2, ls2) = rustygod_db::checkout_store::load_checkout(db, token).await.map_err(|e| Error::new(e.to_string()))?.ok_or_else(|| Error::new("checkout vanished"))?;
+        saleor_rustify_db::promotions::apply_voucher(db, token, &code, &ch).await.map_err(|e| Error::new(e.to_string()))?;
+        saleor_rustify_db::checkout_store::refresh_totals(db, token).await.map_err(|e| Error::new(e.to_string()))?;
+        let (co2, ls2) = saleor_rustify_db::checkout_store::load_checkout(db, token).await.map_err(|e| Error::new(e.to_string()))?.ok_or_else(|| Error::new("checkout vanished"))?;
         Ok(to_gql_checkout(&co2, &ls2, &ch))
     }
 
@@ -319,11 +319,11 @@ impl CheckoutMutation {
         let g = ctx.data::<GqlContext>()?;
         let db = g.db()?;
         let token: Uuid = crate::common::parse_uuid_gid(&checkout_id.0).ok_or_else(|| Error::new("checkoutId must be UUID"))?;
-        let out = rustygod_db::order_promotions::refresh_order_promotion(db, token).await.map_err(|e| Error::new(e.to_string()))?;
+        let out = saleor_rustify_db::order_promotions::refresh_order_promotion(db, token).await.map_err(|e| Error::new(e.to_string()))?;
         Ok(match out {
-            rustygod_db::order_promotions::RefreshOutcome::Cleared => "none".into(),
-            rustygod_db::order_promotions::RefreshOutcome::Discount { rule_id, amount } => format!("discount:{rule_id}:{amount}"),
-            rustygod_db::order_promotions::RefreshOutcome::Gift { rule_id, variant_id, .. } => format!("gift:{rule_id}:{variant_id}"),
+            saleor_rustify_db::order_promotions::RefreshOutcome::Cleared => "none".into(),
+            saleor_rustify_db::order_promotions::RefreshOutcome::Discount { rule_id, amount } => format!("discount:{rule_id}:{amount}"),
+            saleor_rustify_db::order_promotions::RefreshOutcome::Gift { rule_id, variant_id, .. } => format!("gift:{rule_id}:{variant_id}"),
         })
     }
 
@@ -341,13 +341,13 @@ impl CheckoutMutation {
     async fn checkout_create(&self, ctx: &Context<'_>, input: CheckoutCreateInput) -> Result<CheckoutCreate> {
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
         let ch = input.channel.clone().unwrap_or_else(|| "default-channel".into());
-        let (ch_id, currency) = rustygod_db::catalog::channel_info(db, &ch).await.map_err(|e| Error::new(e.to_string()))?;
+        let (ch_id, currency) = saleor_rustify_db::catalog::channel_info(db, &ch).await.map_err(|e| Error::new(e.to_string()))?;
         if input.lines.is_empty() {
             return Ok(CheckoutCreate { checkout: None, errors: ckerr("at least one line is required".into()) });
         }
-        let token = rustygod_db::checkout_store::create_checkout_row(db, ch_id, &currency, input.email.as_deref().unwrap_or("")).await.map_err(|e| Error::new(e.to_string()))?;
+        let token = saleor_rustify_db::checkout_store::create_checkout_row(db, ch_id, &currency, input.email.as_deref().unwrap_or("")).await.map_err(|e| Error::new(e.to_string()))?;
         let items: Vec<(i32, Option<rust_decimal::Decimal>)> = input.lines.iter()
-            .filter_map(|l| rustygod_db::catalog::parse_gid(&l.variant_id.0).map(|v| (v, parse_price(&l.price))))
+            .filter_map(|l| saleor_rustify_db::catalog::parse_gid(&l.variant_id.0).map(|v| (v, parse_price(&l.price))))
             .collect();
         if items.is_empty() {
             return Ok(CheckoutCreate { checkout: None, errors: ckerr("unknown variants".into()) });
@@ -359,7 +359,7 @@ impl CheckoutMutation {
             let qty = l.quantity.max(1);
             let unit = units.get(&vid).copied().unwrap_or(rust_decimal::Decimal::ZERO);
             // force_new_line / metadata ride on the line row when present.
-            let lid = rustygod_db::checkout_store::add_line_row(db, token, vid, qty, unit, &currency, None).await.map_err(|e| Error::new(e.to_string()))?;
+            let lid = saleor_rustify_db::checkout_store::add_line_row(db, token, vid, qty, unit, &currency, None).await.map_err(|e| Error::new(e.to_string()))?;
             let _ = (lid, l.force_new_line);
         }
         if let Some(a) = input.shipping_address.as_ref() {
@@ -369,13 +369,13 @@ impl CheckoutMutation {
             if let Err(e) = save_checkout_address(db, token, true, a).await { return Ok(CheckoutCreate { checkout: None, errors: ckerr(e) }); }
         }
         if let Some(l) = input.language_code.as_ref() {
-            let _ = rustygod_db::checkout_store::set_language_code(db, token, crate::gen::language_code_value(l).to_string()).await;
+            let _ = saleor_rustify_db::checkout_store::set_language_code(db, token, crate::gen::language_code_value(l).to_string()).await;
         }
         if let Some(m) = input.metadata.as_ref() {
             let merged = crate::common::merge_metadata(&serde_json::Value::Null, m);
-            let _ = rustygod_db::checkout_store::set_metadata_opt(db, token, Some(merged)).await;
+            let _ = saleor_rustify_db::checkout_store::set_metadata_opt(db, token, Some(merged)).await;
         }
-        let _ = rustygod_db::checkout_store::refresh_totals(db, token).await;
+        let _ = saleor_rustify_db::checkout_store::refresh_totals(db, token).await;
         Ok(CheckoutCreate { checkout: Some(load_gql(db, token, &ch).await?), errors: vec![] })
     }
 
@@ -389,20 +389,20 @@ impl CheckoutMutation {
             Ok(t) => t,
             Err(e) => return Ok(CheckoutLinesAdd { checkout: None, errors: ckerr(e) }),
         };
-        let (co, _) = rustygod_db::checkout_store::load_checkout(db, t).await.map_err(|e| Error::new(e.to_string()))?.ok_or_else(|| Error::new("checkout not found"))?;
+        let (co, _) = saleor_rustify_db::checkout_store::load_checkout(db, t).await.map_err(|e| Error::new(e.to_string()))?.ok_or_else(|| Error::new("checkout not found"))?;
         let ch = channel_of(&co);
-        let (ch_id, currency) = rustygod_db::catalog::channel_info(db, &ch).await.map_err(|e| Error::new(e.to_string()))?;
+        let (ch_id, currency) = saleor_rustify_db::catalog::channel_info(db, &ch).await.map_err(|e| Error::new(e.to_string()))?;
         let items: Vec<(i32, i32, Option<rust_decimal::Decimal>)> = lines.iter()
-            .filter_map(|l| rustygod_db::catalog::parse_gid(&l.variant_id.0).map(|v| (v, l.quantity.max(1), parse_price(&l.price))))
+            .filter_map(|l| saleor_rustify_db::catalog::parse_gid(&l.variant_id.0).map(|v| (v, l.quantity.max(1), parse_price(&l.price))))
             .collect();
         let units = unit_prices(ctx, db, &ch, &items.iter().map(|(v, _, p)| (*v, *p)).collect::<Vec<_>>()).await?;
-        let nl: Vec<rustygod_db::checkout_store::NewLine> = items.into_iter().map(|(vid, qty, _)| {
-            rustygod_db::checkout_store::NewLine { variant_id: vid, quantity: qty, unit_price: units.get(&vid).copied().unwrap_or(rust_decimal::Decimal::ZERO), price_override: None }
+        let nl: Vec<saleor_rustify_db::checkout_store::NewLine> = items.into_iter().map(|(vid, qty, _)| {
+            saleor_rustify_db::checkout_store::NewLine { variant_id: vid, quantity: qty, unit_price: units.get(&vid).copied().unwrap_or(rust_decimal::Decimal::ZERO), price_override: None }
         }).collect();
-        if let Err(e) = rustygod_db::checkout_store::add_lines_tx(db, t, ch_id, &currency, &nl).await {
+        if let Err(e) = saleor_rustify_db::checkout_store::add_lines_tx(db, t, ch_id, &currency, &nl).await {
             return Ok(CheckoutLinesAdd { checkout: None, errors: ckerr(e.to_string()) });
         }
-        let _ = rustygod_db::checkout_store::refresh_totals(db, t).await;
+        let _ = saleor_rustify_db::checkout_store::refresh_totals(db, t).await;
         Ok(CheckoutLinesAdd { checkout: Some(load_gql(db, t, &ch).await?), errors: vec![] })
     }
 
@@ -416,7 +416,7 @@ impl CheckoutMutation {
             Ok(t) => t,
             Err(e) => return Ok(CheckoutLinesUpdate { checkout: None, errors: ckerr(e.to_string()) }),
         };
-        let (co, _) = rustygod_db::checkout_store::load_checkout(db, t).await.map_err(|e| Error::new(e.to_string()))?.ok_or_else(|| Error::new("checkout not found"))?;
+        let (co, _) = saleor_rustify_db::checkout_store::load_checkout(db, t).await.map_err(|e| Error::new(e.to_string()))?.ok_or_else(|| Error::new("checkout not found"))?;
         let ch = channel_of(&co);
         for l in &lines {
             // lineId preferred, legacy variantId honored.
@@ -425,11 +425,11 @@ impl CheckoutMutation {
                 return Ok(CheckoutLinesUpdate { checkout: None, errors: ckerr("lineId is required".into()) });
             };
             let qty = l.quantity.unwrap_or(1).max(0);
-            if let Err(e) = rustygod_db::checkout_store::update_line_quantity(db, t, lid, qty).await {
+            if let Err(e) = saleor_rustify_db::checkout_store::update_line_quantity(db, t, lid, qty).await {
                 return Ok(CheckoutLinesUpdate { checkout: None, errors: ckerr(e.to_string()) });
             }
         }
-        let _ = rustygod_db::checkout_store::refresh_totals(db, t).await;
+        let _ = saleor_rustify_db::checkout_store::refresh_totals(db, t).await;
         Ok(CheckoutLinesUpdate { checkout: Some(load_gql(db, t, &ch).await?), errors: vec![] })
     }
 
@@ -443,15 +443,15 @@ impl CheckoutMutation {
             Ok(t) => t,
             Err(e) => return Ok(CheckoutLineDelete { checkout: None, errors: ckerr(e.to_string()) }),
         };
-        let (co, _) = rustygod_db::checkout_store::load_checkout(db, t).await.map_err(|e| Error::new(e.to_string()))?.ok_or_else(|| Error::new("checkout not found"))?;
+        let (co, _) = saleor_rustify_db::checkout_store::load_checkout(db, t).await.map_err(|e| Error::new(e.to_string()))?.ok_or_else(|| Error::new("checkout not found"))?;
         let ch = channel_of(&co);
         let Some(lid) = line_id.as_ref().and_then(|i| crate::common::parse_uuid_gid(&i.0)) else {
             return Ok(CheckoutLineDelete { checkout: None, errors: ckerr("lineId is required".into()) });
         };
-        if let Err(e) = rustygod_db::checkout_store::delete_line(db, t, lid).await {
+        if let Err(e) = saleor_rustify_db::checkout_store::delete_line(db, t, lid).await {
             return Ok(CheckoutLineDelete { checkout: None, errors: ckerr(e.to_string()) });
         }
-        let _ = rustygod_db::checkout_store::refresh_totals(db, t).await;
+        let _ = saleor_rustify_db::checkout_store::refresh_totals(db, t).await;
         Ok(CheckoutLineDelete { checkout: Some(load_gql(db, t, &ch).await?), errors: vec![] })
     }
 
@@ -461,7 +461,7 @@ impl CheckoutMutation {
             Ok(t) => t,
             Err(e) => return Ok(CheckoutDelete { checkout: None, errors: ckerr(e.to_string()) }),
         };
-        if let Err(e) = rustygod_db::checkout_store::delete_checkout_row(db, t).await {
+        if let Err(e) = saleor_rustify_db::checkout_store::delete_checkout_row(db, t).await {
             return Ok(CheckoutDelete { checkout: None, errors: ckerr(e.to_string()) });
         }
         Ok(CheckoutDelete { checkout: None, errors: vec![] })
@@ -476,9 +476,9 @@ impl CheckoutMutation {
             Ok(t) => t,
             Err(e) => return Ok(CheckoutEmailUpdate { checkout: None, errors: ckerr(e.to_string()) }),
         };
-        let (co, _) = rustygod_db::checkout_store::load_checkout(db, t).await.map_err(|e| Error::new(e.to_string()))?.ok_or_else(|| Error::new("checkout not found"))?;
+        let (co, _) = saleor_rustify_db::checkout_store::load_checkout(db, t).await.map_err(|e| Error::new(e.to_string()))?.ok_or_else(|| Error::new("checkout not found"))?;
         let ch = channel_of(&co);
-        if let Err(e) = rustygod_db::checkout_store::set_email_opt(db, t, Some(email)).await {
+        if let Err(e) = saleor_rustify_db::checkout_store::set_email_opt(db, t, Some(email)).await {
             return Ok(CheckoutEmailUpdate { checkout: None, errors: ckerr(e.to_string()) });
         }
         Ok(CheckoutEmailUpdate { checkout: Some(load_gql(db, t, &ch).await?), errors: vec![] })
@@ -494,10 +494,10 @@ impl CheckoutMutation {
             Ok(t) => t,
             Err(e) => return Ok(CheckoutCustomerAttach { checkout: None, errors: ckerr(e.to_string()) }),
         };
-        let (co, _) = rustygod_db::checkout_store::load_checkout(db, t).await.map_err(|e| Error::new(e.to_string()))?.ok_or_else(|| Error::new("checkout not found"))?;
+        let (co, _) = saleor_rustify_db::checkout_store::load_checkout(db, t).await.map_err(|e| Error::new(e.to_string()))?.ok_or_else(|| Error::new("checkout not found"))?;
         let ch = channel_of(&co);
-        let uid = customer_id.as_ref().and_then(|i| rustygod_db::catalog::parse_gid(&i.0));
-        if let Err(e) = rustygod_db::checkout_store::set_customer_opt(db, t, uid).await {
+        let uid = customer_id.as_ref().and_then(|i| saleor_rustify_db::catalog::parse_gid(&i.0));
+        if let Err(e) = saleor_rustify_db::checkout_store::set_customer_opt(db, t, uid).await {
             return Ok(CheckoutCustomerAttach { checkout: None, errors: ckerr(e.to_string()) });
         }
         Ok(CheckoutCustomerAttach { checkout: Some(load_gql(db, t, &ch).await?), errors: vec![] })
@@ -512,9 +512,9 @@ impl CheckoutMutation {
             Ok(t) => t,
             Err(e) => return Ok(CheckoutCustomerDetach { checkout: None, errors: ckerr(e.to_string()) }),
         };
-        let (co, _) = rustygod_db::checkout_store::load_checkout(db, t).await.map_err(|e| Error::new(e.to_string()))?.ok_or_else(|| Error::new("checkout not found"))?;
+        let (co, _) = saleor_rustify_db::checkout_store::load_checkout(db, t).await.map_err(|e| Error::new(e.to_string()))?.ok_or_else(|| Error::new("checkout not found"))?;
         let ch = channel_of(&co);
-        if let Err(e) = rustygod_db::checkout_store::set_customer_opt(db, t, None).await {
+        if let Err(e) = saleor_rustify_db::checkout_store::set_customer_opt(db, t, None).await {
             return Ok(CheckoutCustomerDetach { checkout: None, errors: ckerr(e.to_string()) });
         }
         Ok(CheckoutCustomerDetach { checkout: Some(load_gql(db, t, &ch).await?), errors: vec![] })
@@ -526,9 +526,9 @@ impl CheckoutMutation {
             Ok(t) => t,
             Err(e) => return Ok(CheckoutCustomerNoteUpdate { checkout: None, errors: ckerr(e.to_string()) }),
         };
-        let (co, _) = rustygod_db::checkout_store::load_checkout(db, t).await.map_err(|e| Error::new(e.to_string()))?.ok_or_else(|| Error::new("checkout not found"))?;
+        let (co, _) = saleor_rustify_db::checkout_store::load_checkout(db, t).await.map_err(|e| Error::new(e.to_string()))?.ok_or_else(|| Error::new("checkout not found"))?;
         let ch = channel_of(&co);
-        if let Err(e) = rustygod_db::checkout_store::set_note_text(db, t, customer_note).await {
+        if let Err(e) = saleor_rustify_db::checkout_store::set_note_text(db, t, customer_note).await {
             return Ok(CheckoutCustomerNoteUpdate { checkout: None, errors: ckerr(e.to_string()) });
         }
         Ok(CheckoutCustomerNoteUpdate { checkout: Some(load_gql(db, t, &ch).await?), errors: vec![] })
@@ -544,7 +544,7 @@ impl CheckoutMutation {
             Ok(t) => t,
             Err(e) => return Ok(CheckoutShippingAddressUpdate { checkout: None, errors: ckerr(e.to_string()) }),
         };
-        let (co, _) = rustygod_db::checkout_store::load_checkout(db, t).await.map_err(|e| Error::new(e.to_string()))?.ok_or_else(|| Error::new("checkout not found"))?;
+        let (co, _) = saleor_rustify_db::checkout_store::load_checkout(db, t).await.map_err(|e| Error::new(e.to_string()))?.ok_or_else(|| Error::new("checkout not found"))?;
         let ch = channel_of(&co);
         if let Err(e) = save_checkout_address(db, t, false, &shipping_address).await {
             return Ok(CheckoutShippingAddressUpdate { checkout: None, errors: ckerr(e) });
@@ -562,7 +562,7 @@ impl CheckoutMutation {
             Ok(t) => t,
             Err(e) => return Ok(CheckoutBillingAddressUpdate { checkout: None, errors: ckerr(e.to_string()) }),
         };
-        let (co, _) = rustygod_db::checkout_store::load_checkout(db, t).await.map_err(|e| Error::new(e.to_string()))?.ok_or_else(|| Error::new("checkout not found"))?;
+        let (co, _) = saleor_rustify_db::checkout_store::load_checkout(db, t).await.map_err(|e| Error::new(e.to_string()))?.ok_or_else(|| Error::new("checkout not found"))?;
         let ch = channel_of(&co);
         if let Err(e) = save_checkout_address(db, t, true, &billing_address).await {
             return Ok(CheckoutBillingAddressUpdate { checkout: None, errors: ckerr(e) });
@@ -580,13 +580,13 @@ impl CheckoutMutation {
             Ok(t) => t,
             Err(e) => return Ok(CheckoutShippingMethodUpdate { checkout: None, errors: ckerr(e.to_string()) }),
         };
-        let (co, _) = rustygod_db::checkout_store::load_checkout(db, t).await.map_err(|e| Error::new(e.to_string()))?.ok_or_else(|| Error::new("checkout not found"))?;
+        let (co, _) = saleor_rustify_db::checkout_store::load_checkout(db, t).await.map_err(|e| Error::new(e.to_string()))?.ok_or_else(|| Error::new("checkout not found"))?;
         let ch = channel_of(&co);
-        let mid = shipping_method_id.as_ref().and_then(|i| rustygod_db::catalog::parse_gid(&i.0));
-        if let Err(e) = rustygod_db::checkout_store::set_shipping_method_opt(db, t, mid).await {
+        let mid = shipping_method_id.as_ref().and_then(|i| saleor_rustify_db::catalog::parse_gid(&i.0));
+        if let Err(e) = saleor_rustify_db::checkout_store::set_shipping_method_opt(db, t, mid).await {
             return Ok(CheckoutShippingMethodUpdate { checkout: None, errors: ckerr(e.to_string()) });
         }
-        let _ = rustygod_db::checkout_store::refresh_totals(db, t).await;
+        let _ = saleor_rustify_db::checkout_store::refresh_totals(db, t).await;
         Ok(CheckoutShippingMethodUpdate { checkout: Some(load_gql(db, t, &ch).await?), errors: vec![] })
     }
 
@@ -599,28 +599,28 @@ impl CheckoutMutation {
             Ok(t) => t,
             Err(e) => return Ok(CheckoutDeliveryMethodUpdate { checkout: None, errors: ckerr(e.to_string()) }),
         };
-        let (co, _) = rustygod_db::checkout_store::load_checkout(db, t).await.map_err(|e| Error::new(e.to_string()))?.ok_or_else(|| Error::new("checkout not found"))?;
+        let (co, _) = saleor_rustify_db::checkout_store::load_checkout(db, t).await.map_err(|e| Error::new(e.to_string()))?.ok_or_else(|| Error::new("checkout not found"))?;
         let ch = channel_of(&co);
         if let Some(dm) = delivery_method_id.as_ref() {
             // Shipping method (int gid) or collection point (warehouse UUID).
-            if let Some(mid) = rustygod_db::catalog::parse_gid(&dm.0) {
-                if let Err(e) = rustygod_db::checkout_store::set_shipping_method_opt(db, t, Some(mid)).await {
+            if let Some(mid) = saleor_rustify_db::catalog::parse_gid(&dm.0) {
+                if let Err(e) = saleor_rustify_db::checkout_store::set_shipping_method_opt(db, t, Some(mid)).await {
                     return Ok(CheckoutDeliveryMethodUpdate { checkout: None, errors: ckerr(e.to_string()) });
                 }
-                let _ = rustygod_db::checkout_store::set_collection_point_opt(db, t, None).await;
+                let _ = saleor_rustify_db::checkout_store::set_collection_point_opt(db, t, None).await;
             } else if let Some(wid) = crate::common::parse_uuid_gid(&dm.0) {
-                if let Err(e) = rustygod_db::checkout_store::set_collection_point_opt(db, t, Some(wid)).await {
+                if let Err(e) = saleor_rustify_db::checkout_store::set_collection_point_opt(db, t, Some(wid)).await {
                     return Ok(CheckoutDeliveryMethodUpdate { checkout: None, errors: ckerr(e.to_string()) });
                 }
-                let _ = rustygod_db::checkout_store::set_shipping_method_opt(db, t, None).await;
+                let _ = saleor_rustify_db::checkout_store::set_shipping_method_opt(db, t, None).await;
             } else {
                 return Ok(CheckoutDeliveryMethodUpdate { checkout: None, errors: ckerr("bad delivery method id".into()) });
             }
         } else {
-            let _ = rustygod_db::checkout_store::set_shipping_method_opt(db, t, None).await;
-            let _ = rustygod_db::checkout_store::set_collection_point_opt(db, t, None).await;
+            let _ = saleor_rustify_db::checkout_store::set_shipping_method_opt(db, t, None).await;
+            let _ = saleor_rustify_db::checkout_store::set_collection_point_opt(db, t, None).await;
         }
-        let _ = rustygod_db::checkout_store::refresh_totals(db, t).await;
+        let _ = saleor_rustify_db::checkout_store::refresh_totals(db, t).await;
         Ok(CheckoutDeliveryMethodUpdate { checkout: Some(load_gql(db, t, &ch).await?), errors: vec![] })
     }
 
@@ -634,9 +634,9 @@ impl CheckoutMutation {
             Ok(t) => t,
             Err(e) => return Ok(CheckoutLanguageCodeUpdate { checkout: None, errors: ckerr(e.to_string()) }),
         };
-        let (co, _) = rustygod_db::checkout_store::load_checkout(db, t).await.map_err(|e| Error::new(e.to_string()))?.ok_or_else(|| Error::new("checkout not found"))?;
+        let (co, _) = saleor_rustify_db::checkout_store::load_checkout(db, t).await.map_err(|e| Error::new(e.to_string()))?.ok_or_else(|| Error::new("checkout not found"))?;
         let ch = channel_of(&co);
-        if let Err(e) = rustygod_db::checkout_store::set_language_code(db, t, crate::gen::language_code_value(&language_code).to_string()).await {
+        if let Err(e) = saleor_rustify_db::checkout_store::set_language_code(db, t, crate::gen::language_code_value(&language_code).to_string()).await {
             return Ok(CheckoutLanguageCodeUpdate { checkout: None, errors: ckerr(e.to_string()) });
         }
         Ok(CheckoutLanguageCodeUpdate { checkout: Some(load_gql(db, t, &ch).await?), errors: vec![] })
@@ -652,16 +652,16 @@ impl CheckoutMutation {
             Ok(t) => t,
             Err(e) => return Ok(CheckoutAddPromoCode { checkout: None, errors: ckerr(e.to_string()) }),
         };
-        let (co, _) = rustygod_db::checkout_store::load_checkout(db, t).await.map_err(|e| Error::new(e.to_string()))?.ok_or_else(|| Error::new("checkout not found"))?;
+        let (co, _) = saleor_rustify_db::checkout_store::load_checkout(db, t).await.map_err(|e| Error::new(e.to_string()))?.ok_or_else(|| Error::new("checkout not found"))?;
         let ch = channel_of(&co);
         // Voucher first, gift card second (Django tries both code spaces).
-        let voucher_ok = rustygod_db::promotions::apply_voucher(db, t, &promo_code, &ch).await.is_ok();
+        let voucher_ok = saleor_rustify_db::promotions::apply_voucher(db, t, &promo_code, &ch).await.is_ok();
         if !voucher_ok {
-            if let Err(e) = rustygod_db::giftcards::attach_to_checkout(db, t, &promo_code, &co.currency, co.user_id).await {
+            if let Err(e) = saleor_rustify_db::giftcards::attach_to_checkout(db, t, &promo_code, &co.currency, co.user_id).await {
                 return Ok(CheckoutAddPromoCode { checkout: None, errors: ckerr(format!("invalid promo code: {e}")) });
             }
         }
-        let _ = rustygod_db::checkout_store::refresh_totals(db, t).await;
+        let _ = saleor_rustify_db::checkout_store::refresh_totals(db, t).await;
         Ok(CheckoutAddPromoCode { checkout: Some(load_gql(db, t, &ch).await?), errors: vec![] })
     }
 
@@ -677,17 +677,17 @@ impl CheckoutMutation {
             Ok(t) => t,
             Err(e) => return Ok(CheckoutRemovePromoCode { checkout: None, errors: ckerr(e.to_string()) }),
         };
-        let (co, _) = rustygod_db::checkout_store::load_checkout(db, t).await.map_err(|e| Error::new(e.to_string()))?.ok_or_else(|| Error::new("checkout not found"))?;
+        let (co, _) = saleor_rustify_db::checkout_store::load_checkout(db, t).await.map_err(|e| Error::new(e.to_string()))?.ok_or_else(|| Error::new("checkout not found"))?;
         let ch = channel_of(&co);
         let code = promo_code.clone().unwrap_or_default();
-        let cleared = rustygod_db::checkout_store::remove_voucher_code(db, t, if code.is_empty() { None } else { Some(&code) }).await.map_err(|e| Error::new(e.to_string()))?;
+        let cleared = saleor_rustify_db::checkout_store::remove_voucher_code(db, t, if code.is_empty() { None } else { Some(&code) }).await.map_err(|e| Error::new(e.to_string()))?;
         if !cleared && !code.is_empty() {
             // Maybe a gift card: detach is idempotent, missing → error.
-            if let Err(e) = rustygod_db::giftcards::detach_from_checkout(db, t, &code).await {
+            if let Err(e) = saleor_rustify_db::giftcards::detach_from_checkout(db, t, &code).await {
                 return Ok(CheckoutRemovePromoCode { checkout: None, errors: ckerr(format!("promo code not found: {e}")) });
             }
         }
-        let _ = rustygod_db::checkout_store::refresh_totals(db, t).await;
+        let _ = saleor_rustify_db::checkout_store::refresh_totals(db, t).await;
         Ok(CheckoutRemovePromoCode { checkout: Some(load_gql(db, t, &ch).await?), errors: vec![] })
     }
 
@@ -695,21 +695,21 @@ impl CheckoutMutation {
         let g = ctx.data::<GqlContext>()?;
         let db = g.db()?;
         let ch = channel.unwrap_or_else(|| "default-channel".into());
-        let plan = rustygod_ai::agent::plan_checkout(db, &ch, &message).await.map_err(|e| Error::new(e.to_string()))?;
+        let plan = saleor_rustify_ai::agent::plan_checkout(db, &ch, &message).await.map_err(|e| Error::new(e.to_string()))?;
         if plan.lines.is_empty() {
             return Err(Error::new(plan.questions.first().cloned().unwrap_or_else(|| "no purchasable items found".into())));
         }
-        let (ch_id, currency) = rustygod_db::catalog::channel_info(db, &ch).await.map_err(|e| Error::new(e.to_string()))?;
-        let token = rustygod_db::checkout_store::create_checkout_row(db, ch_id, &currency, email.as_deref().unwrap_or("")).await.map_err(|e| Error::new(e.to_string()))?;
+        let (ch_id, currency) = saleor_rustify_db::catalog::channel_info(db, &ch).await.map_err(|e| Error::new(e.to_string()))?;
+        let token = saleor_rustify_db::checkout_store::create_checkout_row(db, ch_id, &currency, email.as_deref().unwrap_or("")).await.map_err(|e| Error::new(e.to_string()))?;
         let vids: Vec<i32> = plan.lines.iter().map(|l| l.variant_id).collect();
-        let pricing = rustygod_db::catalog::checkout_pricing(db, &ch, &vids).await.map_err(|e| Error::new(e.to_string()))?;
-        let items: Vec<rustygod_db::checkout_store::NewLine> = plan.lines.iter().map(|l| {
+        let pricing = saleor_rustify_db::catalog::checkout_pricing(db, &ch, &vids).await.map_err(|e| Error::new(e.to_string()))?;
+        let items: Vec<saleor_rustify_db::checkout_store::NewLine> = plan.lines.iter().map(|l| {
             let unit = pricing.get(&l.variant_id).map(|(m, _)| m.amount).unwrap_or(rust_decimal::Decimal::ZERO);
-            rustygod_db::checkout_store::NewLine { variant_id: l.variant_id, quantity: l.quantity, unit_price: unit, price_override: None }
+            saleor_rustify_db::checkout_store::NewLine { variant_id: l.variant_id, quantity: l.quantity, unit_price: unit, price_override: None }
         }).collect();
-        rustygod_db::checkout_store::add_lines_tx(db, token, ch_id, &currency, &items).await.map_err(|e| Error::new(e.to_string()))?;
-        rustygod_db::checkout_store::refresh_totals(db, token).await.map_err(|e| Error::new(e.to_string()))?;
-        let (co, lines) = rustygod_db::checkout_store::load_checkout(db, token).await.map_err(|e| Error::new(e.to_string()))?.ok_or_else(|| Error::new("checkout vanished"))?;
+        saleor_rustify_db::checkout_store::add_lines_tx(db, token, ch_id, &currency, &items).await.map_err(|e| Error::new(e.to_string()))?;
+        saleor_rustify_db::checkout_store::refresh_totals(db, token).await.map_err(|e| Error::new(e.to_string()))?;
+        let (co, lines) = saleor_rustify_db::checkout_store::load_checkout(db, token).await.map_err(|e| Error::new(e.to_string()))?.ok_or_else(|| Error::new("checkout vanished"))?;
         Ok(AgentCheckoutResult { checkout: to_gql_checkout(&co, &lines, &ch), notes: plan.notes, questions: plan.questions })
     }
 }

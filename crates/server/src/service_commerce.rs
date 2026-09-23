@@ -1,9 +1,9 @@
-//! gRPC services over `rustygod_db::commerce`: discount, shipping,
+//! gRPC services over `saleor_rustify_db::commerce`: discount, shipping,
 //! menu, page, account, channel, tax, warehouse.
 //! (Gift cards live in the dedicated `GiftCardService`, `service_giftcard`.)
 
-use rustygod_db::commerce;
-use rustygod_proto::commerce::{
+use saleor_rustify_db::commerce;
+use saleor_rustify_proto::commerce::{
     account_service_server::AccountService, channel_service_server::ChannelService,
     discount_service_server::DiscountService,
     menu_service_server::MenuService, page_service_server::PageService,
@@ -14,7 +14,7 @@ use sea_orm::DatabaseConnection;
 use tonic::{Request, Response, Status};
 
 impl WarehouseServiceImpl {
-    fn wh_info(w: &rustygod_db::entities::warehouse_warehouse::Model) -> WarehouseInfo {
+    fn wh_info(w: &saleor_rustify_db::entities::warehouse_warehouse::Model) -> WarehouseInfo {
         WarehouseInfo {
             id: w.id.to_string(),
             name: w.name.clone(),
@@ -23,19 +23,19 @@ impl WarehouseServiceImpl {
         }
     }
 
-    fn wh_err(e: rustygod_db::DbError) -> rustygod_proto::common::Error {
+    fn wh_err(e: saleor_rustify_db::DbError) -> saleor_rustify_proto::common::Error {
         err("WAREHOUSE_ERROR", e.to_string())
     }
 }
 
 impl ChannelServiceImpl {
-    fn ch_err(e: rustygod_db::DbError) -> rustygod_proto::common::Error {
+    fn ch_err(e: saleor_rustify_db::DbError) -> saleor_rustify_proto::common::Error {
         err("CHANNEL_ERROR", e.to_string())
     }
 }
 
 impl AccountServiceImpl {
-    fn group_info(g: &rustygod_db::groups::GroupView) -> GroupInfo {
+    fn group_info(g: &saleor_rustify_db::groups::GroupView) -> GroupInfo {
         GroupInfo {
             id: g.id.to_string(),
             name: g.name.clone(),
@@ -44,7 +44,7 @@ impl AccountServiceImpl {
         }
     }
 
-    fn group_err(e: rustygod_db::DbError) -> rustygod_proto::common::Error {
+    fn group_err(e: saleor_rustify_db::DbError) -> saleor_rustify_proto::common::Error {
         err("GROUP_ERROR", e.to_string())
     }
 
@@ -62,9 +62,9 @@ impl AccountServiceImpl {
             uids.push(u.parse::<i32>().map_err(|_| Status::invalid_argument("user_ids must be integers"))?);
         }
         let out = if add {
-            rustygod_db::groups::add_members(db, id, &uids).await
+            saleor_rustify_db::groups::add_members(db, id, &uids).await
         } else {
-            rustygod_db::groups::remove_members(db, id, &uids).await
+            saleor_rustify_db::groups::remove_members(db, id, &uids).await
         };
         match out {
             Ok(g) => Ok(Response::new(GroupResponse {
@@ -88,9 +88,9 @@ impl AccountServiceImpl {
         let r = request.into_inner();
         let id: i32 = r.id.parse().map_err(|_| Status::invalid_argument("id must be an integer"))?;
         let out = if grant {
-            rustygod_db::groups::grant_permissions(db, id, &r.codenames).await
+            saleor_rustify_db::groups::grant_permissions(db, id, &r.codenames).await
         } else {
-            rustygod_db::groups::revoke_permissions(db, id, &r.codenames).await
+            saleor_rustify_db::groups::revoke_permissions(db, id, &r.codenames).await
         };
         match out {
             Ok(g) => Ok(Response::new(GroupResponse {
@@ -105,8 +105,8 @@ impl AccountServiceImpl {
     }
 }
 
-fn err(code: &str, message: String) -> rustygod_proto::common::Error {
-    rustygod_proto::common::Error {
+fn err(code: &str, message: String) -> saleor_rustify_proto::common::Error {
+    saleor_rustify_proto::common::Error {
         code: code.into(),
         message,
         field: String::new(),
@@ -373,7 +373,7 @@ impl AccountService for AccountServiceImpl {
         let db = self.db()?;
         crate::access::authorize(db, request.metadata(), crate::access::MANAGE_STAFF).await?;
         let r = request.into_inner();
-        match rustygod_db::groups::create_group(db, &r.name, &r.permissions).await {
+        match saleor_rustify_db::groups::create_group(db, &r.name, &r.permissions).await {
             Ok(g) => Ok(Response::new(GroupResponse {
                 group: Some(Self::group_info(&g)),
                 errors: vec![],
@@ -392,7 +392,7 @@ impl AccountService for AccountServiceImpl {
         let db = self.db()?;
         crate::access::authorize(db, request.metadata(), crate::access::MANAGE_STAFF).await?;
         let _ = request;
-        match rustygod_db::groups::list_groups(db).await {
+        match saleor_rustify_db::groups::list_groups(db).await {
             Ok(gs) => Ok(Response::new(ListGroupsResponse {
                 groups: gs.iter().map(Self::group_info).collect(),
             })),
@@ -408,7 +408,7 @@ impl AccountService for AccountServiceImpl {
         crate::access::authorize(db, request.metadata(), crate::access::MANAGE_STAFF).await?;
         let r = request.into_inner();
         let id: i32 = r.id.parse().map_err(|_| Status::invalid_argument("id must be an integer"))?;
-        match rustygod_db::groups::rename_group(db, id, &r.name).await {
+        match saleor_rustify_db::groups::rename_group(db, id, &r.name).await {
             Ok(g) => Ok(Response::new(GroupResponse {
                 group: Some(Self::group_info(&g)),
                 errors: vec![],
@@ -427,7 +427,7 @@ impl AccountService for AccountServiceImpl {
         let db = self.db()?;
         crate::access::authorize(db, request.metadata(), crate::access::MANAGE_STAFF).await?;
         let id: i32 = request.into_inner().id.parse().map_err(|_| Status::invalid_argument("id must be an integer"))?;
-        match rustygod_db::groups::delete_group(db, id).await {
+        match saleor_rustify_db::groups::delete_group(db, id).await {
             Ok(()) => Ok(Response::new(DeleteGroupResponse { ok: true, errors: vec![] })),
             Err(e) => Ok(Response::new(DeleteGroupResponse {
                 ok: false,
@@ -515,9 +515,9 @@ impl ChannelService for ChannelServiceImpl {
         let db = self.db()?;
         crate::access::authorize(db, request.metadata(), crate::access::MANAGE_CHANNELS).await?;
         let r = request.into_inner();
-        match rustygod_db::channels::create_channel(
+        match saleor_rustify_db::channels::create_channel(
             db,
-            rustygod_db::channels::NewChannel {
+            saleor_rustify_db::channels::NewChannel {
                 name: r.name,
                 slug: r.slug,
                 currency_code: r.currency_code,
@@ -550,10 +550,10 @@ impl ChannelService for ChannelServiceImpl {
         let db = self.db()?;
         crate::access::authorize(db, request.metadata(), crate::access::MANAGE_CHANNELS).await?;
         let r = request.into_inner();
-        match rustygod_db::channels::update_channel(
+        match saleor_rustify_db::channels::update_channel(
             db,
             &r.slug,
-            rustygod_db::channels::ChannelPatch {
+            saleor_rustify_db::channels::ChannelPatch {
                 name: (!r.name.is_empty()).then_some(r.name),
                 is_active: r.set_active.then_some(r.is_active),
                 default_country: (!r.default_country.is_empty()).then_some(r.default_country),
@@ -586,7 +586,7 @@ impl ChannelService for ChannelServiceImpl {
     ) -> Result<Response<DeleteChannelResponse>, Status> {
         let db = self.db()?;
         crate::access::authorize(db, request.metadata(), crate::access::MANAGE_CHANNELS).await?;
-        match rustygod_db::channels::delete_channel(db, &request.into_inner().slug).await {
+        match saleor_rustify_db::channels::delete_channel(db, &request.into_inner().slug).await {
             Ok(()) => Ok(Response::new(DeleteChannelResponse { ok: true, errors: vec![] })),
             Err(e) => Ok(Response::new(DeleteChannelResponse {
                 ok: false,
@@ -604,7 +604,7 @@ impl ChannelService for ChannelServiceImpl {
         let r = request.into_inner();
         let pid: i32 = r.product_id.parse().map_err(|_| Status::invalid_argument("product_id must be an integer"))?;
         let channel = channel_of(&r.channel).to_string();
-        match rustygod_db::channels::set_product_listing(
+        match saleor_rustify_db::channels::set_product_listing(
             db,
             &channel,
             pid,
@@ -639,7 +639,7 @@ impl ChannelService for ChannelServiceImpl {
             Some(r.cost_price.parse::<rust_decimal::Decimal>().map_err(|_| Status::invalid_argument("cost_price must be a decimal string"))?)
         };
         let channel = channel_of(&r.channel).to_string();
-        match rustygod_db::channels::set_variant_price(db, &channel, vid, price, cost).await {
+        match saleor_rustify_db::channels::set_variant_price(db, &channel, vid, price, cost).await {
             Ok(()) => Ok(Response::new(SetVariantPriceResponse { errors: vec![] })),
             Err(e) => Ok(Response::new(SetVariantPriceResponse {
                 errors: vec![Self::ch_err(e)],
@@ -675,7 +675,7 @@ impl TaxService for TaxServiceImpl {
         let db = self.db()?;
         let r = request.into_inner();
         let channel = channel_of(&r.channel);
-        let cfg = rustygod_db::taxes::channel_config(db, channel)
+        let cfg = saleor_rustify_db::taxes::channel_config(db, channel)
             .await
             .map_err(|e| Status::internal(e.to_string()))?;
         let class = if r.variant_id.is_empty() {
@@ -683,12 +683,12 @@ impl TaxService for TaxServiceImpl {
         } else {
             let vid: i32 = r.variant_id.parse().map_err(|_| Status::invalid_argument("variant_id must be an integer"))?;
             Some(
-                rustygod_db::taxes::class_for_variant(db, vid)
+                saleor_rustify_db::taxes::class_for_variant(db, vid)
                     .await
                     .map_err(|e| Status::internal(e.to_string()))?,
             )
         };
-        let rate = rustygod_db::taxes::rate_for_class(db, class.flatten(), &r.country)
+        let rate = saleor_rustify_db::taxes::rate_for_class(db, class.flatten(), &r.country)
             .await
             .map_err(|e| Status::internal(e.to_string()))?;
         Ok(Response::new(GetTaxRateResponse {
@@ -714,7 +714,7 @@ impl TaxService for TaxServiceImpl {
             }
             lines.push((vid, unit, l.quantity));
         }
-        let taxed = rustygod_db::taxes::calculate_lines(db, &channel, &r.country, &lines)
+        let taxed = saleor_rustify_db::taxes::calculate_lines(db, &channel, &r.country, &lines)
             .await
             .map_err(|e| Status::internal(e.to_string()))?;
         let (mut total_net, mut total_gross) =
@@ -836,9 +836,9 @@ impl WarehouseService for WarehouseServiceImpl {
         let db = self.db()?;
         crate::access::authorize(db, request.metadata(), crate::access::MANAGE_PRODUCTS).await?;
         let r = request.into_inner();
-        match rustygod_db::warehouses::create_warehouse(
+        match saleor_rustify_db::warehouses::create_warehouse(
             db,
-            rustygod_db::warehouses::NewWarehouse {
+            saleor_rustify_db::warehouses::NewWarehouse {
                 name: r.name,
                 slug: r.slug,
                 email: r.email,
@@ -871,10 +871,10 @@ impl WarehouseService for WarehouseServiceImpl {
         crate::access::authorize(db, request.metadata(), crate::access::MANAGE_PRODUCTS).await?;
         let r = request.into_inner();
         let id: uuid::Uuid = r.id.parse().map_err(|_| Status::invalid_argument("id must be a UUID"))?;
-        match rustygod_db::warehouses::update_warehouse(
+        match saleor_rustify_db::warehouses::update_warehouse(
             db,
             id,
-            rustygod_db::warehouses::WarehousePatch {
+            saleor_rustify_db::warehouses::WarehousePatch {
                 name: (!r.name.is_empty()).then_some(r.name),
                 email: (!r.email.is_empty()).then_some(r.email),
                 cc_option: (!r.cc_option.is_empty()).then_some(r.cc_option),
@@ -901,7 +901,7 @@ impl WarehouseService for WarehouseServiceImpl {
         let db = self.db()?;
         crate::access::authorize(db, request.metadata(), crate::access::MANAGE_PRODUCTS).await?;
         let id: uuid::Uuid = request.into_inner().id.parse().map_err(|_| Status::invalid_argument("id must be a UUID"))?;
-        match rustygod_db::warehouses::delete_warehouse(db, id).await {
+        match saleor_rustify_db::warehouses::delete_warehouse(db, id).await {
             Ok(()) => Ok(Response::new(DeleteWarehouseResponse { ok: true, errors: vec![] })),
             Err(e) => Ok(Response::new(DeleteWarehouseResponse {
                 ok: false,
@@ -919,7 +919,7 @@ impl WarehouseService for WarehouseServiceImpl {
         let r = request.into_inner();
         let wh: uuid::Uuid = r.warehouse_id.parse().map_err(|_| Status::invalid_argument("warehouse_id must be a UUID"))?;
         let vid: i32 = r.variant_id.parse().map_err(|_| Status::invalid_argument("variant_id must be an integer"))?;
-        match rustygod_db::warehouses::upsert_stock(db, wh, vid, r.quantity).await {
+        match saleor_rustify_db::warehouses::upsert_stock(db, wh, vid, r.quantity).await {
             Ok(s) => Ok(Response::new(UpsertStockResponse {
                 stock: Some(StockInfo {
                     warehouse_id: s.warehouse_id.to_string(),
@@ -939,7 +939,7 @@ impl WarehouseService for WarehouseServiceImpl {
         &self,
         _request: Request<ListZonesRequest>,
     ) -> Result<Response<ListZonesResponse>, Status> {
-        let zones = rustygod_db::warehouses::list_zones(self.db()?)
+        let zones = saleor_rustify_db::warehouses::list_zones(self.db()?)
             .await
             .map_err(|e| Status::internal(e.to_string()))?;
         Ok(Response::new(ListZonesResponse {
@@ -964,7 +964,7 @@ impl WarehouseService for WarehouseServiceImpl {
         let r = request.into_inner();
         let wh: uuid::Uuid = r.warehouse_id.parse().map_err(|_| Status::invalid_argument("warehouse_id must be a UUID"))?;
         let zid: i32 = r.zone_id.parse().map_err(|_| Status::invalid_argument("zone_id must be an integer"))?;
-        match rustygod_db::warehouses::assign_zone(db, wh, zid).await {
+        match saleor_rustify_db::warehouses::assign_zone(db, wh, zid).await {
             Ok(()) => Ok(Response::new(ZoneLinkResponse { ok: true, errors: vec![] })),
             Err(e) => Ok(Response::new(ZoneLinkResponse {
                 ok: false,
@@ -982,7 +982,7 @@ impl WarehouseService for WarehouseServiceImpl {
         let r = request.into_inner();
         let wh: uuid::Uuid = r.warehouse_id.parse().map_err(|_| Status::invalid_argument("warehouse_id must be a UUID"))?;
         let zid: i32 = r.zone_id.parse().map_err(|_| Status::invalid_argument("zone_id must be an integer"))?;
-        match rustygod_db::warehouses::unassign_zone(db, wh, zid).await {
+        match saleor_rustify_db::warehouses::unassign_zone(db, wh, zid).await {
             Ok(ok) => Ok(Response::new(ZoneLinkResponse { ok, errors: vec![] })),
             Err(e) => Ok(Response::new(ZoneLinkResponse {
                 ok: false,

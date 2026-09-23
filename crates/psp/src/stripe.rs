@@ -1,6 +1,6 @@
 //! Real PSP: Stripe PaymentIntents over HTTPS.
 //!
-//! The engine (`db::payments`) only speaks [`rustygod_core::psp`] outcomes;
+//! The engine (`db::payments`) only speaks [`saleor_rustify_core::psp`] outcomes;
 //! this crate translates Stripe's PaymentIntent/Refund/Charge API into them:
 //! - `succeeded` → `Completed` (funds moved, single `*_success` downstream);
 //! - `requires_action` + `redirect_to_url` → `ActionRequired` (3DS loop via
@@ -18,7 +18,7 @@
 //! the `stripe` gateway instead of failing obscurely mid-flow.
 
 use rust_decimal::Decimal;
-use rustygod_core::psp::{Psp, PspAction, PspOutcome, PspRequest};
+use saleor_rustify_core::psp::{Psp, PspAction, PspOutcome, PspRequest};
 use serde::Deserialize;
 
 pub const STRIPE_API_BASE: &str = "https://api.stripe.com";
@@ -332,7 +332,7 @@ impl Psp for StripePsp {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rustygod_core::psp::PspRequest;
+    use saleor_rustify_core::psp::PspRequest;
     use std::sync::{Arc, Mutex};
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
@@ -481,7 +481,7 @@ mod tests {
     /// single-thread `#[tokio::test]` would panic by design).
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn sync_bridge_used_by_engine() {
-        use rustygod_core::psp::Psp;
+        use saleor_rustify_core::psp::Psp;
         let (base, _) = mock_stripe(|_, _| {
             (200, r#"{"id":"pi_sync","status":"succeeded"}"#.into())
         })

@@ -20,7 +20,7 @@
 
 use chrono::Utc;
 use rust_decimal::Decimal;
-use rustygod_core::psp::{Psp, PspAction, PspOutcome};
+use saleor_rustify_core::psp::{Psp, PspAction, PspOutcome};
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, QuerySelect,
     Set, sea_query::LockType,
@@ -287,7 +287,7 @@ pub async fn report_event_in(
                 record_failure_in(
                     txn,
                     transaction_id,
-                    &rustygod_core::payments::failure_event_of(&ev.event_type)
+                    &saleor_rustify_core::payments::failure_event_of(&ev.event_type)
                         .unwrap_or("info")
                         .to_string(),
                     ev.amount,
@@ -354,9 +354,9 @@ async fn recalc_in(db: &impl sea_orm::ConnectionTrait, transaction_id: i32) -> R
         .filter(payment_transactionevent::Column::TransactionId.eq(transaction_id))
         .all(db)
         .await?;
-    let calc: Vec<rustygod_core::payments::CalcEvent> = events
+    let calc: Vec<saleor_rustify_core::payments::CalcEvent> = events
         .into_iter()
-        .map(|e| rustygod_core::payments::CalcEvent {
+        .map(|e| saleor_rustify_core::payments::CalcEvent {
             event_type: e.r#type,
             psp_reference: e.psp_reference,
             amount: e.amount_value,
@@ -365,7 +365,7 @@ async fn recalc_in(db: &impl sea_orm::ConnectionTrait, transaction_id: i32) -> R
             id: e.id,
         })
         .collect();
-    let b = rustygod_core::payments::recalculate(&calc);
+    let b = saleor_rustify_core::payments::recalculate(&calc);
     let row = payment_transactionitem::Entity::find_by_id(transaction_id)
         .one(db)
         .await?
@@ -432,10 +432,10 @@ pub async fn refresh_order_statuses(
     let total = order.total_gross_amount;
     let mut am: order_order::ActiveModel = order.into();
     am.authorize_status = Set(
-        rustygod_core::payments::coverage_status(auth_covered, total).to_string(),
+        saleor_rustify_core::payments::coverage_status(auth_covered, total).to_string(),
     );
     am.charge_status = Set(
-        rustygod_core::payments::coverage_status(charge_covered, total).to_string(),
+        saleor_rustify_core::payments::coverage_status(charge_covered, total).to_string(),
     );
     am.update(db).await?;
     Ok(())
@@ -554,7 +554,7 @@ pub async fn execute_via(
             }
         }
     }
-    let req = rustygod_core::psp::PspRequest {
+    let req = saleor_rustify_core::psp::PspRequest {
         action,
         amount,
         currency: cur.currency.clone(),
@@ -725,7 +725,7 @@ pub async fn authorize(
     amount: Decimal,
     idempotency_key: &str,
 ) -> Result<TxnView> {
-    use rustygod_core::psp::ManualPsp;
+    use saleor_rustify_core::psp::ManualPsp;
     Ok(execute_via(db, transaction_id, PspAction::Authorize, amount, idempotency_key, &ManualPsp, None, None).await?.txn)
 }
 
@@ -737,7 +737,7 @@ pub async fn charge(
     amount: Decimal,
     idempotency_key: &str,
 ) -> Result<TxnView> {
-    use rustygod_core::psp::ManualPsp;
+    use saleor_rustify_core::psp::ManualPsp;
     Ok(execute_via(db, transaction_id, PspAction::Charge, amount, idempotency_key, &ManualPsp, None, None).await?.txn)
 }
 
@@ -748,7 +748,7 @@ pub async fn refund(
     amount: Decimal,
     idempotency_key: &str,
 ) -> Result<TxnView> {
-    use rustygod_core::psp::ManualPsp;
+    use saleor_rustify_core::psp::ManualPsp;
     Ok(execute_via(db, transaction_id, PspAction::Refund, amount, idempotency_key, &ManualPsp, None, None).await?.txn)
 }
 
@@ -834,6 +834,6 @@ pub async fn cancel(
     amount: Decimal,
     idempotency_key: &str,
 ) -> Result<TxnView> {
-    use rustygod_core::psp::ManualPsp;
+    use saleor_rustify_core::psp::ManualPsp;
     Ok(execute_via(db, transaction_id, PspAction::Cancel, amount, idempotency_key, &ManualPsp, None, None).await?.txn)
 }

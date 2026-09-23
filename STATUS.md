@@ -2,7 +2,7 @@
 
 > **For the next AI:** this file is the complete handoff. Read it fully before
 > touching anything. The working tree is **mid-surgery and may not compile** —
-> start with `cargo check -p rustygod-graphql` and work from the harness.
+> start with `cargo check -p saleor-rustify-graphql` and work from the harness.
 
 Date: 2026-09-20. Goal: stock Saleor Dashboard works against the Rust backend
 with **zero schema-validation errors on every page** — no hand-porting of
@@ -12,22 +12,22 @@ Saleor's Python, no backend slowdown.
 
 | Item | Value |
 |---|---|
-| Our repo | `/home/matin/Desktop/dev/rustygod-saleor` (binary crate `rustygod-server`) |
+| Our repo | `/home/matin/Desktop/dev/saleor-rustify` (binary crate `saleor-rustify-server`) |
 | Saleor core (reference) | `/home/matin/Desktop/dev/saleor/saleor-core` (`__version__ = "3.24.0-a.0"`, schema 3.24) |
 | Dashboard src (reference) | `/home/matin/Desktop/dev/saleor/dashboard` (v3.23.33 sources) |
 | Dashboard running | docker `sad_williamson`, `ghcr.io/saleor/saleor-dashboard:3.23.33`, `http://localhost/` (= port 80), `API_URL=http://localhost:8000/graphql` |
-| Postgres | `saleor-db` on `localhost:5434`, db/user/pass `saleor`; env `RUSTYGOD_DATABASE_URL=postgres://saleor:saleor@localhost:5434/saleor` |
+| Postgres | `saleor-db` on `localhost:5434`, db/user/pass `saleor`; env `RUSTIFY_DATABASE_URL=postgres://saleor:saleor@localhost:5434/saleor` |
 | Ports | gRPC `127.0.0.1:50051`, GraphQL `127.0.0.1:8000/graphql`, metrics `:9000` |
 | Auth | staff JWT RS256, `RSA_PRIVATE_KEY` = `crates/db/tests/testdata/test_rsa.pem`; login `admin@example.com` / `admin` |
 | Permissions | `Permission.code` is the **enum NAME** (`MANAGE_PRODUCTS`), never the DB codename — `common::permission_enum_code` (exact 25-map from `saleor/permission/enums.py`). Lowercase codes hide the whole Dashboard sidebar (full menu verified in headless browser: Catalog/Fulfillment/Customers/Discounts/Modeling/Translations/Configuration all render) |
-| Server management | kill by PID file (`kill -9 $(cat /tmp/rust.pid)`); **NEVER `pkill -f`** (kills your own shell). Start: `RUST_LOG=info RUSTYGOD_DATABASE_URL=... RSA_PRIVATE_KEY="$(cat ...)" setsid ./target/debug/rustygod-server </dev/null >/tmp/rust.log 2>&1 < /dev/null & disown` (the `&` + setsid + stdin redirect is required or the tool hangs) |
+| Server management | kill by PID file (`kill -9 $(cat /tmp/rust.pid)`); **NEVER `pkill -f`** (kills your own shell). Start: `RUST_LOG=info RUSTIFY_DATABASE_URL=... RSA_PRIVATE_KEY="$(cat ...)" setsid ./target/debug/saleor-rustify-server </dev/null >/tmp/rust.log 2>&1 < /dev/null & disown` (the `&` + setsid + stdin redirect is required or the tool hangs) |
 | Query logging | `server/src/main.rs` logs first 500 chars of every GraphQL query at info level (`RUST_LOG=info` required; without it `/tmp/rust.log` stays empty) |
 | Seed data | DB wiped 2026-09-20 and rebuilt purely from Saleor (`DROP SCHEMA public CASCADE` → `migrate` → `seed --createsuperuser`; backup `/tmp/saleor_backup_full.dump`): 145 tables, 29 products, 20 orders, 45 users, 2 channels. **Never re-run populatedb** (would duplicate). Empty admin first/last name is **upstream Saleor behavior** (`dangerously_get_or_create_superuser` sets no names) — Django shows the same blank profile, not our bug |
 | Dashboard schema mode | Release build defaults to **main-schema mode** (`FF_USE_STAGING_SCHEMA` unset). Our backend mimics 3.24, so we support the **superset** (see `LEGACY_FIELDS`) |
 
 ## 2. Architecture (unchanged)
 
-- gRPC core (`rustygod-db` + `rustygod-core`) is source of truth; GraphQL
+- gRPC core (`saleor-rustify-db` + `saleor-rustify-core`) is source of truth; GraphQL
   (`crates/graphql`) is a thin BFF for the Dashboard (Apollo): same Postgres,
   same domain functions, shape-only translation, `Authorization: Bearer` auth.
 - SeaORM rules (hard): **never `SELECT *`** on tables with `tsvector` /
@@ -39,15 +39,15 @@ Saleor's Python, no backend slowdown.
 - Runtime modes (`crates/server/src/modes.rs`, no CLI dep) mirror Saleor's
   processes: `api` (default, uvicorn equivalent: gRPC + GraphQL + metrics +
   embedded sweeper), `worker` (celery-worker equivalent: foreground webhook
-  outbox loop, same `sweeper::tick_once`, `RUSTYGOD_WORKER_SECS` default 10),
+  outbox loop, same `sweeper::tick_once`, `RUSTIFY_WORKER_SECS` default 10),
   `beat` (celery-beat equivalent: all 20 `CELERY_BEAT_SCHEDULE` entries with
   Saleor task names/intervals; only `delete-expired-reservations` is real,
-  rest are deferred stubs; `RUSTYGOD_BEAT_SCALE` multiplies intervals for
+  rest are deferred stubs; `RUSTIFY_BEAT_SCALE` multiplies intervals for
   dev),   `check` (readiness probe: `SELECT 1` + row counts, exit 0/1).
   compose has matching `server`/`worker`/`beat` services.
 - DDL + seed data are **never re-guessed**: `migrate` / `seed` /
   `createsuperuser` delegate to saleor-core's own `manage.py` (venv python,
-  `RUSTYGOD_DATABASE_URL` mapped to `DATABASE_URL`, stdio inherited, exit
+  `RUSTIFY_DATABASE_URL` mapped to `DATABASE_URL`, stdio inherited, exit
   code propagated; `SALEOR_CORE_DIR` override). Verified: `migrate --check`
   exit 0 on the live DB.
 
@@ -137,7 +137,7 @@ field/type/argument/directive`, bad spreads. Progress:
 
 ## 4. Current state (2026-09-20, end of session)
 
-- `cargo check -p rustygod-graphql`: **clean, 0 errors, 0 warnings** (last verified).
+- `cargo check -p saleor-rustify-graphql`: **clean, 0 errors, 0 warnings** (last verified).
 - Server binary builds; last running pid `764265` serves an **older** binary
   (rebuild + restart required to pick up latest gen + surgery).
 - Harness: **457 tested, 18 failed** (`/tmp/harness3.txt` has the full list).
@@ -206,14 +206,14 @@ re-verify after rebuild).
 ### 5e. After the above: rerun gate, then wire real data (priority order)
 
 ```bash
-cargo check -p rustygod-graphql          # must be 0/0
-cargo build -p rustygod-server && restart # §1 for exact restart recipe
+cargo check -p saleor-rustify-graphql          # must be 0/0
+cargo build -p saleor-rustify-server && restart # §1 for exact restart recipe
 python3 scripts/verify_dashboard_ops.py   # must print FAILED=0
-cargo test -j2 -p rustygod-graphql --test schema_sdl
+cargo test -j2 -p saleor-rustify-graphql --test schema_sdl
 ```
 
 Then, page by page (highest traffic first: products → orders → customers):
-replace stub bodies with slim real queries reusing `rustygod-db::*`
+replace stub bodies with slim real queries reusing `saleor-rustify-db::*`
 (check `crates/db/src/` for existing fetchers before writing SQL).
 Candidates already fetched but unexposed: variant `price` (lives in
 `pricing`/channelListings stubs), order `payments`/`fulfillments`,

@@ -30,16 +30,16 @@ fn empty_connection() -> GqlProductConnection {
 
 /// Dashboard IDs are plain ints (ours) or Saleor global IDs — both resolve.
 pub(crate) fn gid_vec(ids: Option<Vec<ID>>) -> Vec<i32> {
-    ids.unwrap_or_default().into_iter().filter_map(|i| rustygod_db::catalog::parse_gid(&i.0)).collect()
+    ids.unwrap_or_default().into_iter().filter_map(|i| saleor_rustify_db::catalog::parse_gid(&i.0)).collect()
 }
 
 pub(crate) fn gid_filter(f: Option<gen::GlobalIDFilterInput>) -> Vec<i32> {
     let mut out = vec![];
     if let Some(ff) = f {
         if let Some(eq) = ff.eq {
-            out.extend(rustygod_db::catalog::parse_gid(&eq.0));
+            out.extend(saleor_rustify_db::catalog::parse_gid(&eq.0));
         }
-        out.extend(ff.one_of.unwrap_or_default().into_iter().filter_map(|i| rustygod_db::catalog::parse_gid(&i.0)));
+        out.extend(ff.one_of.unwrap_or_default().into_iter().filter_map(|i| saleor_rustify_db::catalog::parse_gid(&i.0)));
     }
     out
 }
@@ -52,7 +52,7 @@ pub(crate) fn str_filter(f: Option<gen::StringFilterInput>) -> (Option<String>, 
 }
 
 /// Merge one where-level's flat fields (no AND/OR) into the DB filter.
-fn merge_where_flat(f: &mut rustygod_db::catalog::ProductListFilter, w: &gen::ProductWhereInput) {
+fn merge_where_flat(f: &mut saleor_rustify_db::catalog::ProductListFilter, w: &gen::ProductWhereInput) {
     f.ids.extend(gid_vec(w.ids.clone()));
     let (neq, none_of) = str_filter(w.name.clone());
     if neq.is_some() { f.name_eq = neq; }
@@ -108,14 +108,14 @@ fn resolve_where_ids<'a>(
         // This level's own flat fields (if it has any + the level is a pure
         // branch; the top level is applied by the caller — here we only
         // resolve what AND/OR need).
-        let mut flat = rustygod_db::catalog::ProductListFilter::default();
+        let mut flat = saleor_rustify_db::catalog::ProductListFilter::default();
         merge_where_flat(&mut flat, w);
         let has_flat = !flat.ids.is_empty() || flat.name_eq.is_some() || !flat.name_one_of.is_empty()
             || flat.slug_eq.is_some() || !flat.slug_one_of.is_empty() || !flat.product_type_ids.is_empty()
             || !flat.category_ids.is_empty() || !flat.collection_ids.is_empty()
             || flat.is_published.is_some() || flat.has_category.is_some();
         if has_flat {
-            let ids: HashSet<i32> = rustygod_db::catalog::product_ids_filtered(db, ch, &flat).await.map_err(|_| sea_orm::DbErr::RecordNotFound("product filter".into()))?.into_iter().collect();
+            let ids: HashSet<i32> = saleor_rustify_db::catalog::product_ids_filtered(db, ch, &flat).await.map_err(|_| sea_orm::DbErr::RecordNotFound("product filter".into()))?.into_iter().collect();
             acc = Some(match acc {
                 None => ids,
                 Some(a) => a.intersection(&ids).cloned().collect(),
@@ -137,10 +137,10 @@ impl CatalogQuery {
     ) -> Result<Option<gen::Attribute>> {
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
         use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QuerySelect};
-        type A = rustygod_db::entities::attribute_attribute::Entity;
-        use rustygod_db::entities::attribute_attribute::Column as ACol;
+        type A = saleor_rustify_db::entities::attribute_attribute::Entity;
+        use saleor_rustify_db::entities::attribute_attribute::Column as ACol;
         let aid: Option<i32> = if let Some(i) = id {
-            rustygod_db::catalog::parse_gid(&i.0)
+            saleor_rustify_db::catalog::parse_gid(&i.0)
         } else if let Some(s) = slug {
             A::find().select_only().column(ACol::Id).filter(ACol::Slug.eq(s))
                 .into_tuple::<i32>().one(db).await.map_err(|e| Error::new(e.to_string()))?
@@ -196,7 +196,7 @@ impl CatalogQuery {
             if let Some(v) = f.filterable_in_dashboard { params.push(v.into()); conds.push(format!("a.filterable_in_dashboard = ${}", params.len())); }
             if let Some(v) = f.available_in_grid { params.push(v.into()); conds.push(format!("a.available_in_grid = ${}", params.len())); }
             if let Some(ids) = f.ids.as_ref() {
-                let list: Vec<i32> = ids.iter().filter_map(|i| rustygod_db::catalog::parse_gid(&i.0)).collect();
+                let list: Vec<i32> = ids.iter().filter_map(|i| saleor_rustify_db::catalog::parse_gid(&i.0)).collect();
                 if !list.is_empty() {
                     let base = params.len();
                     let ph = (1..=list.len()).map(|i| format!("${}", base + i)).collect::<Vec<_>>().join(", ");
@@ -285,7 +285,7 @@ impl CatalogQuery {
                 conds.push(format!("(name ILIKE ${p} OR slug ILIKE ${p})"));
             }
             if let Some(ids) = f.ids.as_ref() {
-                let list: Vec<i32> = ids.iter().filter_map(|i| rustygod_db::catalog::parse_gid(&i.0)).collect();
+                let list: Vec<i32> = ids.iter().filter_map(|i| saleor_rustify_db::catalog::parse_gid(&i.0)).collect();
                 if !list.is_empty() {
                     let base = params.len();
                     let ph = (1..=list.len()).map(|i| format!("${}", base + i)).collect::<Vec<_>>().join(", ");
@@ -358,7 +358,7 @@ impl CatalogQuery {
                 conds.push(format!("(c.name ILIKE ${p} OR c.slug ILIKE ${p})"));
             }
             if let Some(ids) = f.ids.as_ref() {
-                let list: Vec<i32> = ids.iter().filter_map(|i| rustygod_db::catalog::parse_gid(&i.0)).collect();
+                let list: Vec<i32> = ids.iter().filter_map(|i| saleor_rustify_db::catalog::parse_gid(&i.0)).collect();
                 if !list.is_empty() {
                     let base = params.len();
                     let ph = (1..=list.len()).map(|i| format!("${}", base + i)).collect::<Vec<_>>().join(", ");
@@ -439,7 +439,7 @@ impl CatalogQuery {
 
     /// Mirrors dashboard `ProductList` — channel defaults to
     /// `default-channel` (populatedb). Filter/where/search/sort are applied
-    /// server-side with Saleor semantics (see `rustygod_db::catalog`);
+    /// server-side with Saleor semantics (see `saleor_rustify_db::catalog`);
     /// price/attribute/stock/date/metadata sub-filters stay accepted-ignored.
     async fn products(
         &self,
@@ -460,7 +460,7 @@ impl CatalogQuery {
         let ch = channel.unwrap_or_else(|| "default-channel".into());
         let off = after.and_then(|c| decode_cursor(&c)).unwrap_or(0);
         let lim = first.unwrap_or(20).clamp(1, 100) as usize;
-        let mut f = rustygod_db::catalog::ProductListFilter::default();
+        let mut f = saleor_rustify_db::catalog::ProductListFilter::default();
         // Deprecated filter input (dashboard search boxes still send it).
         if let Some(flt) = filter.as_ref() {
             f.ids.extend(gid_vec(flt.ids.clone()));
@@ -494,7 +494,7 @@ impl CatalogQuery {
                 f.order_name_asc = Some(matches!(sort.direction, gen::OrderDirection::ASC));
             }
         }
-        let all = rustygod_db::catalog::list_products_filtered(db, &ch, &f, 200).await.map_err(|e| Error::new(e.to_string()))?;
+        let all = saleor_rustify_db::catalog::list_products_filtered(db, &ch, &f, 200).await.map_err(|e| Error::new(e.to_string()))?;
         let total = all.len() as i32;
         let assembled = assemble_list_products(db, all).await?;
         let edges = assembled.into_iter().skip(off).take(lim).enumerate().map(|(i, node)| GqlProductEdge { node, cursor: encode_cursor(off + i) }).collect();
@@ -509,17 +509,17 @@ impl CatalogQuery {
     ) -> Result<Option<gen::Product>> {
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
         let ch = channel.unwrap_or_else(|| "default-channel".into());
-        let mut f = rustygod_db::catalog::ProductListFilter::default();
+        let mut f = saleor_rustify_db::catalog::ProductListFilter::default();
         if let Some(i) = id {
-            if let Some(n) = rustygod_db::catalog::parse_gid(&i.0) { f.ids.push(n); }
+            if let Some(n) = saleor_rustify_db::catalog::parse_gid(&i.0) { f.ids.push(n); }
         }
         if let Some(s) = slug { f.slug_eq = Some(s); }
         if f.ids.is_empty() && f.slug_eq.is_none() { return Ok(None); }
-        let items = rustygod_db::catalog::list_products_filtered(db, &ch, &f, 2).await.map_err(|e| Error::new(e.to_string()))?;
+        let items = saleor_rustify_db::catalog::list_products_filtered(db, &ch, &f, 2).await.map_err(|e| Error::new(e.to_string()))?;
         // Unlisted fallback: Saleor returns the row even with no published
         // listing (post-create details page depends on it).
         let items = if items.is_empty() && f.slug_eq.is_none() && f.ids.len() == 1 {
-            rustygod_db::catalog::get_product_unlisted(db, &ch, f.ids[0]).await.map_err(|e| Error::new(e.to_string()))?.into_iter().collect()
+            saleor_rustify_db::catalog::get_product_unlisted(db, &ch, f.ids[0]).await.map_err(|e| Error::new(e.to_string()))?.into_iter().collect()
         } else { items };
         let out = assemble_list_products(db, items).await?;
         Ok(out.into_iter().next())
@@ -532,9 +532,9 @@ impl CatalogQuery {
     ) -> Result<Option<gen::Category>> {
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
         use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QuerySelect};
-        use rustygod_db::entities::product_category::{Column as CatCol, Entity as Cat};
+        use saleor_rustify_db::entities::product_category::{Column as CatCol, Entity as Cat};
         let row: Option<(i32, String, String, Option<String>, Option<String>, i32)> = if let Some(i) = id {
-            match rustygod_db::catalog::parse_gid(&i.0) {
+            match saleor_rustify_db::catalog::parse_gid(&i.0) {
                 Some(n) => Cat::find_by_id(n).select_only()
                     .column(CatCol::Id).column(CatCol::Name).column(CatCol::Slug)
                     .column(CatCol::SeoTitle).column(CatCol::SeoDescription).column(CatCol::Level)
@@ -570,9 +570,9 @@ impl CatalogQuery {
     ) -> Result<Option<gen::Collection>> {
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
         use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QuerySelect};
-        use rustygod_db::entities::product_collection::{Column as ColCol, Entity as Col};
+        use saleor_rustify_db::entities::product_collection::{Column as ColCol, Entity as Col};
         let row: Option<(i32, String, String, Option<String>, Option<String>)> = if let Some(i) = id {
-            match rustygod_db::catalog::parse_gid(&i.0) {
+            match saleor_rustify_db::catalog::parse_gid(&i.0) {
                 Some(n) => Col::find_by_id(n).select_only()
                     .column(ColCol::Id).column(ColCol::Name).column(ColCol::Slug)
                     .column(ColCol::SeoTitle).column(ColCol::SeoDescription)
@@ -789,13 +789,13 @@ pub(crate) async fn variant_attributes(
     db: &sea_orm::DatabaseConnection,
     variant_gid: &str,
 ) -> Vec<gen::SelectedAttribute> {
-    let Some(vid) = rustygod_db::catalog::parse_gid(variant_gid) else { return vec![] };
+    let Some(vid) = saleor_rustify_db::catalog::parse_gid(variant_gid) else { return vec![] };
     load_variant_batches(db, &[vid]).await.map(|m| m.vattrs.get(&vid).cloned().unwrap_or_default()).unwrap_or_default()
 }
 
 async fn assemble_list_products(
     db: &sea_orm::DatabaseConnection,
-    all: Vec<rustygod_core::product::Product>,
+    all: Vec<saleor_rustify_core::product::Product>,
 ) -> Result<Vec<gen::Product>> {
         use sea_orm::{ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter, QuerySelect, Statement};
         use std::collections::{HashMap, HashSet};
@@ -907,13 +907,13 @@ async fn assemble_list_products(
         let type_ids: HashSet<i32> = all.iter().filter_map(|p| p.product_type_id.parse::<i32>().ok()).collect();
         let mut types: HashMap<i32, (String, String, bool)> = HashMap::new();
         if !type_ids.is_empty() {
-            let rows = rustygod_db::entities::product_producttype::Entity::find()
+            let rows = saleor_rustify_db::entities::product_producttype::Entity::find()
                 .select_only()
-                .column(rustygod_db::entities::product_producttype::Column::Id)
-                .column(rustygod_db::entities::product_producttype::Column::Name)
-                .column(rustygod_db::entities::product_producttype::Column::Slug)
-                .column(rustygod_db::entities::product_producttype::Column::HasVariants)
-                .filter(rustygod_db::entities::product_producttype::Column::Id.is_in(type_ids.into_iter().collect::<Vec<_>>()))
+                .column(saleor_rustify_db::entities::product_producttype::Column::Id)
+                .column(saleor_rustify_db::entities::product_producttype::Column::Name)
+                .column(saleor_rustify_db::entities::product_producttype::Column::Slug)
+                .column(saleor_rustify_db::entities::product_producttype::Column::HasVariants)
+                .filter(saleor_rustify_db::entities::product_producttype::Column::Id.is_in(type_ids.into_iter().collect::<Vec<_>>()))
                 .into_tuple::<(i32, String, String, bool)>()
                 .all(db).await.map_err(|e| Error::new(e.to_string()))?;
             for (id, name, slug, hv) in rows { types.insert(id, (name, slug, hv)); }
@@ -921,12 +921,12 @@ async fn assemble_list_products(
         let cat_ids: HashSet<i32> = all.iter().filter_map(|p| p.category_id.as_ref().and_then(|c| c.parse::<i32>().ok())).collect();
         let mut cats: HashMap<i32, (String, String)> = HashMap::new();
         if !cat_ids.is_empty() {
-            let rows = rustygod_db::entities::product_category::Entity::find()
+            let rows = saleor_rustify_db::entities::product_category::Entity::find()
                 .select_only()
-                .column(rustygod_db::entities::product_category::Column::Id)
-                .column(rustygod_db::entities::product_category::Column::Name)
-                .column(rustygod_db::entities::product_category::Column::Slug)
-                .filter(rustygod_db::entities::product_category::Column::Id.is_in(cat_ids.into_iter().collect::<Vec<_>>()))
+                .column(saleor_rustify_db::entities::product_category::Column::Id)
+                .column(saleor_rustify_db::entities::product_category::Column::Name)
+                .column(saleor_rustify_db::entities::product_category::Column::Slug)
+                .filter(saleor_rustify_db::entities::product_category::Column::Id.is_in(cat_ids.into_iter().collect::<Vec<_>>()))
                 .into_tuple::<(i32, String, String)>()
                 .all(db).await.map_err(|e| Error::new(e.to_string()))?;
             for (id, name, slug) in rows { cats.insert(id, (name, slug)); }
@@ -1101,7 +1101,7 @@ pub(crate) async fn media_by_id(
     media_gid: &str,
 ) -> Result<Option<gen::ProductMedia>> {
     use sea_orm::{ConnectionTrait, Statement};
-    let Some(mid) = rustygod_db::catalog::parse_gid(media_gid) else { return Ok(None) };
+    let Some(mid) = saleor_rustify_db::catalog::parse_gid(media_gid) else { return Ok(None) };
     let rows = db.query_all(Statement::from_sql_and_values(
         sea_orm::DatabaseBackend::Postgres,
         "SELECT id, alt, sort_order, \"type\" FROM product_productmedia WHERE id = $1",
@@ -1142,15 +1142,15 @@ impl CatalogMutation {
         let slug = input.slug.clone().unwrap_or_else(|| name.to_lowercase().replace(' ', "-"));
         // Resolve product_type: use given or first existing.
         let pt_id: i32 = {
-            let parsed = rustygod_db::catalog::parse_gid(&input.product_type.0).unwrap_or(0);
+            let parsed = saleor_rustify_db::catalog::parse_gid(&input.product_type.0).unwrap_or(0);
             if parsed != 0 { parsed } else {
                 use sea_orm::EntityTrait;
-                let pt = rustygod_db::entities::product_producttype::Entity::find().one(db).await.map_err(|e| Error::new(e.to_string()))?
+                let pt = saleor_rustify_db::entities::product_producttype::Entity::find().one(db).await.map_err(|e| Error::new(e.to_string()))?
                     .ok_or_else(|| Error::new("no product type found"))?;
                 pt.id
             }
         };
-        let cat_id: Option<i32> = input.category.as_ref().and_then(|c| rustygod_db::catalog::parse_gid(&c.0));
+        let cat_id: Option<i32> = input.category.as_ref().and_then(|c| saleor_rustify_db::catalog::parse_gid(&c.0));
         let id = create_product_row(db, &name, &slug, pt_id, cat_id).await.map_err(|e| Error::new(e.to_string()))?;
         Ok(GqlProductCreate {
             product: Some(gen::Product {
@@ -1194,7 +1194,7 @@ async fn create_product_row(
     use sea_orm::{ActiveModelTrait, Set};
     use serde_json::json;
     let now: sea_orm::prelude::DateTimeWithTimeZone = Utc::now().into();
-    let row = rustygod_db::entities::product_product::ActiveModel {
+    let row = saleor_rustify_db::entities::product_product::ActiveModel {
         name: Set(name.to_string()),
         slug: Set(slug.to_string()),
         product_type_id: Set(product_type_id),
@@ -1241,12 +1241,12 @@ fn serr(field: Option<String>, message: String) -> gen::BulkStockError {
 async fn resolve_product(db: &sea_orm::DatabaseConnection, id: Option<ID>, ext: Option<String>) -> Result<Option<i32>> {
     use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QuerySelect};
     if let Some(i) = id {
-        return Ok(rustygod_db::catalog::parse_gid(&i.0));
+        return Ok(saleor_rustify_db::catalog::parse_gid(&i.0));
     }
     if let Some(x) = ext {
-        return Ok(rustygod_db::entities::product_product::Entity::find()
-            .select_only().column(rustygod_db::entities::product_product::Column::Id)
-            .filter(rustygod_db::entities::product_product::Column::ExternalReference.eq(x))
+        return Ok(saleor_rustify_db::entities::product_product::Entity::find()
+            .select_only().column(saleor_rustify_db::entities::product_product::Column::Id)
+            .filter(saleor_rustify_db::entities::product_product::Column::ExternalReference.eq(x))
             .into_tuple::<i32>().one(db).await.map_err(|e| Error::new(e.to_string()))?);
     }
     Ok(None)
@@ -1254,10 +1254,10 @@ async fn resolve_product(db: &sea_orm::DatabaseConnection, id: Option<ID>, ext: 
 
 async fn resolve_variant(db: &sea_orm::DatabaseConnection, id: Option<ID>, ext: Option<String>, sku: Option<String>) -> Result<Option<i32>> {
     use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QuerySelect};
-    type V = rustygod_db::entities::product_productvariant::Entity;
-    use rustygod_db::entities::product_productvariant::Column as VCol;
+    type V = saleor_rustify_db::entities::product_productvariant::Entity;
+    use saleor_rustify_db::entities::product_productvariant::Column as VCol;
     if let Some(i) = id {
-        return Ok(rustygod_db::catalog::parse_gid(&i.0));
+        return Ok(saleor_rustify_db::catalog::parse_gid(&i.0));
     }
     if let Some(x) = ext {
         return Ok(V::find().select_only().column(VCol::Id)
@@ -1328,10 +1328,10 @@ fn entity_type_name(t: &gen::AttributeEntityTypeEnum) -> String {
 
 async fn resolve_attribute(db: &sea_orm::DatabaseConnection, id: Option<ID>, ext: Option<String>) -> Result<Option<i32>> {
     use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QuerySelect};
-    type A = rustygod_db::entities::attribute_attribute::Entity;
-    use rustygod_db::entities::attribute_attribute::Column as ACol;
+    type A = saleor_rustify_db::entities::attribute_attribute::Entity;
+    use saleor_rustify_db::entities::attribute_attribute::Column as ACol;
     if let Some(i) = id {
-        return Ok(rustygod_db::catalog::parse_gid(&i.0));
+        return Ok(saleor_rustify_db::catalog::parse_gid(&i.0));
     }
     if let Some(x) = ext {
         return Ok(A::find().select_only().column(ACol::Id)
@@ -1343,10 +1343,10 @@ async fn resolve_attribute(db: &sea_orm::DatabaseConnection, id: Option<ID>, ext
 
 async fn resolve_value(db: &sea_orm::DatabaseConnection, id: Option<ID>, ext: Option<String>) -> Result<Option<i32>> {
     use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QuerySelect};
-    type V = rustygod_db::entities::attribute_attributevalue::Entity;
-    use rustygod_db::entities::attribute_attributevalue::Column as VCol;
+    type V = saleor_rustify_db::entities::attribute_attributevalue::Entity;
+    use saleor_rustify_db::entities::attribute_attributevalue::Column as VCol;
     if let Some(i) = id {
-        return Ok(rustygod_db::catalog::parse_gid(&i.0));
+        return Ok(saleor_rustify_db::catalog::parse_gid(&i.0));
     }
     if let Some(x) = ext {
         return Ok(V::find().select_only().column(VCol::Id)
@@ -1360,8 +1360,8 @@ fn json_of(g: &gen::GenJSONString) -> serde_json::Value {
     serde_json::from_str(&g.0).unwrap_or_else(|_| serde_json::Value::String(g.0.clone()))
 }
 
-fn value_create(i: &gen::AttributeValueCreateInput) -> rustygod_db::attribute_writes::ValueCreate {
-    rustygod_db::attribute_writes::ValueCreate {
+fn value_create(i: &gen::AttributeValueCreateInput) -> saleor_rustify_db::attribute_writes::ValueCreate {
+    saleor_rustify_db::attribute_writes::ValueCreate {
         name: i.name.clone(), value: i.value.clone(), plain_text: i.plain_text.clone(),
         rich_text: i.rich_text.as_ref().map(json_of),
         file_url: i.file_url.clone(), content_type: i.content_type.clone(),
@@ -1384,21 +1384,21 @@ impl CatalogWriteMutation {
             return Ok(gen::ProductUpdate { errors: vec![perr(Some("id".into()), "product not found".into())] });
         };
         let (cur_md, cur_pmd) = read_meta(db, "product_product", pid).await;
-        let patch = rustygod_db::catalog_writes::ProductPatch {
+        let patch = saleor_rustify_db::catalog_writes::ProductPatch {
             name: input.name.clone(),
             slug: input.slug.clone(),
             description: input.description.clone().map(|d| d.0.clone()),
-            category_id: input.category.as_ref().map(|c| rustygod_db::catalog::parse_gid(&c.0)),
+            category_id: input.category.as_ref().map(|c| saleor_rustify_db::catalog::parse_gid(&c.0)),
             seo_title: input.seo.clone().and_then(|s| s.title),
             seo_description: input.seo.clone().and_then(|s| s.description),
             rating: input.rating,
-            tax_class_id: input.tax_class.as_ref().map(|t| rustygod_db::catalog::parse_gid(&t.0)),
+            tax_class_id: input.tax_class.as_ref().map(|t| saleor_rustify_db::catalog::parse_gid(&t.0)),
             charge_taxes: input.charge_taxes,
-            collections: input.collections.as_ref().map(|c| c.iter().filter_map(|i| rustygod_db::catalog::parse_gid(&i.0)).collect()),
+            collections: input.collections.as_ref().map(|c| c.iter().filter_map(|i| saleor_rustify_db::catalog::parse_gid(&i.0)).collect()),
             metadata: merged(cur_md, input.metadata.clone()),
             private_metadata: merged(cur_pmd, input.private_metadata.clone()),
         };
-        match rustygod_db::catalog_writes::update_product(db, pid, &patch).await {
+        match saleor_rustify_db::catalog_writes::update_product(db, pid, &patch).await {
             Ok(()) => Ok(gen::ProductUpdate { errors: vec![] }),
             Err(e) => Ok(gen::ProductUpdate { errors: vec![perr(None, e.to_string())] }),
         }
@@ -1410,7 +1410,7 @@ impl CatalogWriteMutation {
         let Some(pid) = resolve_product(db, id, external_reference).await? else {
             return Ok(gen::ProductDelete { errors: vec![perr(Some("id".into()), "product not found".into())] });
         };
-        match rustygod_db::catalog_writes::delete_product(db, pid).await {
+        match saleor_rustify_db::catalog_writes::delete_product(db, pid).await {
             Ok(()) => Ok(gen::ProductDelete { errors: vec![] }),
             Err(e) => Ok(gen::ProductDelete { errors: vec![perr(None, e.to_string())] }),
         }
@@ -1419,10 +1419,10 @@ impl CatalogWriteMutation {
     async fn product_variant_create(&self, ctx: &Context<'_>, input: gen::ProductVariantCreateInput) -> Result<gen::ProductVariantCreate> {
         let _ = crate::account::require_perm(ctx, "manage_products").await?;
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
-        let Some(pid) = rustygod_db::catalog::parse_gid(&input.product.0) else {
+        let Some(pid) = saleor_rustify_db::catalog::parse_gid(&input.product.0) else {
             return Ok(gen::ProductVariantCreate { product_variant: None, errors: vec![perr(Some("product".into()), "bad product id".into())] });
         };
-        let vid = match rustygod_db::catalog_writes::create_variant(
+        let vid = match saleor_rustify_db::catalog_writes::create_variant(
             db, pid,
             input.sku.clone(),
             input.name.clone(),
@@ -1435,7 +1435,7 @@ impl CatalogWriteMutation {
         };
         for s in input.stocks.clone().unwrap_or_default() {
             match crate::common::parse_uuid_gid(&s.warehouse.0) {
-                Some(wid) => if let Err(e) = rustygod_db::catalog_writes::set_variant_stock(db, vid, wid, s.quantity).await {
+                Some(wid) => if let Err(e) = saleor_rustify_db::catalog_writes::set_variant_stock(db, vid, wid, s.quantity).await {
                     return Ok(gen::ProductVariantCreate { product_variant: None, errors: vec![perr(Some("stocks".into()), e.to_string())] });
                 },
                 None => return Ok(gen::ProductVariantCreate { product_variant: None, errors: vec![perr(Some("stocks".into()), "bad warehouse id".into())] }),
@@ -1454,7 +1454,7 @@ impl CatalogWriteMutation {
             return Ok(gen::ProductVariantUpdate { product_variant: None, errors: vec![perr(Some("id".into()), "variant not found".into())] });
         };
         let (cur_md, cur_pmd) = read_meta(db, "product_productvariant", vid).await;
-        let patch = rustygod_db::catalog_writes::VariantPatch {
+        let patch = saleor_rustify_db::catalog_writes::VariantPatch {
             sku: input.sku.clone().map(Some),
             name: input.name.clone(),
             track_inventory: input.track_inventory,
@@ -1463,7 +1463,7 @@ impl CatalogWriteMutation {
             metadata: merged(cur_md, input.metadata.clone()),
             private_metadata: merged(cur_pmd, input.private_metadata.clone()),
         };
-        match rustygod_db::catalog_writes::update_variant(db, vid, &patch).await {
+        match saleor_rustify_db::catalog_writes::update_variant(db, vid, &patch).await {
             Ok(()) => Ok(gen::ProductVariantUpdate {
                 product_variant: Some(crate::metadata::lit_product_variant(crate::common::gid("ProductVariant", vid), vec![], vec![])),
                 errors: vec![],
@@ -1478,7 +1478,7 @@ impl CatalogWriteMutation {
         let Some(vid) = resolve_variant(db, id, external_reference, sku).await? else {
             return Ok(gen::ProductVariantDelete { errors: vec![perr(Some("id".into()), "variant not found".into())] });
         };
-        match rustygod_db::catalog_writes::delete_variant(db, vid).await {
+        match saleor_rustify_db::catalog_writes::delete_variant(db, vid).await {
             Ok(()) => Ok(gen::ProductVariantDelete { errors: vec![] }),
             Err(e) => Ok(gen::ProductVariantDelete { errors: vec![perr(None, e.to_string())] }),
         }
@@ -1493,7 +1493,7 @@ impl CatalogWriteMutation {
             return Ok(gen::ProductVariantChannelListingUpdate { variant: None, errors: vec![lerr(Some("id".into()), "variant not found".into())] });
         };
         for l in &input {
-            let Some(ch) = rustygod_db::catalog::parse_gid(&l.channel_id.0) else {
+            let Some(ch) = saleor_rustify_db::catalog::parse_gid(&l.channel_id.0) else {
                 return Ok(gen::ProductVariantChannelListingUpdate { variant: None, errors: vec![lerr(Some("channelId".into()), "bad channel id".into())] });
             };
             let price: rust_decimal::Decimal = match l.price.0.parse() {
@@ -1502,7 +1502,7 @@ impl CatalogWriteMutation {
             };
             let cost: Option<rust_decimal::Decimal> = l.cost_price.as_ref().and_then(|c| c.0.parse().ok());
             let prior: Option<rust_decimal::Decimal> = l.prior_price.as_ref().and_then(|c| c.0.parse().ok());
-            if let Err(e) = rustygod_db::catalog_writes::upsert_variant_listing(db, vid, ch, price, cost, prior).await {
+            if let Err(e) = saleor_rustify_db::catalog_writes::upsert_variant_listing(db, vid, ch, price, cost, prior).await {
                 return Ok(gen::ProductVariantChannelListingUpdate { variant: None, errors: vec![lerr(None, e.to_string())] });
             }
         }
@@ -1512,14 +1512,14 @@ impl CatalogWriteMutation {
     async fn product_variant_stocks_create(&self, ctx: &Context<'_>, stocks: Vec<gen::StockInput>, #[graphql(name = "variantId")] variant_id: ID) -> Result<gen::ProductVariantStocksCreate> {
         let _ = crate::account::require_perm(ctx, "manage_products").await?;
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
-        let Some(vid) = rustygod_db::catalog::parse_gid(&variant_id.0) else {
+        let Some(vid) = saleor_rustify_db::catalog::parse_gid(&variant_id.0) else {
             return Ok(gen::ProductVariantStocksCreate { product_variant: None, errors: vec![serr(Some("variantId".into()), "bad variant id".into())] });
         };
         for s in &stocks {
             let Some(wid) = crate::common::parse_uuid_gid(&s.warehouse.0) else {
                 return Ok(gen::ProductVariantStocksCreate { product_variant: None, errors: vec![serr(Some("warehouse".into()), "bad warehouse id".into())] });
             };
-            if let Err(e) = rustygod_db::catalog_writes::set_variant_stock(db, vid, wid, s.quantity).await {
+            if let Err(e) = saleor_rustify_db::catalog_writes::set_variant_stock(db, vid, wid, s.quantity).await {
                 return Ok(gen::ProductVariantStocksCreate { product_variant: None, errors: vec![serr(None, e.to_string())] });
             }
         }
@@ -1537,7 +1537,7 @@ impl CatalogWriteMutation {
             let Some(wid) = crate::common::parse_uuid_gid(&s.warehouse.0) else {
                 return Ok(gen::ProductVariantStocksUpdate { product_variant: None, errors: vec![serr(Some("warehouse".into()), "bad warehouse id".into())] });
             };
-            if let Err(e) = rustygod_db::catalog_writes::set_variant_stock(db, vid, wid, s.quantity).await {
+            if let Err(e) = saleor_rustify_db::catalog_writes::set_variant_stock(db, vid, wid, s.quantity).await {
                 return Ok(gen::ProductVariantStocksUpdate { product_variant: None, errors: vec![serr(None, e.to_string())] });
             }
         }
@@ -1552,8 +1552,8 @@ impl CatalogWriteMutation {
             return Ok(gen::CategoryCreate { errors: vec![perr(Some("name".into()), "name is required".into())], category: None });
         }
         let slug = input.slug.clone().unwrap_or_else(|| name.to_lowercase().replace(' ', "-"));
-        let pid = parent.map(|p| rustygod_db::catalog::parse_gid(&p.0)).unwrap_or(None);
-        match rustygod_db::catalog_writes::create_category(db, &name, &slug, input.description.as_ref().map(|d| d.0.as_str()), pid).await {
+        let pid = parent.map(|p| saleor_rustify_db::catalog::parse_gid(&p.0)).unwrap_or(None);
+        match saleor_rustify_db::catalog_writes::create_category(db, &name, &slug, input.description.as_ref().map(|d| d.0.as_str()), pid).await {
             Ok(id) => Ok(gen::CategoryCreate { errors: vec![], category: Some(crate::metadata::lit_category(crate::common::gid("Category", id), vec![], vec![])) }),
             Err(e) => Ok(gen::CategoryCreate { errors: vec![perr(None, e.to_string())], category: None }),
         }
@@ -1562,17 +1562,17 @@ impl CatalogWriteMutation {
     async fn category_update(&self, ctx: &Context<'_>, id: ID, input: gen::CategoryInput) -> Result<gen::CategoryUpdate> {
         let _ = crate::account::require_perm(ctx, "manage_products").await?;
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
-        let Some(cid) = rustygod_db::catalog::parse_gid(&id.0) else {
+        let Some(cid) = saleor_rustify_db::catalog::parse_gid(&id.0) else {
             return Ok(gen::CategoryUpdate { errors: vec![perr(Some("id".into()), "bad category id".into())], category: None });
         };
-        let patch = rustygod_db::catalog_writes::CategoryPatch {
+        let patch = saleor_rustify_db::catalog_writes::CategoryPatch {
             name: input.name.clone(),
             slug: input.slug.clone(),
             description: input.description.clone().map(|d| d.0.clone()),
             seo_title: input.seo.clone().and_then(|s| s.title),
             seo_description: input.seo.clone().and_then(|s| s.description),
         };
-        match rustygod_db::catalog_writes::update_category(db, cid, &patch).await {
+        match saleor_rustify_db::catalog_writes::update_category(db, cid, &patch).await {
             Ok(()) => Ok(gen::CategoryUpdate { errors: vec![], category: None }),
             Err(e) => Ok(gen::CategoryUpdate { errors: vec![perr(None, e.to_string())], category: None }),
         }
@@ -1581,10 +1581,10 @@ impl CatalogWriteMutation {
     async fn category_delete(&self, ctx: &Context<'_>, id: ID) -> Result<gen::CategoryDelete> {
         let _ = crate::account::require_perm(ctx, "manage_products").await?;
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
-        let Some(cid) = rustygod_db::catalog::parse_gid(&id.0) else {
+        let Some(cid) = saleor_rustify_db::catalog::parse_gid(&id.0) else {
             return Ok(gen::CategoryDelete { errors: vec![perr(Some("id".into()), "bad category id".into())] });
         };
-        match rustygod_db::catalog_writes::delete_category(db, cid).await {
+        match saleor_rustify_db::catalog_writes::delete_category(db, cid).await {
             Ok(()) => Ok(gen::CategoryDelete { errors: vec![] }),
             Err(e) => Ok(gen::CategoryDelete { errors: vec![perr(None, e.to_string())] }),
         }
@@ -1598,8 +1598,8 @@ impl CatalogWriteMutation {
             return Ok(gen::CollectionCreate { errors: vec![cerr(Some("name".into()), "name is required".into())], collection: None });
         }
         let slug = input.slug.clone().unwrap_or_else(|| name.to_lowercase().replace(' ', "-"));
-        let prods: Vec<i32> = input.products.as_ref().map(|p| p.iter().filter_map(|i| rustygod_db::catalog::parse_gid(&i.0)).collect()).unwrap_or_default();
-        match rustygod_db::catalog_writes::create_collection(db, &name, &slug, input.description.as_ref().map(|d| d.0.as_str()), input.is_published.unwrap_or(false), &prods).await {
+        let prods: Vec<i32> = input.products.as_ref().map(|p| p.iter().filter_map(|i| saleor_rustify_db::catalog::parse_gid(&i.0)).collect()).unwrap_or_default();
+        match saleor_rustify_db::catalog_writes::create_collection(db, &name, &slug, input.description.as_ref().map(|d| d.0.as_str()), input.is_published.unwrap_or(false), &prods).await {
             Ok(id) => Ok(gen::CollectionCreate { errors: vec![], collection: Some(crate::metadata::lit_collection(crate::common::gid("Collection", id), vec![], vec![])) }),
             Err(e) => Ok(gen::CollectionCreate { errors: vec![cerr(None, e.to_string())], collection: None }),
         }
@@ -1608,10 +1608,10 @@ impl CatalogWriteMutation {
     async fn collection_update(&self, ctx: &Context<'_>, id: ID, input: gen::CollectionInput) -> Result<gen::CollectionUpdate> {
         let _ = crate::account::require_perm(ctx, "manage_products").await?;
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
-        let Some(cid) = rustygod_db::catalog::parse_gid(&id.0) else {
+        let Some(cid) = saleor_rustify_db::catalog::parse_gid(&id.0) else {
             return Ok(gen::CollectionUpdate { errors: vec![cerr(Some("id".into()), "bad collection id".into())], collection: None });
         };
-        let patch = rustygod_db::catalog_writes::CollectionPatch {
+        let patch = saleor_rustify_db::catalog_writes::CollectionPatch {
             name: input.name.clone(),
             slug: input.slug.clone(),
             description: input.description.clone().map(|d| d.0.clone()),
@@ -1622,7 +1622,7 @@ impl CatalogWriteMutation {
             // membership via collectionAdd/RemoveProducts).
             products: None,
         };
-        match rustygod_db::catalog_writes::update_collection(db, cid, &patch).await {
+        match saleor_rustify_db::catalog_writes::update_collection(db, cid, &patch).await {
             Ok(()) => Ok(gen::CollectionUpdate { errors: vec![], collection: None }),
             Err(e) => Ok(gen::CollectionUpdate { errors: vec![cerr(None, e.to_string())], collection: None }),
         }
@@ -1631,10 +1631,10 @@ impl CatalogWriteMutation {
     async fn collection_delete(&self, ctx: &Context<'_>, id: ID) -> Result<gen::CollectionDelete> {
         let _ = crate::account::require_perm(ctx, "manage_products").await?;
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
-        let Some(cid) = rustygod_db::catalog::parse_gid(&id.0) else {
+        let Some(cid) = saleor_rustify_db::catalog::parse_gid(&id.0) else {
             return Ok(gen::CollectionDelete { errors: vec![cerr(Some("id".into()), "bad collection id".into())] });
         };
-        match rustygod_db::catalog_writes::delete_collection(db, cid).await {
+        match saleor_rustify_db::catalog_writes::delete_collection(db, cid).await {
             Ok(()) => Ok(gen::CollectionDelete { errors: vec![] }),
             Err(e) => Ok(gen::CollectionDelete { errors: vec![cerr(None, e.to_string())] }),
         }
@@ -1643,10 +1643,10 @@ impl CatalogWriteMutation {
     async fn collection_add_products(&self, ctx: &Context<'_>, #[graphql(name = "collectionId")] collection_id: ID, products: Vec<ID>) -> Result<gen::CollectionAddProducts> {
         let _ = crate::account::require_perm(ctx, "manage_products").await?;
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
-        let (Some(cid), prods) = (rustygod_db::catalog::parse_gid(&collection_id.0), products.iter().filter_map(|i| rustygod_db::catalog::parse_gid(&i.0)).collect::<Vec<_>>()) else {
+        let (Some(cid), prods) = (saleor_rustify_db::catalog::parse_gid(&collection_id.0), products.iter().filter_map(|i| saleor_rustify_db::catalog::parse_gid(&i.0)).collect::<Vec<_>>()) else {
             return Ok(gen::CollectionAddProducts { errors: vec![cerr(Some("collectionId".into()), "bad collection id".into())] });
         };
-        match rustygod_db::catalog_writes::collection_add_products(db, cid, &prods).await {
+        match saleor_rustify_db::catalog_writes::collection_add_products(db, cid, &prods).await {
             Ok(()) => Ok(gen::CollectionAddProducts { errors: vec![] }),
             Err(e) => Ok(gen::CollectionAddProducts { errors: vec![cerr(None, e.to_string())] }),
         }
@@ -1655,10 +1655,10 @@ impl CatalogWriteMutation {
     async fn collection_remove_products(&self, ctx: &Context<'_>, #[graphql(name = "collectionId")] collection_id: ID, products: Vec<ID>) -> Result<gen::CollectionRemoveProducts> {
         let _ = crate::account::require_perm(ctx, "manage_products").await?;
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
-        let (Some(cid), prods) = (rustygod_db::catalog::parse_gid(&collection_id.0), products.iter().filter_map(|i| rustygod_db::catalog::parse_gid(&i.0)).collect::<Vec<_>>()) else {
+        let (Some(cid), prods) = (saleor_rustify_db::catalog::parse_gid(&collection_id.0), products.iter().filter_map(|i| saleor_rustify_db::catalog::parse_gid(&i.0)).collect::<Vec<_>>()) else {
             return Ok(gen::CollectionRemoveProducts { collection: None, errors: vec![cerr(Some("collectionId".into()), "bad collection id".into())] });
         };
-        match rustygod_db::catalog_writes::collection_remove_products(db, cid, &prods).await {
+        match saleor_rustify_db::catalog_writes::collection_remove_products(db, cid, &prods).await {
             Ok(()) => Ok(gen::CollectionRemoveProducts { collection: None, errors: vec![] }),
             Err(e) => Ok(gen::CollectionRemoveProducts { collection: None, errors: vec![cerr(None, e.to_string())] }),
         }
@@ -1667,13 +1667,13 @@ impl CatalogWriteMutation {
     async fn collection_reorder_products(&self, ctx: &Context<'_>, #[graphql(name = "collectionId")] collection_id: ID, moves: Vec<gen::MoveProductInput>) -> Result<gen::CollectionReorderProducts> {
         let _ = crate::account::require_perm(ctx, "manage_products").await?;
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
-        let Some(cid) = rustygod_db::catalog::parse_gid(&collection_id.0) else {
+        let Some(cid) = saleor_rustify_db::catalog::parse_gid(&collection_id.0) else {
             return Ok(gen::CollectionReorderProducts { errors: vec![cerr(Some("collectionId".into()), "bad collection id".into())] });
         };
         let mv: Vec<(i32, i32)> = moves.iter()
-            .filter_map(|m| rustygod_db::catalog::parse_gid(&m.product_id.0).map(|p| (p, m.sort_order.unwrap_or(0))))
+            .filter_map(|m| saleor_rustify_db::catalog::parse_gid(&m.product_id.0).map(|p| (p, m.sort_order.unwrap_or(0))))
             .collect();
-        match rustygod_db::attribute_writes::reorder_collection_products(db, cid, &mv).await {
+        match saleor_rustify_db::attribute_writes::reorder_collection_products(db, cid, &mv).await {
             Ok(()) => Ok(gen::CollectionReorderProducts { errors: vec![] }),
             Err(e) => Ok(gen::CollectionReorderProducts { errors: vec![cerr(None, e.to_string())] }),
         }
@@ -1685,21 +1685,21 @@ impl CatalogWriteMutation {
         let _ = crate::account::require_perm(ctx, "manage_product_types_and_attributes").await?;
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
         let err = |m: String| gen::ProductAttributeAssign { product_type: None, errors: vec![perr(Some("operations".into()), m)] };
-        let Some(pt) = rustygod_db::catalog::parse_gid(&product_type_id.0) else {
+        let Some(pt) = saleor_rustify_db::catalog::parse_gid(&product_type_id.0) else {
             return Ok(err("bad product type id".into()));
         };
         let mut ops = vec![];
         for o in &operations {
-            let Some(aid) = rustygod_db::catalog::parse_gid(&o.id.0) else {
+            let Some(aid) = saleor_rustify_db::catalog::parse_gid(&o.id.0) else {
                 return Ok(err("bad attribute id".into()));
             };
             let kind = match format!("{:?}", o.r#type).as_str() {
-                "PRODUCT" => rustygod_db::attribute_writes::AssignKind::Product,
-                _ => rustygod_db::attribute_writes::AssignKind::Variant,
+                "PRODUCT" => saleor_rustify_db::attribute_writes::AssignKind::Product,
+                _ => saleor_rustify_db::attribute_writes::AssignKind::Variant,
             };
-            ops.push(rustygod_db::attribute_writes::AssignOp { attr_id: aid, kind, variant_selection: o.variant_selection.unwrap_or(false) });
+            ops.push(saleor_rustify_db::attribute_writes::AssignOp { attr_id: aid, kind, variant_selection: o.variant_selection.unwrap_or(false) });
         }
-        match rustygod_db::attribute_writes::assign_attributes(db, pt, &ops).await {
+        match saleor_rustify_db::attribute_writes::assign_attributes(db, pt, &ops).await {
             Ok(()) => Ok(gen::ProductAttributeAssign { product_type: None, errors: vec![] }),
             Err(e) => Ok(err(e.to_string())),
         }
@@ -1709,11 +1709,11 @@ impl CatalogWriteMutation {
         let _ = crate::account::require_perm(ctx, "manage_product_types_and_attributes").await?;
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
         let err = |m: String| gen::ProductAttributeUnassign { product_type: None, errors: vec![perr(Some("attributeIds".into()), m)] };
-        let Some(pt) = rustygod_db::catalog::parse_gid(&product_type_id.0) else {
+        let Some(pt) = saleor_rustify_db::catalog::parse_gid(&product_type_id.0) else {
             return Ok(err("bad product type id".into()));
         };
-        let aids: Vec<i32> = attribute_ids.iter().filter_map(|i| rustygod_db::catalog::parse_gid(&i.0)).collect();
-        match rustygod_db::attribute_writes::unassign_attributes(db, pt, &aids).await {
+        let aids: Vec<i32> = attribute_ids.iter().filter_map(|i| saleor_rustify_db::catalog::parse_gid(&i.0)).collect();
+        match saleor_rustify_db::attribute_writes::unassign_attributes(db, pt, &aids).await {
             Ok(_) => Ok(gen::ProductAttributeUnassign { product_type: None, errors: vec![] }),
             Err(e) => Ok(err(e.to_string())),
         }
@@ -1723,17 +1723,17 @@ impl CatalogWriteMutation {
         let _ = crate::account::require_perm(ctx, "manage_product_types_and_attributes").await?;
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
         let err = |m: String| gen::ProductAttributeAssignmentUpdate { product_type: None, errors: vec![perr(Some("operations".into()), m)] };
-        let Some(pt) = rustygod_db::catalog::parse_gid(&product_type_id.0) else {
+        let Some(pt) = saleor_rustify_db::catalog::parse_gid(&product_type_id.0) else {
             return Ok(err("bad product type id".into()));
         };
         let mut ops = vec![];
         for o in &operations {
-            let Some(aid) = rustygod_db::catalog::parse_gid(&o.id.0) else {
+            let Some(aid) = saleor_rustify_db::catalog::parse_gid(&o.id.0) else {
                 return Ok(err("bad attribute id".into()));
             };
             ops.push((aid, o.variant_selection));
         }
-        match rustygod_db::attribute_writes::update_attribute_assignment(db, pt, &ops).await {
+        match saleor_rustify_db::attribute_writes::update_attribute_assignment(db, pt, &ops).await {
             Ok(()) => Ok(gen::ProductAttributeAssignmentUpdate { product_type: None, errors: vec![] }),
             Err(e) => Ok(err(e.to_string())),
         }
@@ -1743,7 +1743,7 @@ impl CatalogWriteMutation {
         let _ = crate::account::require_perm(ctx, "manage_product_types_and_attributes").await?;
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
         let err = |m: String| gen::AttributeCreate { attribute: None, errors: vec![aerr(None, m)] };
-        let create = rustygod_db::attribute_writes::AttributeCreate {
+        let create = saleor_rustify_db::attribute_writes::AttributeCreate {
             name: input.name.clone(),
             slug: input.slug.clone(),
             input_type: input.input_type.as_ref().map(attr_input_type).unwrap_or_else(|| "dropdown".into()),
@@ -1752,14 +1752,14 @@ impl CatalogWriteMutation {
             unit: input.unit.as_ref().map(|u| format!("{u:?}").to_lowercase()),
             value_required: input.value_required.unwrap_or(false),
             external_reference: input.external_reference.clone(),
-            reference_types: input.reference_types.as_ref().map(|v| v.iter().filter_map(|i| rustygod_db::catalog::parse_gid(&i.0)).collect()).unwrap_or_default(),
+            reference_types: input.reference_types.as_ref().map(|v| v.iter().filter_map(|i| saleor_rustify_db::catalog::parse_gid(&i.0)).collect()).unwrap_or_default(),
         };
-        let aid = match rustygod_db::attribute_writes::create_attribute(db, &create).await {
+        let aid = match saleor_rustify_db::attribute_writes::create_attribute(db, &create).await {
             Ok(a) => a,
             Err(e) => return Ok(err(e.to_string())),
         };
         for v in input.values.as_ref().map(|v| v.as_slice()).unwrap_or(&[]) {
-            if let Err(e) = rustygod_db::attribute_writes::create_attribute_value(db, aid, &value_create(v)).await {
+            if let Err(e) = saleor_rustify_db::attribute_writes::create_attribute_value(db, aid, &value_create(v)).await {
                 return Ok(err(e.to_string()));
             }
         }
@@ -1773,7 +1773,7 @@ impl CatalogWriteMutation {
         let Some(aid) = resolve_attribute(db, id, external_reference).await? else {
             return Ok(gen::AttributeUpdate { attribute: None, errors: vec![aerr(Some("id".into()), "attribute not found".into())] });
         };
-        let patch = rustygod_db::attribute_writes::AttributePatch {
+        let patch = saleor_rustify_db::attribute_writes::AttributePatch {
             name: input.name.clone(),
             slug: input.slug.clone(),
             unit: input.unit.as_ref().map(|u| format!("{u:?}").to_lowercase()),
@@ -1786,14 +1786,14 @@ impl CatalogWriteMutation {
             available_in_grid: input.available_in_grid,
             external_reference: input.external_reference.clone(),
             entity_type: None,
-            reference_types: input.reference_types.as_ref().map(|v| v.iter().filter_map(|i| rustygod_db::catalog::parse_gid(&i.0)).collect()),
+            reference_types: input.reference_types.as_ref().map(|v| v.iter().filter_map(|i| saleor_rustify_db::catalog::parse_gid(&i.0)).collect()),
         };
         let mut adds = vec![];
         for v in input.add_values.as_ref().map(|v| v.as_slice()).unwrap_or(&[]) {
             let Some(n) = v.name.clone().filter(|n| !n.trim().is_empty()) else {
                 return Ok(err("value name is required".into()));
             };
-            adds.push(rustygod_db::attribute_writes::ValueCreate {
+            adds.push(saleor_rustify_db::attribute_writes::ValueCreate {
                 name: n, value: v.value.clone(), plain_text: v.plain_text.clone(),
                 rich_text: v.rich_text.as_ref().map(json_of),
                 file_url: v.file_url.clone(), content_type: v.content_type.clone(),
@@ -1801,8 +1801,8 @@ impl CatalogWriteMutation {
             });
         }
         let removes: Vec<i32> = input.remove_values.as_ref().map(|v| v.as_slice()).unwrap_or(&[])
-            .iter().filter_map(|i| rustygod_db::catalog::parse_gid(&i.0)).collect();
-        match rustygod_db::attribute_writes::update_attribute(db, aid, &patch, &adds, &removes).await {
+            .iter().filter_map(|i| saleor_rustify_db::catalog::parse_gid(&i.0)).collect();
+        match saleor_rustify_db::attribute_writes::update_attribute(db, aid, &patch, &adds, &removes).await {
             Ok(()) => Ok(gen::AttributeUpdate { attribute: attr_payload(db, aid).await?, errors: vec![] }),
             Err(e) => Ok(err(e.to_string())),
         }
@@ -1814,7 +1814,7 @@ impl CatalogWriteMutation {
         let Some(aid) = resolve_attribute(db, id, external_reference).await? else {
             return Ok(gen::AttributeDelete { errors: vec![aerr(Some("id".into()), "attribute not found".into())] });
         };
-        match rustygod_db::attribute_writes::delete_attribute(db, aid).await {
+        match saleor_rustify_db::attribute_writes::delete_attribute(db, aid).await {
             Ok(()) => Ok(gen::AttributeDelete { errors: vec![] }),
             Err(e) => Ok(gen::AttributeDelete { errors: vec![aerr(None, e.to_string())] }),
         }
@@ -1823,8 +1823,8 @@ impl CatalogWriteMutation {
     async fn attribute_bulk_delete(&self, ctx: &Context<'_>, ids: Vec<ID>) -> Result<gen::AttributeBulkDelete> {
         let _ = crate::account::require_perm(ctx, "manage_product_types_and_attributes").await?;
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
-        let aids: Vec<i32> = ids.iter().filter_map(|i| rustygod_db::catalog::parse_gid(&i.0)).collect();
-        match rustygod_db::attribute_writes::bulk_delete_attributes(db, &aids).await {
+        let aids: Vec<i32> = ids.iter().filter_map(|i| saleor_rustify_db::catalog::parse_gid(&i.0)).collect();
+        match saleor_rustify_db::attribute_writes::bulk_delete_attributes(db, &aids).await {
             Ok(_) => Ok(gen::AttributeBulkDelete { errors: vec![] }),
             Err(e) => Ok(gen::AttributeBulkDelete { errors: vec![aerr(None, e.to_string())] }),
         }
@@ -1834,10 +1834,10 @@ impl CatalogWriteMutation {
         let _ = crate::account::require_perm(ctx, "manage_product_types_and_attributes").await?;
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
         let err = |m: String| gen::AttributeValueCreate { attribute: None, errors: vec![aerr(None, m)] };
-        let Some(aid) = rustygod_db::catalog::parse_gid(&attribute.0) else {
+        let Some(aid) = saleor_rustify_db::catalog::parse_gid(&attribute.0) else {
             return Ok(err("bad attribute id".into()));
         };
-        match rustygod_db::attribute_writes::create_attribute_value(db, aid, &value_create(&input)).await {
+        match saleor_rustify_db::attribute_writes::create_attribute_value(db, aid, &value_create(&input)).await {
             Ok(_) => Ok(gen::AttributeValueCreate { attribute: attr_payload(db, aid).await?, errors: vec![] }),
             Err(e) => Ok(err(e.to_string())),
         }
@@ -1852,16 +1852,16 @@ impl CatalogWriteMutation {
         };
         // The parent attribute id for the payload: resolve via value row.
         use sea_orm::{EntityTrait, QuerySelect};
-        let aid: Option<i32> = rustygod_db::entities::attribute_attributevalue::Entity::find_by_id(vid)
-            .select_only().column(rustygod_db::entities::attribute_attributevalue::Column::AttributeId)
+        let aid: Option<i32> = saleor_rustify_db::entities::attribute_attributevalue::Entity::find_by_id(vid)
+            .select_only().column(saleor_rustify_db::entities::attribute_attributevalue::Column::AttributeId)
             .into_tuple::<i32>().one(db).await.map_err(|e| Error::new(e.to_string()))?;
-        let patch = rustygod_db::attribute_writes::ValuePatch {
+        let patch = saleor_rustify_db::attribute_writes::ValuePatch {
             name: input.name.clone(), value: input.value.clone(), plain_text: input.plain_text.clone(),
             rich_text: input.rich_text.as_ref().map(json_of),
             file_url: input.file_url.clone(), content_type: input.content_type.clone(),
             external_reference: input.external_reference.clone(),
         };
-        match rustygod_db::attribute_writes::update_attribute_value(db, vid, &patch).await {
+        match saleor_rustify_db::attribute_writes::update_attribute_value(db, vid, &patch).await {
             Ok(()) => Ok(gen::AttributeValueUpdate {
                 attribute: match aid { Some(a) => attr_payload(db, a).await?, None => None },
                 errors: vec![],
@@ -1876,7 +1876,7 @@ impl CatalogWriteMutation {
         let Some(vid) = resolve_value(db, id, external_reference).await? else {
             return Ok(gen::AttributeValueDelete { attribute: None, errors: vec![aerr(Some("id".into()), "attribute value not found".into())] });
         };
-        match rustygod_db::attribute_writes::delete_attribute_value(db, vid).await {
+        match saleor_rustify_db::attribute_writes::delete_attribute_value(db, vid).await {
             Ok(()) => Ok(gen::AttributeValueDelete { attribute: None, errors: vec![] }),
             Err(e) => Ok(gen::AttributeValueDelete { attribute: None, errors: vec![aerr(None, e.to_string())] }),
         }
@@ -1885,8 +1885,8 @@ impl CatalogWriteMutation {
     async fn attribute_value_bulk_delete(&self, ctx: &Context<'_>, ids: Vec<ID>) -> Result<gen::AttributeValueBulkDelete> {
         let _ = crate::account::require_perm(ctx, "manage_product_types_and_attributes").await?;
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
-        let vids: Vec<i32> = ids.iter().filter_map(|i| rustygod_db::catalog::parse_gid(&i.0)).collect();
-        match rustygod_db::attribute_writes::bulk_delete_attribute_values(db, &vids).await {
+        let vids: Vec<i32> = ids.iter().filter_map(|i| saleor_rustify_db::catalog::parse_gid(&i.0)).collect();
+        match saleor_rustify_db::attribute_writes::bulk_delete_attribute_values(db, &vids).await {
             Ok(n) => Ok(gen::AttributeValueBulkDelete { count: Some(n as i32), errors: vec![] }),
             Err(e) => Ok(gen::AttributeValueBulkDelete { count: None, errors: vec![aerr(None, e.to_string())] }),
         }
@@ -1896,13 +1896,13 @@ impl CatalogWriteMutation {
         let _ = crate::account::require_perm(ctx, "manage_product_types_and_attributes").await?;
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
         let err = |m: String| gen::AttributeReorderValues { attribute: None, errors: vec![aerr(None, m)] };
-        let Some(aid) = rustygod_db::catalog::parse_gid(&attribute_id.0) else {
+        let Some(aid) = saleor_rustify_db::catalog::parse_gid(&attribute_id.0) else {
             return Ok(err("bad attribute id".into()));
         };
         let mv: Vec<(i32, i32)> = moves.iter()
-            .filter_map(|m| rustygod_db::catalog::parse_gid(&m.id.0).map(|v| (v, m.sort_order.unwrap_or(0))))
+            .filter_map(|m| saleor_rustify_db::catalog::parse_gid(&m.id.0).map(|v| (v, m.sort_order.unwrap_or(0))))
             .collect();
-        match rustygod_db::attribute_writes::reorder_attribute_values(db, aid, &mv).await {
+        match saleor_rustify_db::attribute_writes::reorder_attribute_values(db, aid, &mv).await {
             Ok(()) => Ok(gen::AttributeReorderValues { attribute: attr_payload(db, aid).await?, errors: vec![] }),
             Err(e) => Ok(err(e.to_string())),
         }
@@ -1930,7 +1930,7 @@ impl CatalogWriteMutation {
                 }
             };
             let (cur_md, cur_pmd) = read_meta(db, "product_productvariant", vid).await;
-            let patch = rustygod_db::catalog_writes::VariantPatch {
+            let patch = saleor_rustify_db::catalog_writes::VariantPatch {
                 sku: v.sku.clone().map(Some),
                 name: v.name.clone(),
                 track_inventory: v.track_inventory,
@@ -1940,7 +1940,7 @@ impl CatalogWriteMutation {
                 private_metadata: merged(cur_pmd, v.private_metadata.clone()),
             };
             let mut errs: Vec<gen::ProductVariantBulkError> = vec![];
-            if let Err(e) = rustygod_db::catalog_writes::update_variant(db, vid, &patch).await {
+            if let Err(e) = saleor_rustify_db::catalog_writes::update_variant(db, vid, &patch).await {
                 errs.push(berr(e.to_string()));
             }
             for e in apply_variant_sub(db, vid, v.stocks.clone(), v.channel_listings.clone()).await {
@@ -1964,14 +1964,14 @@ impl CatalogWriteMutation {
         let _ = error_policy;
         let _ = crate::account::require_perm(ctx, "manage_products").await?;
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
-        let Some(pid) = rustygod_db::catalog::parse_gid(&product.0) else {
+        let Some(pid) = saleor_rustify_db::catalog::parse_gid(&product.0) else {
             return Ok(gen::ProductVariantBulkCreate { product_variants: vec![], results: vec![], errors: vec![gen::BulkProductError { field: Some("product".into()), message: Some("bad product id".into()), code: None, index: None, channels: vec![] }] });
         };
         let mut pvs = vec![];
         let mut results = vec![];
         for (idx, v) in variants.iter().enumerate() {
             let berr = |m: String| gen::ProductVariantBulkError { field: None, message: Some(m), code: None, attributes: vec![], values: vec![], warehouses: vec![], channels: vec![] };
-            let vid = match rustygod_db::catalog_writes::create_variant(
+            let vid = match saleor_rustify_db::catalog_writes::create_variant(
                 db, pid, v.sku.clone(), v.name.clone(),
                 v.track_inventory.unwrap_or(true), v.quantity_limit_per_customer, v.external_reference.clone(),
             ).await {
@@ -2005,8 +2005,8 @@ impl CatalogWriteMutation {
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
         let mut errs = vec![];
         for i in ids.unwrap_or_default() {
-            match rustygod_db::catalog::parse_gid(&i.0) {
-                Some(vid) => if let Err(e) = rustygod_db::catalog_writes::delete_variant(db, vid).await {
+            match saleor_rustify_db::catalog::parse_gid(&i.0) {
+                Some(vid) => if let Err(e) = saleor_rustify_db::catalog_writes::delete_variant(db, vid).await {
                     errs.push(perr(None, e.to_string()));
                 },
                 None => errs.push(perr(Some("ids".into()), "bad variant id".into())),
@@ -2015,7 +2015,7 @@ impl CatalogWriteMutation {
         // skus resolve via the variant table
         for s in skus.unwrap_or_default() {
             match resolve_variant(db, None, None, Some(s)).await? {
-                Some(vid) => if let Err(e) = rustygod_db::catalog_writes::delete_variant(db, vid).await {
+                Some(vid) => if let Err(e) = saleor_rustify_db::catalog_writes::delete_variant(db, vid).await {
                     errs.push(perr(None, e.to_string()));
                 },
                 None => errs.push(perr(Some("skus".into()), "variant not found".into())),
@@ -2031,13 +2031,13 @@ impl CatalogWriteMutation {
         let _ = crate::account::require_perm(ctx, "manage_products").await?;
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
         let lerr = |m: String| gen::ProductChannelListingError { field: None, message: Some(m), code: None, channels: vec![] };
-        let Some(pid) = rustygod_db::catalog::parse_gid(&id.0) else {
+        let Some(pid) = saleor_rustify_db::catalog::parse_gid(&id.0) else {
             return Ok(gen::ProductChannelListingUpdate { product: None, errors: vec![lerr("bad product id".into())] });
         };
         for c in input.update_channels.clone().unwrap_or_default() {
-            match rustygod_db::catalog::parse_gid(&c.channel_id.0) {
+            match saleor_rustify_db::catalog::parse_gid(&c.channel_id.0) {
                 Some(ch) => {
-                    if let Err(e) = rustygod_db::catalog_writes::upsert_product_listing(
+                    if let Err(e) = saleor_rustify_db::catalog_writes::upsert_product_listing(
                         db, pid, ch, c.is_published,
                         c.published_at.or(c.publication_date), c.visible_in_listings,
                         c.available_for_purchase_at.or(c.available_for_purchase_date),
@@ -2049,8 +2049,8 @@ impl CatalogWriteMutation {
             }
         }
         for r in input.remove_channels.clone().unwrap_or_default() {
-            match rustygod_db::catalog::parse_gid(&r.0) {
-                Some(ch) => if let Err(e) = rustygod_db::catalog_writes::delete_product_listing(db, pid, ch).await {
+            match saleor_rustify_db::catalog::parse_gid(&r.0) {
+                Some(ch) => if let Err(e) = saleor_rustify_db::catalog_writes::delete_product_listing(db, pid, ch).await {
                     return Ok(gen::ProductChannelListingUpdate { product: None, errors: vec![lerr(e.to_string())] });
                 },
                 None => return Ok(gen::ProductChannelListingUpdate { product: None, errors: vec![lerr("bad channel id".into())] }),
@@ -2069,7 +2069,7 @@ pub(crate) async fn category_children(
     after: Option<String>,
 ) -> Option<gen::CategoryCountableConnection> {
     use sea_orm::{ConnectionTrait, Statement};
-    let cid = rustygod_db::catalog::parse_gid(cid_gid)?;
+    let cid = saleor_rustify_db::catalog::parse_gid(cid_gid)?;
     let rows = db.query_all(Statement::from_sql_and_values(
         sea_orm::DatabaseBackend::Postgres,
         "SELECT id, name, slug FROM product_category WHERE parent_id = $1 ORDER BY name, id",
@@ -2099,7 +2099,7 @@ pub(crate) async fn category_products(
     cid_gid: &str,
 ) -> Option<GqlProductConnection> {
     use sea_orm::{ConnectionTrait, Statement};
-    let cid = rustygod_db::catalog::parse_gid(cid_gid)?;
+    let cid = saleor_rustify_db::catalog::parse_gid(cid_gid)?;
     let n: i32 = db.query_one(Statement::from_sql_and_values(
         sea_orm::DatabaseBackend::Postgres,
         "SELECT COUNT(p.id) AS n FROM product_category c JOIN product_category d ON d.tree_id = c.tree_id AND d.lft BETWEEN c.lft AND c.rght LEFT JOIN product_product p ON p.category_id = d.id WHERE c.id = $1",
@@ -2118,7 +2118,7 @@ pub(crate) async fn category_ancestors(
     first: Option<i32>,
 ) -> Option<gen::CategoryCountableConnection> {
     use sea_orm::{ConnectionTrait, Statement};
-    let cid = rustygod_db::catalog::parse_gid(cid_gid)?;
+    let cid = saleor_rustify_db::catalog::parse_gid(cid_gid)?;
     let rows = db.query_all(Statement::from_sql_and_values(
         sea_orm::DatabaseBackend::Postgres,
         "SELECT a.id, a.name, a.slug FROM product_category c JOIN product_category a ON a.tree_id = c.tree_id AND a.lft < c.lft AND c.lft < a.rght WHERE c.id = $1 ORDER BY a.lft",
@@ -2146,7 +2146,7 @@ pub(crate) async fn category_bg_image(
     cid_gid: &str,
 ) -> Option<crate::account::GqlImage> {
     use sea_orm::{ConnectionTrait, Statement};
-    let cid = rustygod_db::catalog::parse_gid(cid_gid)?;
+    let cid = saleor_rustify_db::catalog::parse_gid(cid_gid)?;
     let r = db.query_one(Statement::from_sql_and_values(
         sea_orm::DatabaseBackend::Postgres,
         "SELECT background_image, background_image_alt FROM product_category WHERE id = $1",
@@ -2167,7 +2167,7 @@ pub(crate) async fn collection_products(
     after: Option<String>,
 ) -> Option<GqlProductConnection> {
     use sea_orm::{ConnectionTrait, Statement};
-    let cid = rustygod_db::catalog::parse_gid(coll_gid)?;
+    let cid = saleor_rustify_db::catalog::parse_gid(coll_gid)?;
     let rows = db.query_all(Statement::from_sql_and_values(
         sea_orm::DatabaseBackend::Postgres,
         "SELECT product_id FROM product_collectionproduct WHERE collection_id = $1 ORDER BY product_id",
@@ -2184,11 +2184,11 @@ pub(crate) async fn collection_products(
             page_info: crate::common::PageInfo { has_next_page: false, has_previous_page: off > 0, start_cursor: None, end_cursor: None },
         });
     }
-    let mut f = rustygod_db::catalog::ProductListFilter::default();
+    let mut f = saleor_rustify_db::catalog::ProductListFilter::default();
     f.ids = page;
     // Channel-agnostic: list_products_filtered needs a channel for pricing;
     // default-channel prices are correct for the dashboard (single currency view).
-    let items = rustygod_db::catalog::list_products_filtered(db, "default-channel", &f, 100)
+    let items = saleor_rustify_db::catalog::list_products_filtered(db, "default-channel", &f, 100)
         .await.ok()?;
     let assembled = assemble_list_products(db, items).await.ok()?;
     let edges = assembled.into_iter().map(|p| GqlProductEdge {
@@ -2206,7 +2206,7 @@ pub(crate) async fn collection_bg_image(
     coll_gid: &str,
 ) -> Option<crate::account::GqlImage> {
     use sea_orm::{ConnectionTrait, Statement};
-    let cid = rustygod_db::catalog::parse_gid(coll_gid)?;
+    let cid = saleor_rustify_db::catalog::parse_gid(coll_gid)?;
     let r = db.query_one(Statement::from_sql_and_values(
         sea_orm::DatabaseBackend::Postgres,
         "SELECT background_image, background_image_alt FROM product_collection WHERE id = $1",
@@ -2232,7 +2232,7 @@ async fn apply_variant_sub(
         for c in s.create.clone().unwrap_or_default() {
             match crate::common::parse_uuid_gid(&c.warehouse.0) {
                 Some(wid) => {
-                    if let Err(e) = rustygod_db::catalog_writes::set_variant_stock(db, vid, wid, c.quantity).await {
+                    if let Err(e) = saleor_rustify_db::catalog_writes::set_variant_stock(db, vid, wid, c.quantity).await {
                         errs.push(e.to_string());
                     }
                 }
@@ -2240,9 +2240,9 @@ async fn apply_variant_sub(
             }
         }
         for u in s.update.clone().unwrap_or_default() {
-            match rustygod_db::catalog::parse_gid(&u.stock.0) {
+            match saleor_rustify_db::catalog::parse_gid(&u.stock.0) {
                 Some(sid) => {
-                    if let Err(e) = rustygod_db::catalog_writes::update_stock_qty(db, sid, u.quantity).await {
+                    if let Err(e) = saleor_rustify_db::catalog_writes::update_stock_qty(db, sid, u.quantity).await {
                         errs.push(e.to_string());
                     }
                 }
@@ -2253,7 +2253,7 @@ async fn apply_variant_sub(
             // Saleor sends warehouse ids here.
             match crate::common::parse_uuid_gid(&w.0) {
                 Some(wid) => {
-                    if let Err(e) = rustygod_db::catalog_writes::delete_variant_stock(db, vid, wid).await {
+                    if let Err(e) = saleor_rustify_db::catalog_writes::delete_variant_stock(db, vid, wid).await {
                         errs.push(e.to_string());
                     }
                 }
@@ -2264,7 +2264,7 @@ async fn apply_variant_sub(
     if let Some(l) = listings {
         // create-path entries (channelId + price)
         for c in l.create.clone().unwrap_or_default() {
-            match rustygod_db::catalog::parse_gid(&c.channel_id.0) {
+            match saleor_rustify_db::catalog::parse_gid(&c.channel_id.0) {
                 Some(ch) => {
                     let price = match c.price.0.parse::<rust_decimal::Decimal>() {
                         Ok(p) => p,
@@ -2272,7 +2272,7 @@ async fn apply_variant_sub(
                     };
                     let cost = c.cost_price.as_ref().and_then(|x| x.0.parse().ok());
                     let prior = c.prior_price.as_ref().and_then(|x| x.0.parse().ok());
-                    if let Err(e) = rustygod_db::catalog_writes::upsert_variant_listing(db, vid, ch, price, cost, prior).await {
+                    if let Err(e) = saleor_rustify_db::catalog_writes::upsert_variant_listing(db, vid, ch, price, cost, prior).await {
                         errs.push(e.to_string());
                     }
                 }
@@ -2281,7 +2281,7 @@ async fn apply_variant_sub(
         }
         // update-path entries (listing id + optional price)
         for u in l.update.clone().unwrap_or_default() {
-            match rustygod_db::catalog::parse_gid(&u.channel_listing.0) {
+            match saleor_rustify_db::catalog::parse_gid(&u.channel_listing.0) {
                 Some(lid) => {
                     // resolve listing -> (variant, channel) for the upsert
                     let row: Option<(i32, i32)> = {
@@ -2302,7 +2302,7 @@ async fn apply_variant_sub(
                                 Ok(price) => {
                                     let cost = u.cost_price.as_ref().and_then(|x| x.0.parse().ok());
                                     let prior = u.prior_price.as_ref().and_then(|x| x.0.parse().ok());
-                                    if let Err(e) = rustygod_db::catalog_writes::upsert_variant_listing(db, vid, ch, price, cost, prior).await {
+                                    if let Err(e) = saleor_rustify_db::catalog_writes::upsert_variant_listing(db, vid, ch, price, cost, prior).await {
                                         errs.push(e.to_string());
                                     }
                                 }
@@ -2317,8 +2317,8 @@ async fn apply_variant_sub(
             }
         }
         for r in l.remove.clone().unwrap_or_default() {
-            if let Some(lid) = rustygod_db::catalog::parse_gid(&r.0) {
-                if let Err(e) = rustygod_db::catalog_writes::delete_variant_listing(db, lid).await {
+            if let Some(lid) = saleor_rustify_db::catalog::parse_gid(&r.0) {
+                if let Err(e) = saleor_rustify_db::catalog_writes::delete_variant_listing(db, lid).await {
                     errs.push(e.to_string());
                 }
             } else {
@@ -2396,7 +2396,7 @@ pub(crate) async fn attribute_choices(
     after: Option<String>,
 ) -> Option<gen::AttributeValueCountableConnection> {
     use sea_orm::{ConnectionTrait, Statement};
-    let aid = rustygod_db::catalog::parse_gid(attr_gid)?;
+    let aid = saleor_rustify_db::catalog::parse_gid(attr_gid)?;
     let mut sql = "SELECT id, name, slug, value, input_type FROM attribute_attributevalue WHERE attribute_id = $1".to_string();
     let mut params: Vec<sea_orm::Value> = vec![aid.into()];
     if let Some(s) = search.as_ref().filter(|s| !s.trim().is_empty()) {
@@ -2429,7 +2429,7 @@ pub(crate) async fn attribute_assigned_types(
     variant: bool,
 ) -> Option<gen::ProductTypeCountableConnection> {
     use sea_orm::{ConnectionTrait, Statement};
-    let aid = rustygod_db::catalog::parse_gid(attr_gid)?;
+    let aid = saleor_rustify_db::catalog::parse_gid(attr_gid)?;
     let table = if variant { "attribute_attributevariant" } else { "attribute_attributeproduct" };
     let rows = db.query_all(Statement::from_sql_and_values(
         sea_orm::DatabaseBackend::Postgres,

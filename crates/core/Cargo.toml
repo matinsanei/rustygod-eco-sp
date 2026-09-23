@@ -1,5 +1,5 @@
 [package]
-name = "rustygod-core"
+name = "saleor-rustify-core"
 version = "0.1.0"
 edition = "2021"
 
@@ -19,7 +19,7 @@ jsonwebtoken = { workspace = true }
 sha1 = { workspace = true }
 digest = { workspace = true }
 rsa = { workspace = true }
-rustygod-proto = { path = "../proto" }
+saleor-rustify-proto = { path = "../proto" }
 rand = { workspace = true }
 rust_decimal_macros = { workspace = true }
 

@@ -1,8 +1,8 @@
-use rustygod_db::{catalog, checkout_store, complete, database_url};
+use saleor_rustify_db::{catalog, checkout_store, complete, database_url};
 use sea_orm::DatabaseConnection;
 
 async fn db() -> DatabaseConnection {
-    rustygod_db::connect(&database_url()).await.unwrap()
+    saleor_rustify_db::connect(&database_url()).await.unwrap()
 }
 
 #[tokio::test]
@@ -17,14 +17,14 @@ async fn guest_email_links_to_existing_user_on_complete() {
     let pricing = catalog::checkout_pricing(&db, "default-channel", &[vid]).await.unwrap();
     checkout_store::add_line_row(&db, token, vid, 1, pricing[&vid].0.amount, &currency, None).await.unwrap();
     let out = complete::complete_checkout(&db, token).await.unwrap();
-    let (header, _) = rustygod_db::order_store::get_order_rows(&db, out.order_id).await.unwrap().unwrap();
+    let (header, _) = saleor_rustify_db::order_store::get_order_rows(&db, out.order_id).await.unwrap().unwrap();
     // The order should have user_id of admin (id 1-ish) – at least not None, and email matches.
     assert_eq!(header.user_email, "admin@example.com");
     // Check order's user_id is linked (if DB has admin user).
     let order_user: Option<i32> = {
         use sea_orm::{EntityTrait, QuerySelect};
-        rustygod_db::entities::order_order::Entity::find_by_id(out.order_id)
-            .select_only().column(rustygod_db::entities::order_order::Column::UserId)
+        saleor_rustify_db::entities::order_order::Entity::find_by_id(out.order_id)
+            .select_only().column(saleor_rustify_db::entities::order_order::Column::UserId)
             .into_tuple::<Option<i32>>().one(&db).await.unwrap().flatten()
     };
     assert!(order_user.is_some(), "guest with existing email should link to user");
@@ -38,15 +38,15 @@ async fn authenticated_checkout_links_user_and_addresses() {
     // Set checkout user_id to admin (simulate authenticated checkout).
     {
         use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, Set};
-        let co = rustygod_db::entities::checkout_checkout::Entity::find_by_id(token).one(&db).await.unwrap().unwrap();
-        let mut am: rustygod_db::entities::checkout_checkout::ActiveModel = co.into();
+        let co = saleor_rustify_db::entities::checkout_checkout::Entity::find_by_id(token).one(&db).await.unwrap().unwrap();
+        let mut am: saleor_rustify_db::entities::checkout_checkout::ActiveModel = co.into();
         // Find admin user id
-        let admin = rustygod_db::entities::account_user::Entity::find()
-            .filter(rustygod_db::entities::account_user::Column::Email.eq("admin@example.com"))
+        let admin = saleor_rustify_db::entities::account_user::Entity::find()
+            .filter(saleor_rustify_db::entities::account_user::Column::Email.eq("admin@example.com"))
             .one(&db).await.unwrap().unwrap();
         am.user_id = Set(Some(admin.id));
         // Create an address and set as billing
-        let addr_id = rustygod_db::commerce::create_address(&db, &rustygod_db::commerce::NewAddress {
+        let addr_id = saleor_rustify_db::commerce::create_address(&db, &saleor_rustify_db::commerce::NewAddress {
             first_name: "Test".into(), last_name: "User".into(), street_address_1: "123 St".into(),
             city: "Warsaw".into(), postal_code: "00-001".into(), country: "PL".into(), phone: "".into(),
         }).await.unwrap();
@@ -60,15 +60,15 @@ async fn authenticated_checkout_links_user_and_addresses() {
     let out = complete::complete_checkout(&db, token).await.unwrap();
     let order_user: Option<i32> = {
         use sea_orm::{EntityTrait, QuerySelect};
-        rustygod_db::entities::order_order::Entity::find_by_id(out.order_id)
-            .select_only().column(rustygod_db::entities::order_order::Column::UserId)
+        saleor_rustify_db::entities::order_order::Entity::find_by_id(out.order_id)
+            .select_only().column(saleor_rustify_db::entities::order_order::Column::UserId)
             .into_tuple::<Option<i32>>().one(&db).await.unwrap().flatten()
     };
     assert!(order_user.is_some(), "authenticated checkout should link user");
     let order_billing: Option<i32> = {
         use sea_orm::{EntityTrait, QuerySelect};
-        rustygod_db::entities::order_order::Entity::find_by_id(out.order_id)
-            .select_only().column(rustygod_db::entities::order_order::Column::BillingAddressId)
+        saleor_rustify_db::entities::order_order::Entity::find_by_id(out.order_id)
+            .select_only().column(saleor_rustify_db::entities::order_order::Column::BillingAddressId)
             .into_tuple::<Option<i32>>().one(&db).await.unwrap().flatten()
     };
     assert!(order_billing.is_some(), "billing address should be carried");

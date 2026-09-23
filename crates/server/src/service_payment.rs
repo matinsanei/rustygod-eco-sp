@@ -4,9 +4,9 @@
 //! Money RPCs demand MANAGE_PAYMENTS.
 
 use rust_decimal::Decimal;
-use rustygod_core::psp::{ChallengePsp, ManualPsp, Psp, PspAction, ScriptedPsp};
-use rustygod_db::payments;
-use rustygod_proto::payment::{
+use saleor_rustify_core::psp::{ChallengePsp, ManualPsp, Psp, PspAction, ScriptedPsp};
+use saleor_rustify_db::payments;
+use saleor_rustify_proto::payment::{
     payment_service_server::PaymentService, AdjustAuthorizationRequest, CreateTransactionRequest,
     CreateTransactionResponse, GatewayActionRequest, GatewayActionResponse, GetTransactionRequest,
     GetTransactionResponse, PspCallbackRequest, PspCallbackResponse, TransactionInfo,
@@ -30,8 +30,8 @@ impl PaymentServiceImpl {
             .ok_or_else(|| Status::unavailable("postgres unavailable"))
     }
 
-    fn err(code: &str, message: String) -> rustygod_proto::common::Error {
-        rustygod_proto::common::Error {
+    fn err(code: &str, message: String) -> saleor_rustify_proto::common::Error {
+        saleor_rustify_proto::common::Error {
             code: code.into(),
             message,
             field: String::new(),
@@ -75,11 +75,11 @@ impl PaymentServiceImpl {
         // PSP selector. async-sim is pending-by-default: settle via PspCallback.
         // stripe is real PaymentIntents HTTP (STRIPE_SECRET_KEY); without a
         // key it rejects cleanly instead of failing mid-flow.
-        let domain = std::env::var("RUSTYGOD_DOMAIN").unwrap_or_else(|_| "localhost".into());
+        let domain = std::env::var("RUSTIFY_DOMAIN").unwrap_or_else(|_| "localhost".into());
         let manual = ManualPsp;
         let challenge = ChallengePsp::new(domain);
         let async_sim = ScriptedPsp::pending("async-sim");
-        let stripe = rustygod_psp::StripePsp::from_env();
+        let stripe = saleor_rustify_psp::StripePsp::from_env();
         let psp: &dyn Psp = match req.gateway.as_str() {
             "" | "manual" => &manual,
             "challenge" => &challenge,

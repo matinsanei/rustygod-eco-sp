@@ -1,5 +1,5 @@
 [package]
-name = "rustygod-plugins"
+name = "saleor-rustify-plugins"
 version = "0.1.0"
 edition = "2021"
 

@@ -1,12 +1,12 @@
 //! PaymentService flow over gRPC handlers: PSP selection, async callbacks,
 //! 3DS challenges, and adjustments — all against real Postgres.
 
-use rustygod_db::database_url;
-use rustygod_proto::payment::{
+use saleor_rustify_db::database_url;
+use saleor_rustify_proto::payment::{
     payment_service_server::PaymentService, AdjustAuthorizationRequest, CreateTransactionRequest,
     GatewayActionRequest, GetTransactionRequest, PspCallbackRequest,
 };
-use rustygod_server::service_payment::PaymentServiceImpl;
+use saleor_rustify_server::service_payment::PaymentServiceImpl;
 use tonic::Request;
 
 fn test_key() -> String {
@@ -19,12 +19,12 @@ fn test_key() -> String {
 
 async fn staff_req<T>(msg: T) -> Request<T> {
     std::env::set_var("RSA_PRIVATE_KEY", test_key());
-    let db = rustygod_db::connect(&database_url()).await.unwrap();
-    let (user, _) = rustygod_db::auth::find_for_login(&db, "admin@example.com")
+    let db = saleor_rustify_db::connect(&database_url()).await.unwrap();
+    let (user, _) = saleor_rustify_db::auth::find_for_login(&db, "admin@example.com")
         .await
         .unwrap()
         .unwrap();
-    let pair = rustygod_core::auth::mint_tokens_with_key(
+    let pair = saleor_rustify_core::auth::mint_tokens_with_key(
         &test_key(),
         "test",
         &user.email,
@@ -42,7 +42,7 @@ async fn staff_req<T>(msg: T) -> Request<T> {
 }
 
 async fn svc() -> PaymentServiceImpl {
-    let db = rustygod_db::connect(&database_url()).await.unwrap();
+    let db = saleor_rustify_db::connect(&database_url()).await.unwrap();
     PaymentServiceImpl::new(Some(db))
 }
 
@@ -67,7 +67,7 @@ async fn new_txn(svc: &PaymentServiceImpl, tag: &str) -> i32 {
 }
 
 async fn request_psp(db: &sea_orm::DatabaseConnection, txn_id: i32, t: &str) -> String {
-    use rustygod_db::entities::payment_transactionevent;
+    use saleor_rustify_db::entities::payment_transactionevent;
     use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
     payment_transactionevent::Entity::find()
         .filter(payment_transactionevent::Column::TransactionId.eq(txn_id))
@@ -81,7 +81,7 @@ async fn request_psp(db: &sea_orm::DatabaseConnection, txn_id: i32, t: &str) -> 
 }
 
 async fn cleanup(db: &sea_orm::DatabaseConnection, txn_id: i32) {
-    use rustygod_db::entities::{payment_transactionevent, payment_transactionitem};
+    use saleor_rustify_db::entities::{payment_transactionevent, payment_transactionitem};
     use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
     payment_transactionevent::Entity::delete_many()
         .filter(payment_transactionevent::Column::TransactionId.eq(txn_id))
@@ -108,7 +108,7 @@ fn action_req(txn_id: i32, amount: &str, key: &str, gateway: &str) -> GatewayAct
 #[tokio::test]
 async fn manual_authorize_then_charge_over_rpc() {
     let svc = svc().await;
-    let db = rustygod_db::connect(&database_url()).await.unwrap();
+    let db = saleor_rustify_db::connect(&database_url()).await.unwrap();
     let id = new_txn(&svc, "manual").await;
     let r = svc
         .authorize(staff_req(action_req(id, "100.000", "m-a", "manual")).await)
@@ -138,7 +138,7 @@ async fn manual_authorize_then_charge_over_rpc() {
 #[tokio::test]
 async fn async_sim_pending_then_callback_over_rpc() {
     let svc = svc().await;
-    let db = rustygod_db::connect(&database_url()).await.unwrap();
+    let db = saleor_rustify_db::connect(&database_url()).await.unwrap();
     let id = new_txn(&svc, "async").await;
     let r = svc
         .authorize(staff_req(action_req(id, "75.000", "a-1", "async-sim")).await)
@@ -173,7 +173,7 @@ async fn async_sim_pending_then_callback_over_rpc() {
 #[tokio::test]
 async fn challenge_then_adjust_over_rpc() {
     let svc = svc().await;
-    let db = rustygod_db::connect(&database_url()).await.unwrap();
+    let db = saleor_rustify_db::connect(&database_url()).await.unwrap();
     let id = new_txn(&svc, "3ds").await;
     let r = svc
         .authorize(staff_req(action_req(id, "120.000", "c-1", "challenge")).await)

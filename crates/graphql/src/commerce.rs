@@ -30,7 +30,7 @@ pub struct GqlStockConnection {
 
 async fn warehouse_gen(db: &sea_orm::DatabaseConnection, wid: uuid::Uuid) -> Result<Option<gen::Warehouse>, String> {
     use sea_orm::EntityTrait;
-    let row = rustygod_db::entities::warehouse_warehouse::Entity::find_by_id(wid)
+    let row = saleor_rustify_db::entities::warehouse_warehouse::Entity::find_by_id(wid)
         .one(db).await.map_err(|e| e.to_string())?;
     Ok(row.map(|w| {
         let mut g = crate::metadata::lit_warehouse(crate::common::gid("Warehouse", wid), vec![], vec![]);
@@ -45,7 +45,7 @@ async fn warehouse_gen(db: &sea_orm::DatabaseConnection, wid: uuid::Uuid) -> Res
 
 async fn stock_node(db: &sea_orm::DatabaseConnection, sid: i32) -> Result<Option<gen::Stock>, String> {
     use sea_orm::EntityTrait;
-    let row = rustygod_db::entities::warehouse_stock::Entity::find_by_id(sid)
+    let row = saleor_rustify_db::entities::warehouse_stock::Entity::find_by_id(sid)
         .one(db).await.map_err(|e| e.to_string())?;
     let Some(s) = row else { return Ok(None) };
     Ok(Some(gen::Stock {
@@ -101,7 +101,7 @@ async fn tax_config_node(db: &sea_orm::DatabaseConnection, tid: i32) -> Result<O
 }
 
 async fn menu_item_node(db: &sea_orm::DatabaseConnection, mid: i32) -> Result<Option<gen::MenuItem>, String> {
-    use rustygod_db::entities::{menu_menu, menu_menuitem};
+    use saleor_rustify_db::entities::{menu_menu, menu_menuitem};
     use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QueryOrder, QuerySelect};
     let Some(m) = menu_menuitem::Entity::find_by_id(mid).one(db).await.map_err(|e| e.to_string())? else {
         return Ok(None);
@@ -396,7 +396,7 @@ impl CommerceQuery {
         let mut params: Vec<sea_orm::Value> = vec![];
         if let Some(f) = filter.as_ref() {
             if let Some(ids) = f.ids.as_ref() {
-                let list: Vec<i32> = ids.iter().filter_map(|i| rustygod_db::catalog::parse_gid(&i.0)).collect();
+                let list: Vec<i32> = ids.iter().filter_map(|i| saleor_rustify_db::catalog::parse_gid(&i.0)).collect();
                 if !list.is_empty() {
                     let ph = (1..=list.len()).map(|i| format!("${i}")).collect::<Vec<_>>().join(", ");
                     conds.push(format!("t.id IN ({ph})"));
@@ -495,14 +495,14 @@ impl CommerceQuery {
     /// Saleor `giftCard(id)` — details page (was a None stub).
     async fn gift_card(&self, ctx: &Context<'_>, id: ID) -> Result<Option<gen::GiftCard>> {
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
-        let Some(gid) = rustygod_db::catalog::parse_gid(&id.0) else { return Ok(None) };
+        let Some(gid) = saleor_rustify_db::catalog::parse_gid(&id.0) else { return Ok(None) };
         Ok(assemble_gift_card(db, gid).await.map_err(Error::new)?)
     }
 
     /// Saleor `shippingZone(id)`.
     async fn shipping_zone(&self, ctx: &Context<'_>, id: ID) -> Result<Option<gen::ShippingZone>> {
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
-        let Some(zid) = rustygod_db::catalog::parse_gid(&id.0) else { return Ok(None) };
+        let Some(zid) = saleor_rustify_db::catalog::parse_gid(&id.0) else { return Ok(None) };
         Ok(assemble_zone(db, zid).await.map_err(Error::new)?)
     }
 
@@ -547,7 +547,7 @@ impl CommerceQuery {
                 conds.push(if u { "g.used_by_id IS NOT NULL".into() } else { "g.used_by_id IS NULL".into() });
             }
             if let Some(prods) = f.products.as_ref() {
-                let list: Vec<i32> = prods.iter().filter_map(|i| rustygod_db::catalog::parse_gid(&i.0)).collect();
+                let list: Vec<i32> = prods.iter().filter_map(|i| saleor_rustify_db::catalog::parse_gid(&i.0)).collect();
                 if !list.is_empty() {
                     let base = params.len();
                     let ph = (1..=list.len()).map(|i| format!("${}", base + i)).collect::<Vec<_>>().join(", ");
@@ -654,8 +654,8 @@ impl CommerceQuery {
     async fn channels(&self, ctx: &Context<'_>) -> Result<Vec<gen::Channel>> {
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
         use sea_orm::{EntityTrait, QuerySelect};
-        type Ch = rustygod_db::entities::channel_channel::Entity;
-        use rustygod_db::entities::channel_channel::Column as ChCol;
+        type Ch = saleor_rustify_db::entities::channel_channel::Entity;
+        use saleor_rustify_db::entities::channel_channel::Column as ChCol;
         let ids: Vec<i32> = Ch::find()
             .select_only().column(ChCol::Id)
             .into_tuple::<i32>().all(db).await.map_err(|e| Error::new(e.to_string()))?;
@@ -673,12 +673,12 @@ impl CommerceQuery {
     async fn channel(&self, ctx: &Context<'_>, id: Option<ID>, slug: Option<String>) -> Result<Option<gen::Channel>> {
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
         let cid: Option<i32> = if let Some(i) = id {
-            rustygod_db::catalog::parse_gid(&i.0)
+            saleor_rustify_db::catalog::parse_gid(&i.0)
         } else if let Some(s) = slug {
             use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QuerySelect};
-            rustygod_db::entities::channel_channel::Entity::find()
-                .select_only().column(rustygod_db::entities::channel_channel::Column::Id)
-                .filter(rustygod_db::entities::channel_channel::Column::Slug.eq(s))
+            saleor_rustify_db::entities::channel_channel::Entity::find()
+                .select_only().column(saleor_rustify_db::entities::channel_channel::Column::Id)
+                .filter(saleor_rustify_db::entities::channel_channel::Column::Slug.eq(s))
                 .into_tuple::<i32>().one(db).await.map_err(|e| Error::new(e.to_string()))?
         } else { None };
         match cid {
@@ -696,7 +696,7 @@ impl CommerceQuery {
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
         let off = after.and_then(|c| crate::common::decode_cursor(&c)).unwrap_or(0);
         let lim = first.unwrap_or(100).clamp(1, 100) as usize;
-        let rows = rustygod_db::commerce::list_warehouses(db, "default-channel").await.map_err(|e| Error::new(e.to_string()))?;
+        let rows = saleor_rustify_db::commerce::list_warehouses(db, "default-channel").await.map_err(|e| Error::new(e.to_string()))?;
         let total = rows.len() as i32;
         let edges = rows.into_iter().skip(off).take(lim).map(|w| gen::WarehouseCountableEdge { node: Some(gen::Warehouse {
             id: Some(ID(crate::common::gid("Warehouse", &w.id))),
@@ -721,7 +721,7 @@ impl CommerceQuery {
         let _ = (before, last, channel, filter, sort_by);
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
         use sea_orm::EntityTrait;
-        let rows = rustygod_db::entities::menu_menu::Entity::find().all(db).await.map_err(|e| Error::new(e.to_string()))?;
+        let rows = saleor_rustify_db::entities::menu_menu::Entity::find().all(db).await.map_err(|e| Error::new(e.to_string()))?;
         let off = after.and_then(|c| crate::common::decode_cursor(&c)).unwrap_or(0);
         let lim = first.unwrap_or(100).clamp(1, 100) as usize;
         let edges = rows.into_iter().skip(off).take(lim).map(|m| gen::MenuCountableEdge { node: Some(gen::Menu {
@@ -744,7 +744,7 @@ impl CommerceQuery {
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
         let off = after.and_then(|c| crate::common::decode_cursor(&c)).unwrap_or(0);
         let lim = first.unwrap_or(100).clamp(1, 100) as usize;
-        let rows = rustygod_db::commerce::list_tax_classes(db).await.map_err(|e| Error::new(e.to_string()))?;
+        let rows = saleor_rustify_db::commerce::list_tax_classes(db).await.map_err(|e| Error::new(e.to_string()))?;
         let edges = rows.into_iter().skip(off).take(lim).map(|(id, name)| gen::TaxClassCountableEdge { node: Some(gen::TaxClass {
             id: Some(ID(crate::common::gid("TaxClass", id))),
             private_metadata: vec![],
@@ -759,7 +759,7 @@ impl CommerceQuery {
     /// visibility inherited from the variant (dashboard inventory views).
     async fn stock(&self, ctx: &Context<'_>, id: ID) -> Result<Option<gen::Stock>> {
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
-        let Some(sid) = rustygod_db::catalog::parse_gid(&id.0) else { return Ok(None) };
+        let Some(sid) = saleor_rustify_db::catalog::parse_gid(&id.0) else { return Ok(None) };
         stock_node(db, sid).await.map_err(Error::new)
     }
 
@@ -809,8 +809,8 @@ impl CommerceQuery {
 
     async fn tax_class(&self, ctx: &Context<'_>, id: ID) -> Result<Option<gen::TaxClass>> {
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
-        let Some(tid) = rustygod_db::catalog::parse_gid(&id.0) else { return Ok(None) };
-        let rows = rustygod_db::commerce::list_tax_classes(db).await.map_err(|e| Error::new(e.to_string()))?;
+        let Some(tid) = saleor_rustify_db::catalog::parse_gid(&id.0) else { return Ok(None) };
+        let rows = saleor_rustify_db::commerce::list_tax_classes(db).await.map_err(|e| Error::new(e.to_string()))?;
         Ok(rows.into_iter().find(|(i, _)| *i == tid).map(|(id, name)| {
             let mut t = crate::metadata::lit_tax_class(crate::common::gid("TaxClass", id), vec![], vec![]);
             t.name = Some(name);
@@ -820,7 +820,7 @@ impl CommerceQuery {
 
     async fn tax_configuration(&self, ctx: &Context<'_>, id: ID) -> Result<Option<gen::TaxConfiguration>> {
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
-        let Some(tid) = rustygod_db::catalog::parse_gid(&id.0) else { return Ok(None) };
+        let Some(tid) = saleor_rustify_db::catalog::parse_gid(&id.0) else { return Ok(None) };
         tax_config_node(db, tid).await.map_err(Error::new)
     }
 
@@ -854,7 +854,7 @@ impl CommerceQuery {
     /// Deprecated in Saleor (use `taxClasses`): tax classes as gateway types.
     async fn tax_types(&self, ctx: &Context<'_>) -> Result<Vec<GqlTaxType>> {
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
-        let rows = rustygod_db::commerce::list_tax_classes(db).await.map_err(|e| Error::new(e.to_string()))?;
+        let rows = saleor_rustify_db::commerce::list_tax_classes(db).await.map_err(|e| Error::new(e.to_string()))?;
         Ok(rows.into_iter().map(|(_, name)| GqlTaxType { description: Some(name.clone()), tax_code: Some(name) }).collect())
     }
 
@@ -921,7 +921,7 @@ impl CommerceQuery {
     async fn menu_item(&self, ctx: &Context<'_>, id: ID, channel: Option<String>) -> Result<Option<gen::MenuItem>> {
         let _ = channel;
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
-        let Some(mid) = rustygod_db::catalog::parse_gid(&id.0) else { return Ok(None) };
+        let Some(mid) = saleor_rustify_db::catalog::parse_gid(&id.0) else { return Ok(None) };
         menu_item_node(db, mid).await.map_err(Error::new)
     }
 
@@ -960,7 +960,7 @@ impl CommerceQuery {
     async fn shipping_methods(&self, ctx: &Context<'_>, channel: Option<String>) -> Result<Vec<GqlShippingMethod>> {
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
         let ch = channel.unwrap_or_else(|| "default-channel".into());
-        let rows = rustygod_db::commerce::list_shipping_methods(db, &ch).await.map_err(|e| Error::new(e.to_string()))?;
+        let rows = saleor_rustify_db::commerce::list_shipping_methods(db, &ch).await.map_err(|e| Error::new(e.to_string()))?;
         Ok(rows.into_iter().map(|m| GqlShippingMethod { id: ID(crate::common::gid("ShippingMethod", m.id)), name: m.name, price: m.price_amount.to_string() }).collect())
     }
 
@@ -973,7 +973,7 @@ impl CommerceQuery {
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
         let off = after.and_then(|c| crate::common::decode_cursor(&c)).unwrap_or(0);
         let lim = first.unwrap_or(100).clamp(1, 100) as usize;
-        let rows = rustygod_db::commerce::list_pages(db).await.map_err(|e| Error::new(e.to_string()))?;
+        let rows = saleor_rustify_db::commerce::list_pages(db).await.map_err(|e| Error::new(e.to_string()))?;
         let total = rows.len() as i32;
         let edges = rows.into_iter().skip(off).take(lim).map(|p| gen::PageCountableEdge { node: Some(gen::Page {
             id: Some(ID(crate::common::gid("Page", p.id))),
@@ -1002,7 +1002,7 @@ impl CommerceQuery {
         let ch = channel.unwrap_or_else(|| "default-channel".into());
         let off = after.and_then(|c| crate::common::decode_cursor(&c)).unwrap_or(0);
         let lim = first.unwrap_or(100).clamp(1, 100) as usize;
-        let rows = rustygod_db::commerce::list_promotions(db, &ch).await.map_err(|e| Error::new(e.to_string()))?;
+        let rows = saleor_rustify_db::commerce::list_promotions(db, &ch).await.map_err(|e| Error::new(e.to_string()))?;
         let edges = rows.into_iter().skip(off).take(lim).map(|p| gen::PromotionCountableEdge { node: Some(gen::Promotion {
             id: Some(ID(crate::common::gid("Promotion", &p.id))),
             private_metadata: vec![],
@@ -1033,16 +1033,16 @@ impl CommerceQuery {
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
         let resolved_slug: Option<String> = if let Some(s) = slug { Some(s) } else if let Some(n) = name {
             use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
-            rustygod_db::entities::menu_menu::Entity::find()
-                .filter(rustygod_db::entities::menu_menu::Column::Name.eq(n))
+            saleor_rustify_db::entities::menu_menu::Entity::find()
+                .filter(saleor_rustify_db::entities::menu_menu::Column::Name.eq(n))
                 .one(db).await.map_err(|e| Error::new(e.to_string()))?.map(|m| m.slug)
         } else if let Some(i) = id {
             use sea_orm::EntityTrait;
-            let pk: i32 = rustygod_db::catalog::parse_gid(&i.0).unwrap_or(-1);
-            rustygod_db::entities::menu_menu::Entity::find_by_id(pk).one(db).await.map_err(|e| Error::new(e.to_string()))?.map(|m| m.slug)
+            let pk: i32 = saleor_rustify_db::catalog::parse_gid(&i.0).unwrap_or(-1);
+            saleor_rustify_db::entities::menu_menu::Entity::find_by_id(pk).one(db).await.map_err(|e| Error::new(e.to_string()))?.map(|m| m.slug)
         } else { None };
         let m = match resolved_slug {
-            Some(s) => rustygod_db::commerce::get_menu(db, &s).await.map_err(|e| Error::new(e.to_string()))?,
+            Some(s) => saleor_rustify_db::commerce::get_menu(db, &s).await.map_err(|e| Error::new(e.to_string()))?,
             None => None,
         };
         Ok(m.map(|x| gen::Menu {
@@ -1063,12 +1063,12 @@ async fn site_info(ctx: &Context<'_>) -> (String, Option<String>) {
     let Ok(db) = g.db() else { return fallback };
     // Slim selects only (never SELECT * — tsvector/interval columns break SeaORM).
     use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QuerySelect};
-    let site: Option<String> = rustygod_db::entities::django_site::Entity::find()
-        .select_only().column(rustygod_db::entities::django_site::Column::Name)
-        .filter(rustygod_db::entities::django_site::Column::Id.eq(1))
+    let site: Option<String> = saleor_rustify_db::entities::django_site::Entity::find()
+        .select_only().column(saleor_rustify_db::entities::django_site::Column::Name)
+        .filter(saleor_rustify_db::entities::django_site::Column::Id.eq(1))
         .into_tuple().one(db).await.ok().flatten();
-    let desc: Option<String> = rustygod_db::entities::site_sitesettings::Entity::find()
-        .select_only().column(rustygod_db::entities::site_sitesettings::Column::Description)
+    let desc: Option<String> = saleor_rustify_db::entities::site_sitesettings::Entity::find()
+        .select_only().column(saleor_rustify_db::entities::site_sitesettings::Column::Description)
         .into_tuple().one(db).await.ok().flatten();
     (
         site.unwrap_or(fallback.0),
@@ -1082,9 +1082,9 @@ async fn site_metadata(ctx: &Context<'_>) -> Vec<crate::common::MetadataItem> {
     let Ok(g) = ctx.data::<GqlContext>() else { return vec![] };
     let Ok(db) = g.db() else { return vec![] };
     use sea_orm::{EntityTrait, QuerySelect};
-    let v: Option<serde_json::Value> = rustygod_db::entities::site_sitesettings::Entity::find()
+    let v: Option<serde_json::Value> = saleor_rustify_db::entities::site_sitesettings::Entity::find()
         .select_only()
-        .column(rustygod_db::entities::site_sitesettings::Column::Metadata)
+        .column(saleor_rustify_db::entities::site_sitesettings::Column::Metadata)
         .into_tuple()
         .one(db)
         .await
@@ -1098,11 +1098,11 @@ async fn all_permissions(ctx: &Context<'_>) -> Vec<GqlPermission> {
     let Ok(g) = ctx.data::<GqlContext>() else { return vec![] };
     let Ok(db) = g.db() else { return vec![] };
     use sea_orm::{EntityTrait, QueryOrder, QuerySelect};
-    let rows = rustygod_db::entities::permission_permission::Entity::find()
+    let rows = saleor_rustify_db::entities::permission_permission::Entity::find()
         .select_only()
-        .column(rustygod_db::entities::permission_permission::Column::Codename)
-        .column(rustygod_db::entities::permission_permission::Column::Name)
-        .order_by_asc(rustygod_db::entities::permission_permission::Column::Codename)
+        .column(saleor_rustify_db::entities::permission_permission::Column::Codename)
+        .column(saleor_rustify_db::entities::permission_permission::Column::Name)
+        .order_by_asc(saleor_rustify_db::entities::permission_permission::Column::Codename)
         .into_tuple::<(String, String)>()
         .all(db).await.unwrap_or_default();
     rows.into_iter().map(|(code, name)| GqlPermission { code: crate::common::permission_enum_code(&code), name }).collect()
@@ -1138,7 +1138,7 @@ impl CommerceMutation {
         let _ = crate::account::require_perm(ctx, "manage_shipping").await?;
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
         let serr = |m: String| gen::ShippingError { field: None, message: Some(m), code: None, channels: vec![] };
-        let Some(zid) = rustygod_db::catalog::parse_gid(&id.0) else {
+        let Some(zid) = saleor_rustify_db::catalog::parse_gid(&id.0) else {
             return Ok(gen::ShippingZoneUpdate { errors: vec![serr("bad zone id".into())], shipping_zone: None });
         };
         use sea_orm::TransactionTrait;
@@ -1160,7 +1160,7 @@ impl CommerceMutation {
             }
         }
         // membership edits (dashboard sends globals; channels are int pks)
-        let ch_ids = |ids: &Option<Vec<ID>>| ids.as_ref().map(|v| v.iter().filter_map(|i| rustygod_db::catalog::parse_gid(&i.0)).collect::<Vec<_>>()).unwrap_or_default();
+        let ch_ids = |ids: &Option<Vec<ID>>| ids.as_ref().map(|v| v.iter().filter_map(|i| saleor_rustify_db::catalog::parse_gid(&i.0)).collect::<Vec<_>>()).unwrap_or_default();
         for cid in ch_ids(&input.add_channels) {
             if let Err(e) = zexec(&txn, "INSERT INTO shipping_shippingzone_channels (shippingzone_id, channel_id) VALUES ($1, $2) ON CONFLICT DO NOTHING".into(),
                 vec![zid.into(), cid.into()]).await {
@@ -1202,14 +1202,14 @@ impl CommerceMutation {
         let _ = crate::account::require_perm(ctx, "manage_taxes").await?;
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
         let terr = |m: String| gen::TaxConfigurationUpdateError { field: None, message: Some(m), code: None };
-        let Some(tid) = rustygod_db::catalog::parse_gid(&id.0) else {
+        let Some(tid) = saleor_rustify_db::catalog::parse_gid(&id.0) else {
             return Ok(gen::TaxConfigurationUpdate { errors: vec![terr("bad tax configuration id".into())] });
         };
         let strategy = input.tax_calculation_strategy.as_ref().map(|s| match format!("{s:?}").as_str() {
             "TAXAPP" => "TAX_APP".to_string(),
             _ => "FLAT_RATES".to_string(),
         });
-        let mut patch = rustygod_db::taxes::TaxConfigPatch {
+        let mut patch = saleor_rustify_db::taxes::TaxConfigPatch {
             charge_taxes: input.charge_taxes,
             strategy,
             display_gross: input.display_gross_prices,
@@ -1221,7 +1221,7 @@ impl CommerceMutation {
                 .iter().map(|c| format!("{c:?}")).collect(),
         };
         for c in input.update_countries_configuration.as_ref().map(|v| v.as_slice()).unwrap_or(&[]) {
-            patch.upsert_countries.push(rustygod_db::taxes::CountryOverride {
+            patch.upsert_countries.push(saleor_rustify_db::taxes::CountryOverride {
                 country_code: format!("{:?}", c.country_code),
                 charge_taxes: c.charge_taxes,
                 strategy: c.tax_calculation_strategy.as_ref().map(|s| match format!("{s:?}").as_str() {
@@ -1233,7 +1233,7 @@ impl CommerceMutation {
                 use_weighted_tax_for_shipping: c.use_weighted_tax_for_shipping.unwrap_or(false),
             });
         }
-        match rustygod_db::taxes::update_tax_configuration(db, tid, &patch).await {
+        match saleor_rustify_db::taxes::update_tax_configuration(db, tid, &patch).await {
             Ok(()) => Ok(gen::TaxConfigurationUpdate { errors: vec![] }),
             Err(e) => Ok(gen::TaxConfigurationUpdate { errors: vec![terr(e.to_string())] }),
         }
@@ -1256,8 +1256,8 @@ impl CommerceMutation {
         let db = g.db()?;
         use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, Set};
         if let Some(meta) = input.metadata.clone().or(input.private_metadata.clone()) {
-            if let Some(row) = rustygod_db::entities::site_sitesettings::Entity::find()
-                .filter(rustygod_db::entities::site_sitesettings::Column::Id.eq(1))
+            if let Some(row) = saleor_rustify_db::entities::site_sitesettings::Entity::find()
+                .filter(saleor_rustify_db::entities::site_sitesettings::Column::Id.eq(1))
                 .one(db)
                 .await
                 .map_err(|e| Error::new(e.to_string()))?
@@ -1266,7 +1266,7 @@ impl CommerceMutation {
                     &serde_json::to_value(&row.metadata).unwrap_or(serde_json::Value::Null),
                     &meta,
                 );
-                let mut am: rustygod_db::entities::site_sitesettings::ActiveModel = row.into();
+                let mut am: saleor_rustify_db::entities::site_sitesettings::ActiveModel = row.into();
                 if input.private_metadata.is_some() {
                     am.private_metadata = Set(merged.clone());
                 } else {
@@ -1276,20 +1276,20 @@ impl CommerceMutation {
             }
         }
         if let Some(desc) = input.description.clone() {
-            if let Some(row) = rustygod_db::entities::site_sitesettings::Entity::find()
-                .filter(rustygod_db::entities::site_sitesettings::Column::Id.eq(1))
+            if let Some(row) = saleor_rustify_db::entities::site_sitesettings::Entity::find()
+                .filter(saleor_rustify_db::entities::site_sitesettings::Column::Id.eq(1))
                 .one(db).await.map_err(|e| Error::new(e.to_string()))?
             {
-                let mut am: rustygod_db::entities::site_sitesettings::ActiveModel = row.into();
+                let mut am: saleor_rustify_db::entities::site_sitesettings::ActiveModel = row.into();
                 am.description = Set(desc);
                 am.update(db).await.map_err(|e| Error::new(e.to_string()))?;
             }
         }
         if let Some(site_name) = input.name.clone() {
-            if let Some(row) = rustygod_db::entities::django_site::Entity::find_by_id(1)
+            if let Some(row) = saleor_rustify_db::entities::django_site::Entity::find_by_id(1)
                 .one(db).await.map_err(|e| Error::new(e.to_string()))?
             {
-                let mut am: rustygod_db::entities::django_site::ActiveModel = row.into();
+                let mut am: saleor_rustify_db::entities::django_site::ActiveModel = row.into();
                 am.name = Set(site_name);
                 am.update(db).await.map_err(|e| Error::new(e.to_string()))?;
             }

@@ -1,8 +1,8 @@
 //! WebhookService: trigger fan-out, signed HTTP delivery, attempts,
 //! retry dues — over Django's webhook/core tables.
 
-use rustygod_db::webhooks;
-use rustygod_proto::webhook::{
+use saleor_rustify_db::webhooks;
+use saleor_rustify_proto::webhook::{
     webhook_service_server::WebhookService, AttemptInfo, DeliveryInfo, DueDeliveriesRequest,
     DueDeliveriesResponse, GetDeliveryRequest, GetDeliveryResponse, ListAttemptsRequest,
     ListAttemptsResponse, SendDeliveryRequest, SendDeliveryResponse, TriggerEventRequest,
@@ -20,7 +20,7 @@ impl WebhookServiceImpl {
     pub fn new(db: Option<DatabaseConnection>) -> Self {
         Self {
             db,
-            domain: std::env::var("RUSTYGOD_DOMAIN").unwrap_or_else(|_| "localhost".into()),
+            domain: std::env::var("RUSTIFY_DOMAIN").unwrap_or_else(|_| "localhost".into()),
         }
     }
 
@@ -30,8 +30,8 @@ impl WebhookServiceImpl {
             .ok_or_else(|| Status::unavailable("postgres unavailable"))
     }
 
-    fn err(code: &str, message: String) -> rustygod_proto::common::Error {
-        rustygod_proto::common::Error {
+    fn err(code: &str, message: String) -> saleor_rustify_proto::common::Error {
+        saleor_rustify_proto::common::Error {
             code: code.into(),
             message,
             field: String::new(),

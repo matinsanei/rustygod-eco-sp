@@ -4,12 +4,12 @@
 //! with lines, statuses follow `determine_order_status`.
 
 use rust_decimal::Decimal;
-use rustygod_db::{catalog, checkout_store, database_url, fulfillment, order_store};
+use saleor_rustify_db::{catalog, checkout_store, database_url, fulfillment, order_store};
 use sea_orm::DatabaseConnection;
 use uuid::Uuid;
 
 async fn db() -> DatabaseConnection {
-    rustygod_db::connect(&database_url())
+    saleor_rustify_db::connect(&database_url())
         .await
         .expect("saleor postgres must be up (localhost:5434)")
 }
@@ -33,7 +33,7 @@ fn stock_guard() -> StockGuard {
     let f = std::fs::OpenOptions::new()
         .create(true)
         .write(true)
-        .open("/tmp/rustygod-stock.lock")
+        .open("/tmp/rustify-stock.lock")
         .expect("lock file");
     f.lock_exclusive().expect("stock lock");
     StockGuard { _f: f }
@@ -83,7 +83,7 @@ async fn mint_order(db: &DatabaseConnection) -> OrderCtx {
 
 async fn cleanup_order(db: &DatabaseConnection, ctx: &OrderCtx) {
     let oid = ctx.order_id;
-    use rustygod_db::entities::{order_fulfillment, order_fulfillmentline, order_order, order_orderline};
+    use saleor_rustify_db::entities::{order_fulfillment, order_fulfillmentline, order_order, order_orderline};
     use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
     let fulfills: Vec<i32> = {
         use sea_orm::QuerySelect;
@@ -113,7 +113,7 @@ async fn cleanup_order(db: &DatabaseConnection, ctx: &OrderCtx) {
 }
 
 async fn order_status(db: &DatabaseConnection, oid: Uuid) -> String {
-    use rustygod_db::entities::order_order;
+    use saleor_rustify_db::entities::order_order;
     use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QuerySelect};
     order_order::Entity::find_by_id(oid)
         .select_only()
@@ -127,7 +127,7 @@ async fn order_status(db: &DatabaseConnection, oid: Uuid) -> String {
 }
 
 async fn free_stock(db: &DatabaseConnection, vid: i32) -> i32 {
-    rustygod_db::commerce::stocks_for_variant(db, vid)
+    saleor_rustify_db::commerce::stocks_for_variant(db, vid)
         .await
         .unwrap()
         .into_iter()
@@ -269,7 +269,7 @@ async fn refund_moves_to_returned() {
 
 #[tokio::test]
 async fn status_branches_match_django() {
-    use rustygod_db::fulfillment::determine_status;
+    use saleor_rustify_db::fulfillment::determine_status;
     assert_eq!(determine_status(10, 0, 0), "unfulfilled");
     assert_eq!(determine_status(10, 5, 0), "partially fulfilled");
     assert_eq!(determine_status(10, 10, 0), "fulfilled");

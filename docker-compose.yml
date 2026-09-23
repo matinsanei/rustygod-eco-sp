@@ -35,9 +35,9 @@ services:
       db:
         condition: service_healthy
     environment:
-      RUSTYGOD_DATABASE_URL: postgres://saleor:saleor@db:5432/saleor
-      RUSTYGOD_ADDR: 0.0.0.0:50051
-      RUSTYGOD_METRICS_ADDR: 0.0.0.0:9000
+      RUSTIFY_DATABASE_URL: postgres://saleor:saleor@db:5432/saleor
+      RUSTIFY_ADDR: 0.0.0.0:50051
+      RUSTIFY_METRICS_ADDR: 0.0.0.0:9000
     ports:
       - "50051:50051"
       - "9000:9000"
@@ -50,8 +50,8 @@ services:
         condition: service_healthy
     command: ["worker"]
     environment:
-      RUSTYGOD_DATABASE_URL: postgres://saleor:saleor@db:5432/saleor
-      RUSTYGOD_WORKER_SECS: 10
+      RUSTIFY_DATABASE_URL: postgres://saleor:saleor@db:5432/saleor
+      RUSTIFY_WORKER_SECS: 10
 
   # Saleor's celery beat: periodic scheduler (CELERY_BEAT_SCHEDULE).
   beat:
@@ -61,7 +61,7 @@ services:
         condition: service_healthy
     command: ["beat"]
     environment:
-      RUSTYGOD_DATABASE_URL: postgres://saleor:saleor@db:5432/saleor
+      RUSTIFY_DATABASE_URL: postgres://saleor:saleor@db:5432/saleor
 
 volumes:
   saleor-pg:

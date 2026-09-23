@@ -20,7 +20,7 @@
 
 use chrono::Utc;
 use rust_decimal::Decimal;
-use rustygod_core::{checkout::Checkout, money::Money};
+use saleor_rustify_core::{checkout::Checkout, money::Money};
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, ConnectionTrait, DatabaseConnection, EntityTrait, QueryFilter, QueryOrder,
     QuerySelect, Set, TransactionTrait,
@@ -370,7 +370,7 @@ pub async fn delete_checkout_row(
 /// Inactivity is `last_change`-based with Saleor's three buckets:
 /// anonymous (no email AND no user) after 30d, user checkouts after 90d,
 /// empty (no lines) checkouts after 6h — all configurable via
-/// `RUSTYGOD_{ANONYMOUS,USER}_CHECKOUT_DAYS` / `RUSTYGOD_EMPTY_CHECKOUT_HOURS`
+/// `RUSTIFY_{ANONYMOUS,USER}_CHECKOUT_DAYS` / `RUSTIFY_EMPTY_CHECKOUT_HOURS`
 /// (Saleor reads the same from Django settings env). Checkouts holding
 /// TransactionItem money (authorized/pending/charged/...) are never touched.
 /// Deletes reuse `delete_checkout_row` (discounts + reservations + lines +
@@ -382,9 +382,9 @@ pub async fn sweep_expired_checkouts(
     fn env_u64(name: &str, dflt: u64) -> u64 {
         std::env::var(name).ok().and_then(|s| s.parse().ok()).unwrap_or(dflt)
     }
-    let anon_cut = Utc::now() - chrono::Duration::days(env_u64("RUSTYGOD_ANONYMOUS_CHECKOUT_DAYS", 30) as i64);
-    let user_cut = Utc::now() - chrono::Duration::days(env_u64("RUSTYGOD_USER_CHECKOUT_DAYS", 90) as i64);
-    let empty_cut = Utc::now() - chrono::Duration::hours(env_u64("RUSTYGOD_EMPTY_CHECKOUT_HOURS", 6) as i64);
+    let anon_cut = Utc::now() - chrono::Duration::days(env_u64("RUSTIFY_ANONYMOUS_CHECKOUT_DAYS", 30) as i64);
+    let user_cut = Utc::now() - chrono::Duration::days(env_u64("RUSTIFY_USER_CHECKOUT_DAYS", 90) as i64);
+    let empty_cut = Utc::now() - chrono::Duration::hours(env_u64("RUSTIFY_EMPTY_CHECKOUT_HOURS", 6) as i64);
     let mut total: u64 = 0;
     for _ in 0..5 {
         let sel = sea_orm::Statement::from_sql_and_values(
@@ -457,20 +457,20 @@ pub struct AutoCompleteReport {
 /// `complete::complete_checkout` — idempotent via the order's checkout
 /// token, so a replayed beat never double-mints. One bad checkout never
 /// aborts the batch; failures are counted and retried after the retry
-/// window (24h default). Tunables: `RUSTYGOD_AUTO_COMPLETE_BATCH` (20),
-/// `RUSTYGOD_AUTO_COMPLETE_MAX_AGE_DAYS` (30),
-/// `RUSTYGOD_AUTO_COMPLETE_RETRY_HOURS` (24).
+/// window (24h default). Tunables: `RUSTIFY_AUTO_COMPLETE_BATCH` (20),
+/// `RUSTIFY_AUTO_COMPLETE_MAX_AGE_DAYS` (30),
+/// `RUSTIFY_AUTO_COMPLETE_RETRY_HOURS` (24).
 pub async fn auto_complete_expired_checkouts(
     db: &DatabaseConnection,
 ) -> Result<AutoCompleteReport> {
     fn env_u64(name: &str, dflt: u64) -> u64 {
         std::env::var(name).ok().and_then(|s| s.parse().ok()).unwrap_or(dflt)
     }
-    let batch = env_u64("RUSTYGOD_AUTO_COMPLETE_BATCH", 20).clamp(1, 500) as i64;
+    let batch = env_u64("RUSTIFY_AUTO_COMPLETE_BATCH", 20).clamp(1, 500) as i64;
     let oldest_cut =
-        Utc::now() - chrono::Duration::days(env_u64("RUSTYGOD_AUTO_COMPLETE_MAX_AGE_DAYS", 30) as i64);
+        Utc::now() - chrono::Duration::days(env_u64("RUSTIFY_AUTO_COMPLETE_MAX_AGE_DAYS", 30) as i64);
     let retry_cut =
-        Utc::now() - chrono::Duration::hours(env_u64("RUSTYGOD_AUTO_COMPLETE_RETRY_HOURS", 24) as i64);
+        Utc::now() - chrono::Duration::hours(env_u64("RUSTIFY_AUTO_COMPLETE_RETRY_HOURS", 24) as i64);
     let sel = sea_orm::Statement::from_sql_and_values(
         sea_orm::DatabaseBackend::Postgres,
         "SELECT c.token FROM checkout_checkout c \
@@ -537,7 +537,7 @@ pub fn to_domain(
     };
     for l in lines {
         let unit = l.price_override.unwrap_or(l.undiscounted_unit_price_amount);
-        out.lines.push(rustygod_core::checkout::CheckoutLine {
+        out.lines.push(saleor_rustify_core::checkout::CheckoutLine {
             variant_id: l.variant_id.to_string(),
             quantity: l.quantity,
             unit_price: Money::new(unit, l.currency.clone()),

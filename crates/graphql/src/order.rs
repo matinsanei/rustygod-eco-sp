@@ -105,8 +105,8 @@ fn parse_id(s: &str) -> Uuid {
  /// totals/lines/channel/variant+product/totals), `None`/`[]` elsewhere.
 async fn to_gen_order(
     db: &sea_orm::DatabaseConnection,
-    h: &rustygod_db::order_store::OrderHeader,
-    ls: Vec<rustygod_db::entities::order_orderline::Model>,
+    h: &saleor_rustify_db::order_store::OrderHeader,
+    ls: Vec<saleor_rustify_db::entities::order_orderline::Model>,
 ) -> gen::Order {
     use sea_orm::EntityTrait;
     // Order-level undiscounted total = sum of line undiscounted totals
@@ -124,14 +124,14 @@ async fn to_gen_order(
         let mut variant_sku = None;
         let mut product_stub = None;
         if let Some(vid) = l.variant_id {
-            if let Ok(Some(v)) = rustygod_db::entities::product_productvariant::Entity::find_by_id(vid).one(db).await {
+            if let Ok(Some(v)) = saleor_rustify_db::entities::product_productvariant::Entity::find_by_id(vid).one(db).await {
                 variant_name = Some(v.name.clone());
                 variant_sku = v.sku.clone();
                 // Slim select: product_product.search_vector is tsvector and
                 // crashes full-model decode (same class as channel INTERVAL).
                 use sea_orm::{ColumnTrait, QueryFilter, QuerySelect};
-                type PP = rustygod_db::entities::product_product::Entity;
-                use rustygod_db::entities::product_product::Column as PPCol;
+                type PP = saleor_rustify_db::entities::product_product::Entity;
+                use saleor_rustify_db::entities::product_product::Column as PPCol;
                 let prow: Option<(i32, String, String, Option<String>, Option<String>)> = PP::find()
                     .select_only()
                     .column(PPCol::Id).column(PPCol::Name).column(PPCol::Slug)
@@ -342,7 +342,7 @@ fn parse_order_uuid(s: &str) -> Option<Uuid> {
 
 /// `number:<n>` / email substring search shared by `search` + deprecated filter.
 fn search_condition(s: &str) -> sea_orm::Condition {
-    use rustygod_db::entities::order_order::Column as OCol;
+    use saleor_rustify_db::entities::order_order::Column as OCol;
     use sea_orm::{ColumnTrait, Condition};
     let s = s.trim();
     let like = format!("%{s}%");
@@ -361,7 +361,7 @@ impl OrderQuery {
     async fn order(&self, ctx: &Context<'_>, id: ID) -> Result<Option<gen::Order>> {
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
         let oid = parse_id(&id.0);
-        let Some((h, ls)) = rustygod_db::order_store::get_order_rows(db, oid).await.map_err(|e| Error::new(e.to_string()))? else { return Ok(None) };
+        let Some((h, ls)) = saleor_rustify_db::order_store::get_order_rows(db, oid).await.map_err(|e| Error::new(e.to_string()))? else { return Ok(None) };
         Ok(Some(to_gen_order(db, &h, ls).await))
     }
 
@@ -370,7 +370,7 @@ impl OrderQuery {
     async fn order_by_token(&self, ctx: &Context<'_>, token: Uuid) -> Result<Option<gen::Order>> {
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
         let oid: Uuid = token;
-        let Some((h, ls)) = rustygod_db::order_store::get_order_rows(db, oid).await.map_err(|e| Error::new(e.to_string()))? else { return Ok(None) };
+        let Some((h, ls)) = saleor_rustify_db::order_store::get_order_rows(db, oid).await.map_err(|e| Error::new(e.to_string()))? else { return Ok(None) };
         Ok(Some(to_gen_order(db, &h, ls).await))
     }
 
@@ -379,7 +379,7 @@ impl OrderQuery {
     async fn order_settings(&self, ctx: &Context<'_>) -> Result<Option<gen::OrderSettings>> {
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
         use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QuerySelect};
-        use rustygod_db::entities::channel_channel::{Column as CCol, Entity as CEnt};
+        use saleor_rustify_db::entities::channel_channel::{Column as CCol, Entity as CEnt};
         // Slim select: the row carries an INTERVAL column SeaORM cannot decode.
         let row: Option<(Option<bool>, Option<bool>, Option<i32>, String, bool, Option<i32>)> = CEnt::find()
             .select_only()
@@ -429,7 +429,7 @@ impl OrderQuery {
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
         let off = after.and_then(|c| crate::common::decode_cursor(&c)).unwrap_or(0);
         let lim = first.unwrap_or(20).clamp(1, 100) as usize;
-        let (ch_id, _) = rustygod_db::catalog::channel_info(db, &channel).await.map_err(|e| Error::new(e.to_string()))?;
+        let (ch_id, _) = saleor_rustify_db::catalog::channel_info(db, &channel).await.map_err(|e| Error::new(e.to_string()))?;
         let days: i64 = match format!("{period:?}").as_str() {
             "TODAY" => 1,
             _ => 30,
@@ -474,7 +474,7 @@ impl OrderQuery {
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
         let off = after.and_then(|c| decode_cursor(&c)).unwrap_or(0);
         let lim = first.unwrap_or(20).clamp(1, 100) as usize;
-        use rustygod_db::entities::order_order::{Column as OCol, Entity as OEnt};
+        use saleor_rustify_db::entities::order_order::{Column as OCol, Entity as OEnt};
         use sea_orm::{ColumnTrait, Condition, EntityTrait, QueryFilter, QueryOrder, QuerySelect};
         let mut cond = Condition::all();
         // --- where input ---
@@ -522,7 +522,7 @@ impl OrderQuery {
                 cond = cond.add(OCol::UserEmail.like(format!("%{c}%")));
             }
             if let Some(chs) = flt.channels.as_ref() {
-                let cids: Vec<i32> = chs.iter().filter_map(|i| rustygod_db::catalog::parse_gid(&i.0)).collect();
+                let cids: Vec<i32> = chs.iter().filter_map(|i| saleor_rustify_db::catalog::parse_gid(&i.0)).collect();
                 if !cids.is_empty() { cond = cond.add(OCol::ChannelId.is_in(cids)); }
             }
             if let Some(r) = flt.created.as_ref() {
@@ -547,7 +547,7 @@ impl OrderQuery {
         let total = ids.len() as i32;
         let mut out = Vec::new();
         for oid in ids.into_iter().skip(off).take(lim) {
-            if let Some((hh, ll)) = rustygod_db::order_store::get_order_rows(db, oid).await.map_err(|e| Error::new(e.to_string()))? {
+            if let Some((hh, ll)) = saleor_rustify_db::order_store::get_order_rows(db, oid).await.map_err(|e| Error::new(e.to_string()))? {
                 out.push(to_gen_order(db, &hh, ll).await);
             }
         }
@@ -573,8 +573,8 @@ impl OrderMutation {
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
         authorize(ctx, crate::context::MANAGE_ORDERS).await?;
         let oid = parse_id(&id.0);
-        rustygod_db::cancel::cancel_order(db, oid).await.map_err(|e| Error::new(e.to_string()))?;
-        let (h, ls) = rustygod_db::order_store::get_order_rows(db, oid).await.map_err(|e| Error::new(e.to_string()))?.ok_or_else(|| Error::new("order vanished"))?;
+        saleor_rustify_db::cancel::cancel_order(db, oid).await.map_err(|e| Error::new(e.to_string()))?;
+        let (h, ls) = saleor_rustify_db::order_store::get_order_rows(db, oid).await.map_err(|e| Error::new(e.to_string()))?.ok_or_else(|| Error::new("order vanished"))?;
         Ok(GqlOrderCancel { order: Some(to_gen_order(db, &h, ls).await), errors: vec![] })
     }
 
@@ -585,13 +585,13 @@ impl OrderMutation {
         authorize(ctx, crate::context::MANAGE_ORDERS).await?;
         let oid = parse_id(&order.map(|o| o.0).unwrap_or_default());
         use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QuerySelect};
-        let mut items: Vec<rustygod_db::fulfillment::FulfillItem> = vec![];
+        let mut items: Vec<saleor_rustify_db::fulfillment::FulfillItem> = vec![];
         for l in input.lines {
             let lid = parse_id(&l.order_line_id.map(|i| i.0).unwrap_or_default());
             // variant of this line (for warehouse -> stock resolution).
-            let line_variant: Option<i32> = rustygod_db::entities::order_orderline::Entity::find()
-                .select_only().column(rustygod_db::entities::order_orderline::Column::VariantId)
-                .filter(rustygod_db::entities::order_orderline::Column::Id.eq(lid))
+            let line_variant: Option<i32> = saleor_rustify_db::entities::order_orderline::Entity::find()
+                .select_only().column(saleor_rustify_db::entities::order_orderline::Column::VariantId)
+                .filter(saleor_rustify_db::entities::order_orderline::Column::Id.eq(lid))
                 .into_tuple::<Option<i32>>().one(db).await.map_err(|e| Error::new(e.to_string()))?.flatten();
             for s in l.stocks {
                 // Dashboard sends the WAREHOUSE id (uuid global); resolve to
@@ -599,12 +599,12 @@ impl OrderMutation {
                 // dropped by an i32 parse — wrong-warehouse fulfillments).
                 let stock_id: Option<i32> = match crate::common::parse_uuid_gid(&s.warehouse.0) {
                     Some(wid) => match line_variant {
-                        Some(vid) => rustygod_db::fulfillment::stock_for_variant_warehouse(db, vid, wid).await.map_err(|e| Error::new(e.to_string()))?,
+                        Some(vid) => saleor_rustify_db::fulfillment::stock_for_variant_warehouse(db, vid, wid).await.map_err(|e| Error::new(e.to_string()))?,
                         None => None,
                     },
                     None => None,
                 };
-                items.push(rustygod_db::fulfillment::FulfillItem {
+                items.push(saleor_rustify_db::fulfillment::FulfillItem {
                     order_line_id: lid,
                     quantity: s.quantity,
                     stock_id,
@@ -612,8 +612,8 @@ impl OrderMutation {
             }
         }
         let tracking = input.tracking_number.unwrap_or_default();
-        rustygod_db::fulfillment::create_fulfillment(db, oid, &items, &tracking).await.map_err(|e| Error::new(e.to_string()))?;
-        let order_view = match rustygod_db::order_store::get_order_rows(db, oid).await.map_err(|e| Error::new(e.to_string()))? {
+        saleor_rustify_db::fulfillment::create_fulfillment(db, oid, &items, &tracking).await.map_err(|e| Error::new(e.to_string()))?;
+        let order_view = match saleor_rustify_db::order_store::get_order_rows(db, oid).await.map_err(|e| Error::new(e.to_string()))? {
             Some((h, ll)) => Some(to_gen_order(db, &h, ll).await),
             None => None,
         };
@@ -624,12 +624,12 @@ impl OrderMutation {
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
         authorize(ctx, crate::context::MANAGE_ORDERS).await?;
         let oid = parse_id(&order_id.0);
-        let items: Vec<rustygod_db::fulfillment::FulfillItem> = lines.into_iter().map(|l| {
+        let items: Vec<saleor_rustify_db::fulfillment::FulfillItem> = lines.into_iter().map(|l| {
             let lid = parse_id(&l.order_line_id.0);
-            let sid: Option<i32> = l.stock_id.and_then(|s| rustygod_db::catalog::parse_gid(&s.0));
-            rustygod_db::fulfillment::FulfillItem { order_line_id: lid, quantity: l.quantity, stock_id: sid }
+            let sid: Option<i32> = l.stock_id.and_then(|s| saleor_rustify_db::catalog::parse_gid(&s.0));
+            saleor_rustify_db::fulfillment::FulfillItem { order_line_id: lid, quantity: l.quantity, stock_id: sid }
         }).collect();
-        let out = rustygod_db::fulfillment::return_and_refund(db, oid, &items, &reason, restock.unwrap_or(true), None).await.map_err(|e| Error::new(e.to_string()))?;
+        let out = saleor_rustify_db::fulfillment::return_and_refund(db, oid, &items, &reason, restock.unwrap_or(true), None).await.map_err(|e| Error::new(e.to_string()))?;
         Ok(format!("fulfillment:{} grant:{}", out.fulfillment_id, out.granted_refund_id))
     }
 }

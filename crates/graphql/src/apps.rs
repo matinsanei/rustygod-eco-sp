@@ -232,10 +232,10 @@ impl AppsQuery {
     async fn app_extension(&self, ctx: &Context<'_>, id: ID) -> Result<Option<GqlAppExtension>> {
         let g = ctx.data::<GqlContext>()?;
         let db = g.db()?;
-        let eid = rustygod_db::catalog::parse_gid(&id.0).unwrap_or(-1);
+        let eid = saleor_rustify_db::catalog::parse_gid(&id.0).unwrap_or(-1);
         let rows = load_extensions(db).await.map_err(|e| Error::new(e.to_string()))?;
         Ok(rows.into_iter().find(|e| {
-            rustygod_db::catalog::parse_gid(&e.id.0).unwrap_or(-2) == eid
+            saleor_rustify_db::catalog::parse_gid(&e.id.0).unwrap_or(-2) == eid
         }))
     }
 
@@ -324,7 +324,7 @@ fn to_gql(a: &AppRow) -> gen::App {
     }
 }
 
-fn to_row(m: &rustygod_db::entities::app_app::Model) -> AppRow {
+fn to_row(m: &saleor_rustify_db::entities::app_app::Model) -> AppRow {
     AppRow {
         id: m.id,
         name: m.name.clone(),
@@ -348,7 +348,7 @@ async fn load_apps(
     db: &sea_orm::DatabaseConnection,
 ) -> Result<Vec<gen::App>, sea_orm::DbErr> {
     use sea_orm::{EntityTrait, QueryOrder};
-    use rustygod_db::entities::app_app;
+    use saleor_rustify_db::entities::app_app;
     let rows = app_app::Entity::find()
         .order_by_asc(app_app::Column::Id)
         .all(db)
@@ -361,7 +361,7 @@ async fn load_extensions(
     db: &sea_orm::DatabaseConnection,
 ) -> Result<Vec<GqlAppExtension>, sea_orm::DbErr> {
     use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QueryOrder, QuerySelect};
-    use rustygod_db::entities::{app_app, app_appextension, app_appextension_permissions, permission_permission};
+    use saleor_rustify_db::entities::{app_app, app_appextension, app_appextension_permissions, permission_permission};
     let exts: Vec<(i32, String, String, i32, String, String, serde_json::Value, Option<String>)> =
         app_appextension::Entity::find()
             .select_only()

@@ -1,23 +1,23 @@
 //! DB-mode invoice flow over gRPC handlers: request → fulfill →
 //! list-ready → send, against real Postgres.
 
-use rustygod_db::database_url;
-use rustygod_proto::invoice::{
+use saleor_rustify_db::database_url;
+use saleor_rustify_proto::invoice::{
     invoice_service_server::InvoiceService, FulfillInvoiceRequest, InvoiceIdRequest,
     ListReadyInvoicesRequest, RequestInvoiceRequest, SendInvoiceRequest,
 };
-use rustygod_server::service_invoice::InvoiceServiceImpl;
+use saleor_rustify_server::service_invoice::InvoiceServiceImpl;
 use tonic::Request;
 use uuid::Uuid;
 
 async fn svc() -> InvoiceServiceImpl {
-    let db = rustygod_db::connect(&database_url()).await.unwrap();
+    let db = saleor_rustify_db::connect(&database_url()).await.unwrap();
     InvoiceServiceImpl::new(Some(db))
 }
 
 async fn billable_order() -> String {
-    let db = rustygod_db::connect(&database_url()).await.unwrap();
-    use rustygod_db::entities::order_order;
+    let db = saleor_rustify_db::connect(&database_url()).await.unwrap();
+    use saleor_rustify_db::entities::order_order;
     use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QuerySelect};
     order_order::Entity::find()
         .select_only()
@@ -44,12 +44,12 @@ fn test_key() -> String {
 /// Staff request: populatedb admin JWT in metadata.
 async fn staff_req<T>(msg: T) -> Request<T> {
     std::env::set_var("RSA_PRIVATE_KEY", test_key());
-    let db = rustygod_db::connect(&rustygod_db::database_url()).await.unwrap();
-    let (user, _) = rustygod_db::auth::find_for_login(&db, "admin@example.com")
+    let db = saleor_rustify_db::connect(&saleor_rustify_db::database_url()).await.unwrap();
+    let (user, _) = saleor_rustify_db::auth::find_for_login(&db, "admin@example.com")
         .await
         .unwrap()
         .unwrap();
-    let pair = rustygod_core::auth::mint_tokens_with_key(
+    let pair = saleor_rustify_core::auth::mint_tokens_with_key(
         &test_key(),
         "test",
         &user.email,

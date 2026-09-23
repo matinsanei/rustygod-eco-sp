@@ -110,8 +110,8 @@ impl Order {
         }
     }
 
-    pub fn to_proto(&self) -> rustygod_proto::order::Order {
-        rustygod_proto::order::Order {
+    pub fn to_proto(&self) -> saleor_rustify_proto::order::Order {
+        saleor_rustify_proto::order::Order {
             id: self.id.clone(),
             number: self.number.clone(),
             channel: self.channel.clone(),
@@ -120,7 +120,7 @@ impl Order {
             lines: self
                 .lines
                 .iter()
-                .map(|l| rustygod_proto::order::OrderLine {
+                .map(|l| saleor_rustify_proto::order::OrderLine {
                     variant_id: l.variant_id.clone(),
                     product_name: l.product_name.clone(),
                     quantity: l.quantity,

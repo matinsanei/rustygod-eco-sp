@@ -1,11 +1,11 @@
 //! Attribute writes contract: CRUD + values + assignments + reorders hit
 //! real Django tables with Django's validations.
 
-use rustygod_db::{attribute_writes::*, database_url};
+use saleor_rustify_db::{attribute_writes::*, database_url};
 use sea_orm::DatabaseConnection;
 
 async fn db() -> DatabaseConnection {
-    rustygod_db::connect(&database_url())
+    saleor_rustify_db::connect(&database_url())
         .await
         .expect("saleor postgres must be up (localhost:5434)")
 }
@@ -15,7 +15,7 @@ fn slug(tag: &str) -> String {
 }
 
 async fn product_type_id(db: &DatabaseConnection) -> i32 {
-    use rustygod_db::entities::product_producttype;
+    use saleor_rustify_db::entities::product_producttype;
     use sea_orm::{EntityTrait, QuerySelect};
     product_producttype::Entity::find()
         .select_only()
@@ -69,7 +69,7 @@ async fn attribute_crud_and_values() {
 
     // Reorder: Blue first.
     reorder_attribute_values(&db, aid, &[(v2, 0), (v1, 1)]).await.unwrap();
-    use rustygod_db::entities::attribute_attributevalue;
+    use saleor_rustify_db::entities::attribute_attributevalue;
     use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QueryOrder, QuerySelect};
     let ordered: Vec<(i32, Option<i32>)> = attribute_attributevalue::Entity::find()
         .select_only()
@@ -121,7 +121,7 @@ async fn attribute_crud_and_values() {
     assert_eq!(bulk_delete_attribute_values(&db, &left).await.unwrap(), left.len() as u64);
 
     delete_attribute(&db, aid).await.unwrap();
-    use rustygod_db::entities::attribute_attribute;
+    use saleor_rustify_db::entities::attribute_attribute;
     assert!(attribute_attribute::Entity::find_by_id(aid).one(&db).await.unwrap().is_none());
 }
 
@@ -197,7 +197,7 @@ async fn assign_unassign_validations() {
 
     // Assignment update flips variant_selection.
     update_attribute_assignment(&db, pt, &[(only, false)]).await.unwrap();
-    use rustygod_db::entities::attribute_attributevariant;
+    use saleor_rustify_db::entities::attribute_attributevariant;
     use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QuerySelect};
     let sel: Option<bool> = attribute_attributevariant::Entity::find()
         .select_only()
@@ -222,7 +222,7 @@ async fn assign_unassign_validations() {
 async fn collection_reorder_persists() {
     let db = db().await;
     // Pick a collection that already has >= 2 products in seed.
-    use rustygod_db::entities::product_collectionproduct;
+    use saleor_rustify_db::entities::product_collectionproduct;
     use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QuerySelect};
     let cid: i32 = product_collectionproduct::Entity::find()
         .select_only()

@@ -177,7 +177,7 @@ pub async fn record_attempt(
         .await?;
     let status = if ok {
         "success"
-    } else if attempts >= rustygod_core::webhooks::MAX_DELIVERY_RETRIES as u64 {
+    } else if attempts >= saleor_rustify_core::webhooks::MAX_DELIVERY_RETRIES as u64 {
         "failed"
     } else {
         "pending"
@@ -264,7 +264,7 @@ pub async fn due_deliveries(db: &DatabaseConnection, limit: u64) -> Result<Vec<i
             .filter(core_eventdeliveryattempt::Column::DeliveryId.eq(id))
             .count(db)
             .await?;
-        if attempts >= rustygod_core::webhooks::MAX_DELIVERY_RETRIES as u64 {
+        if attempts >= saleor_rustify_core::webhooks::MAX_DELIVERY_RETRIES as u64 {
             continue;
         }
         // Last attempt time, else delivery creation time.
@@ -279,8 +279,8 @@ pub async fn due_deliveries(db: &DatabaseConnection, limit: u64) -> Result<Vec<i
             .flatten();
         let since = last.unwrap_or(created);
         let wait = chrono::Duration::seconds(
-            rustygod_core::webhooks::retry_countdown_secs(
-                rustygod_core::webhooks::DELIVERY_BACKOFF_SECS,
+            saleor_rustify_core::webhooks::retry_countdown_secs(
+                saleor_rustify_core::webhooks::DELIVERY_BACKOFF_SECS,
                 attempts as u32,
             ) as i64,
         );
@@ -302,8 +302,8 @@ pub fn signed_headers(
     payload: &str,
     secret: &str,
 ) -> Vec<(String, String)> {
-    let sig = rustygod_core::webhooks::sign_payload(payload.as_bytes(), secret);
-    rustygod_core::webhooks::delivery_headers(domain, event_type, &sig)
+    let sig = saleor_rustify_core::webhooks::sign_payload(payload.as_bytes(), secret);
+    saleor_rustify_core::webhooks::delivery_headers(domain, event_type, &sig)
 }
 
 pub async fn webhook_secret(

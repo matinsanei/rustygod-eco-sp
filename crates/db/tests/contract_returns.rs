@@ -4,12 +4,12 @@
 //! books damaged/lost returns without touching the shelf.
 
 use rust_decimal::Decimal;
-use rustygod_db::{catalog, checkout_store, complete, database_url, fulfillment, order_store, payments};
+use saleor_rustify_db::{catalog, checkout_store, complete, database_url, fulfillment, order_store, payments};
 use sea_orm::DatabaseConnection;
 use uuid::Uuid;
 
 async fn db() -> DatabaseConnection {
-    rustygod_db::connect(&database_url())
+    saleor_rustify_db::connect(&database_url())
         .await
         .expect("saleor postgres must be up (localhost:5434)")
 }
@@ -28,7 +28,7 @@ mod fs2 {
             let f = std::fs::OpenOptions::new()
                 .create(true)
                 .write(true)
-                .open("/tmp/rustygod-stock.lock")
+                .open("/tmp/rustify-stock.lock")
                 .expect("stock lock");
             f.lock_exclusive().expect("stock lock");
             Self { _f: f }
@@ -50,7 +50,7 @@ struct PaidFulfilled {
 }
 
 async fn free_for(db: &DatabaseConnection, vid: i32) -> i32 {
-    rustygod_db::commerce::stocks_for_variant(db, vid)
+    saleor_rustify_db::commerce::stocks_for_variant(db, vid)
         .await
         .unwrap()
         .iter()
@@ -67,7 +67,7 @@ async fn paid_fulfilled(db: &DatabaseConnection, tag: &str) -> PaidFulfilled {
     let products = catalog::list_products(db, "default-channel", None, 100).await.unwrap();
     // Tracked variant only: untracked (digital) variants never touch the
     // shelf, which would make the stock assertions meaningless.
-    use rustygod_db::entities::product_productvariant;
+    use saleor_rustify_db::entities::product_productvariant;
     use sea_orm::EntityTrait;
     let mut vid: Option<i32> = None;
     for p in products.iter().flat_map(|p| &p.variants) {
@@ -123,7 +123,7 @@ async fn paid_fulfilled(db: &DatabaseConnection, tag: &str) -> PaidFulfilled {
 }
 
 async fn cleanup(db: &DatabaseConnection, o: &PaidFulfilled, grant_ids: &[i32], fulfillment_ids: &[i32]) {
-    use rustygod_db::entities::*;
+    use saleor_rustify_db::entities::*;
     use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
     for fid in fulfillment_ids {
         order_fulfillmentline::Entity::delete_many()
@@ -166,7 +166,7 @@ async fn return_one_unit_restocks_and_refunds() {
     .unwrap();
     // Money: exactly one unit gross back, decision success.
     assert_eq!(out.amount, o.unit_gross);
-    let g = rustygod_db::granted_refunds::view(&db, out.granted_refund_id).await.unwrap();
+    let g = saleor_rustify_db::granted_refunds::view(&db, out.granted_refund_id).await.unwrap();
     assert_eq!(g.status, "success");
     assert_eq!(g.lines.len(), 1);
     assert_eq!(g.lines[0].quantity, 1);
@@ -179,7 +179,7 @@ async fn return_one_unit_restocks_and_refunds() {
     let (header, _) = order_store::get_order_rows(&db, o.order_id).await.unwrap().unwrap();
     assert!(header.status.contains("return"), "status={}", header.status);
     // Reconcile green with a live grant on the books.
-    let checks = rustygod_db::reconcile::reconcile_order(&db, o.order_id).await.unwrap();
+    let checks = saleor_rustify_db::reconcile::reconcile_order(&db, o.order_id).await.unwrap();
     assert!(checks.iter().all(|c| c.ok), "{checks:?}");
     cleanup(&db, &o, &[out.granted_refund_id], &[out.fulfillment_id]).await;
 }
@@ -201,7 +201,7 @@ async fn over_return_rejected_atomically() {
     .await
     .unwrap_err();
     assert!(err.to_string().contains("only 2 fulfilled and unreturned"), "{err}");
-    use rustygod_db::entities::{order_fulfillment, order_ordergrantedrefund};
+    use saleor_rustify_db::entities::{order_fulfillment, order_ordergrantedrefund};
     use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
     assert_eq!(
         order_fulfillment::Entity::find()
