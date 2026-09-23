@@ -1,0 +1,16 @@
+{
+  // rust-analyzer must see the SAME code cargo sees (incl. test targets),
+  // or it reports phantom errors cargo never has.
+  "rust-analyzer.cargo.allTargets": true,
+  "rust-analyzer.checkOnSave": true,
+  "rust-analyzer.check.extraArgs": ["--all-targets"],
+  "rust-analyzer.restartServerOnConfigChange": true,
+  // Don't waste the watcher (or clash with cargo) on build output.
+  "files.watcherExclude": {
+    "**/target/**": true,
+    "**/.git/objects/**": true
+  },
+  "files.exclude": {
+    "**/target": true
+  }
+}

@@ -16,5 +16,6 @@ uuid = { workspace = true }
 chrono = { workspace = true }
 base64 = { workspace = true }
 rustygod-db = { path = "../db" }
+rustygod-ai = { path = "../ai" }
 rustygod-core = { path = "../core" }
 sea-orm = { workspace = true }

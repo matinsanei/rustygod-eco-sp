@@ -4,8 +4,82 @@
 //! figures match what the catalog serves.
 
 use sea_orm::{ConnectionTrait, DatabaseConnection, Statement};
+use std::collections::HashSet;
 
-use crate::Result;
+use crate::{traits::Embedder, vectors, Result};
+
+pub struct RecoHitV2 {
+    pub variant_id: i32,
+    pub score: f64,
+    pub price: rust_decimal::Decimal,
+    pub currency: String,
+    pub name: String,
+}
+
+/// Recommender v2: co-occurrence first (proven purchase signal), embedding
+/// similarity as backfill (cold-start / thin-order coverage). Scores are
+/// f64 throughout; the gRPC contract already carries `score` as double.
+#[tracing::instrument(skip(db, embedder))]
+pub async fn recommend_v2(
+    db: &DatabaseConnection,
+    embedder: &impl Embedder,
+    variant_id: i32,
+    channel_slug: &str,
+    limit: u64,
+) -> Result<Vec<RecoHitV2>> {
+    let (ch_id, _) = rustygod_db::catalog::channel_info(db, channel_slug).await?;
+    let co = recommend_for_variant(db, variant_id, channel_slug, limit).await?;
+    let mut out: Vec<RecoHitV2> = co
+        .into_iter()
+        .map(|r| RecoHitV2 {
+            variant_id: r.variant_id,
+            score: r.score as f64,
+            price: r.price,
+            currency: r.currency,
+            name: r.name,
+        })
+        .collect();
+    if out.len() >= limit as usize {
+        out.truncate(limit as usize);
+        return Ok(out);
+    }
+    // Backfill: variants of embedding-similar products.
+    let rows = db
+        .query_all(Statement::from_sql_and_values(
+            sea_orm::DatabaseBackend::Postgres,
+            "SELECT product_id FROM product_productvariant WHERE id = $1".to_string(),
+            [variant_id.into()],
+        ))
+        .await?;
+    let pid: Option<i32> = rows.first().and_then(|r| r.try_get("", "product_id").ok());
+    let Some(pid) = pid else { return Ok(out) };
+    let published = vectors::published_in_channel(db, ch_id).await?;
+    let sims = vectors::similar_products(db, pid, &published, (limit * 2) as usize).await?;
+    let pids: Vec<i32> = sims.iter().map(|(p, _)| *p).collect();
+    let rep = vectors::representative_variants(db, ch_id, &pids).await?;
+    let vids: Vec<i32> = rep.values().copied().collect();
+    let pricing = rustygod_db::catalog::checkout_pricing(db, channel_slug, &vids).await?;
+    let seen: HashSet<i32> = out.iter().map(|r| r.variant_id).collect();
+    for (p, s) in sims {
+        if out.len() >= limit as usize {
+            break;
+        }
+        let Some(vid) = rep.get(&p) else { continue };
+        if seen.contains(vid) {
+            continue;
+        }
+        if let Some((price, name)) = pricing.get(vid) {
+            out.push(RecoHitV2 {
+                variant_id: *vid,
+                score: s,
+                price: price.amount,
+                currency: price.currency.clone(),
+                name: name.clone(),
+            });
+        }
+    }
+    Ok(out)
+}
 
 pub struct RecoHit {
     pub variant_id: i32,

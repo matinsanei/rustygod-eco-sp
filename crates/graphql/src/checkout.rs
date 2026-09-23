@@ -59,6 +59,13 @@ pub struct AddLineInput {
     pub quantity: i32,
 }
 
+#[derive(SimpleObject, Clone)]
+pub struct AgentCheckoutResult {
+    pub checkout: GqlCheckout,
+    pub notes: Vec<String>,
+    pub questions: Vec<String>,
+}
+
 #[derive(Default)]
 pub struct CheckoutQuery;
 
@@ -142,5 +149,32 @@ impl CheckoutMutation {
             rustygod_db::order_promotions::RefreshOutcome::Discount { rule_id, amount } => format!("discount:{rule_id}:{amount}"),
             rustygod_db::order_promotions::RefreshOutcome::Gift { rule_id, variant_id, .. } => format!("gift:{rule_id}:{variant_id}"),
         })
+    }
+
+    /// Agentic buying: natural-language text → a real checkout with lines.
+    /// Deterministic (no LLM): quantities + product phrases resolve against
+    /// the catalog; unmatched phrases come back as `questions`, never as
+    /// hallucinated lines. Custom root (not in the Saleor schema, so
+    /// codegen never touches it).
+    async fn agent_checkout(&self, ctx: &Context<'_>, message: String, channel: Option<String>, email: Option<String>) -> Result<AgentCheckoutResult> {
+        let g = ctx.data::<GqlContext>()?;
+        let db = g.db()?;
+        let ch = channel.unwrap_or_else(|| "default-channel".into());
+        let plan = rustygod_ai::agent::plan_checkout(db, &ch, &message).await.map_err(|e| Error::new(e.to_string()))?;
+        if plan.lines.is_empty() {
+            return Err(Error::new(plan.questions.first().cloned().unwrap_or_else(|| "no purchasable items found".into())));
+        }
+        let (ch_id, currency) = rustygod_db::catalog::channel_info(db, &ch).await.map_err(|e| Error::new(e.to_string()))?;
+        let token = rustygod_db::checkout_store::create_checkout_row(db, ch_id, &currency, email.as_deref().unwrap_or("")).await.map_err(|e| Error::new(e.to_string()))?;
+        let vids: Vec<i32> = plan.lines.iter().map(|l| l.variant_id).collect();
+        let pricing = rustygod_db::catalog::checkout_pricing(db, &ch, &vids).await.map_err(|e| Error::new(e.to_string()))?;
+        let items: Vec<rustygod_db::checkout_store::NewLine> = plan.lines.iter().map(|l| {
+            let unit = pricing.get(&l.variant_id).map(|(m, _)| m.amount).unwrap_or(rust_decimal::Decimal::ZERO);
+            rustygod_db::checkout_store::NewLine { variant_id: l.variant_id, quantity: l.quantity, unit_price: unit, price_override: None }
+        }).collect();
+        rustygod_db::checkout_store::add_lines_tx(db, token, ch_id, &currency, &items).await.map_err(|e| Error::new(e.to_string()))?;
+        rustygod_db::checkout_store::refresh_totals(db, token).await.map_err(|e| Error::new(e.to_string()))?;
+        let (co, lines) = rustygod_db::checkout_store::load_checkout(db, token).await.map_err(|e| Error::new(e.to_string()))?.ok_or_else(|| Error::new("checkout vanished"))?;
+        Ok(AgentCheckoutResult { checkout: to_gql_checkout(&co, &lines, &ch), notes: plan.notes, questions: plan.questions })
     }
 }

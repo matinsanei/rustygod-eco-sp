@@ -7,11 +7,13 @@
 //! - **Milestone**: Candle/ONNX embedders and Qdrant/pgvector stores implement
 //!   the same `Embedder`/`VectorStore` traits — drop-in, no API change.
 
+pub mod agent;
 pub mod chat;
 pub mod embed;
 pub mod recommend;
 pub mod search;
 pub mod traits;
+pub mod vectors;
 
 #[derive(Debug, thiserror::Error)]
 pub enum AiError {

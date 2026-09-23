@@ -3688,6 +3688,7 @@ dependencies = [
  "base64 0.22.1",
  "chrono",
  "rust_decimal",
+ "rustygod-ai",
  "rustygod-core",
  "rustygod-db",
  "sea-orm",

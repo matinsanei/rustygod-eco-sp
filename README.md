@@ -106,13 +106,12 @@ The stock Saleor Dashboard runs against `/graphql` with zero schema errors
      against live Stripe (mock-server tests only) — Adyen still missing.
    - Still ignored sub-filters: price/attribute/stock/date/metadata, order
      AND/OR nesting, payment-state pseudo-filters; pagination works.
-   - Multipart upload deferred, CSV intentionally last, attribute writes
-     accepted-ignored, many non-catalog mutations still validated stubs.
+   - Multipart upload deferred, CSV intentionally last, many non-catalog mutations still validated stubs.
    - `extensions/installed` is correctly empty on a fresh `populatedb` (0 apps).
    - Done and verified, despite what older docs may say: guest→user link +
      address carry (E3/E11, `contract_guest.rs` green), checkout reservation
-     sweep (expired *checkout rows* still linger — E10, annoying, not a stock
-     leak), `shopSettingsUpdate` persists name/description/metadata,
+     sweep + expired-checkout sweep + fully-paid auto-complete (E10 done),
+     `shopSettingsUpdate` persists name/description/metadata,
      server-side filtering for products/orders/customers (search/ids/type/
      category-subtree/collection/status/channels/sort), real thumbnails +
      `/media/` serving, detail roots (product/category/collection/user).
@@ -306,10 +305,10 @@ order #522 minted live during development). Known edge, documented in
 - [x] Fulfillment (auto-increment, remainder guards, stock decrease/restore, cancel, refunds, `determine_order_status`) + `return_and_refund` + per-transaction `granted_refunds`
 - [x] GraphQL BFF (enterprise, thin): `crates/graphql` + `server` dual-stack `gRPC :50051` / `GraphQL :8000` / `metrics :9000`, same DB/logic (`me`, `products`, `checkout`, `order`, `channels`, `transaction`), Dashboard `API_URL=http://localhost:8000/graphql`
 - [x] Audit-hardened: zero `unwrap` in production, transactional checkout-complete (user/address + promotions + gift cards + stock), idempotent add-lines, `FOR UPDATE` lock ordering (R6), outbox + sweeper (R8/R9)
-- [ ] Checkout `auto-complete` expired + TTL sweeper final (E10)
-- [ ] Product attribute writes / collection writes full parity
+- [x] Checkout `auto-complete` expired + TTL sweeper final (E10: fully-paid auto-complete per channel flag/delay, payments follow the order, beat-wired)
+- [x] Product attribute writes / collection writes full parity (assign/unassign/assignment-update, attribute+value CRUD/bulk/reorder, collection reorder — all live-verified)
 - [ ] CSV / thumbnails / site settings (intentionally last)
-- [ ] AI layer: pgvector, recommender v2, agentic buying (natural-language checkout)
+- [x] AI layer v2: extension-free `REAL[]` embeddings + idempotent refresh beat, blended lexical/semantic search, co-occurrence+similarity recommender, agentic buying (`agentCheckout`: NL → checkout)
 - [ ] Storefront/ Dashboard v2 generated from protos (Phase 4, <100ms TTFB target)
 
 ## Contributing

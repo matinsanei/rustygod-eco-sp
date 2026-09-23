@@ -2,6 +2,7 @@
 //! (server-streaming).
 
 use rustygod_ai::{chat, recommend, search};
+use rustygod_ai::embed::HashingEmbedder;
 use rustygod_db::catalog;
 use rustygod_proto::ai::{
     chat_agent_server::ChatAgent, recommender_server::Recommender,
@@ -74,7 +75,7 @@ impl SemanticSearch for SemanticSearchImpl {
             .await
             .map_err(|e| Status::internal(e.to_string()))?;
         let first = if req.first <= 0 { 10 } else { (req.first as u64).min(1000) };
-        let hits = search::search_products(db, &req.query, ch_id, &currency, first)
+        let hits = search::search_products_blended(db, &HashingEmbedder::default(), &req.query, ch_id, &currency, first)
             .await
             .map_err(|e| Status::internal(e.to_string()))?;
         let results = hits
@@ -105,7 +106,7 @@ impl Recommender for RecommenderImpl {
         let channel = channel_of(&req.channel).to_string();
         let vid: i32 = req.variant_id.parse().unwrap_or(-1);
         let first = if req.first <= 0 { 10 } else { (req.first as u64).min(1000) };
-        let recos = recommend::recommend_for_variant(db, vid, &channel, first)
+        let recos = recommend::recommend_v2(db, &HashingEmbedder::default(), vid, &channel, first)
             .await
             .map_err(|e| Status::internal(e.to_string()))?;
         Ok(Response::new(RecommendProductsResponse {
@@ -118,7 +119,7 @@ impl Recommender for RecommenderImpl {
                         String::new(),
                         r.currency,
                         r.price.to_string(),
-                        r.score as f64,
+                        r.score,
                     )
                 })
                 .collect(),
