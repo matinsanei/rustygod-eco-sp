@@ -29539,62 +29539,6 @@ impl GenMutation {
 
     }
 
-    #[graphql(name = "createWarehouse")]
-    async fn create_warehouse(&self, #[graphql(name = "input")] _arg_input: WarehouseCreateInput) -> Option<WarehouseCreate> {
-
-        Some(WarehouseCreate { errors: vec![], warehouse: None })
-
-    }
-
-    #[graphql(name = "updateWarehouse")]
-    async fn update_warehouse(&self, #[graphql(name = "externalReference")] _arg_external_reference: Option<String>, #[graphql(name = "id")] _arg_id: Option<ID>, #[graphql(name = "input")] _arg_input: WarehouseUpdateInput) -> Option<WarehouseUpdate> {
-
-        Some(WarehouseUpdate { errors: vec![], warehouse: None })
-
-    }
-
-    #[graphql(name = "deleteWarehouse")]
-    async fn delete_warehouse(&self, #[graphql(name = "id")] _arg_id: ID) -> Option<WarehouseDelete> {
-
-        Some(WarehouseDelete { errors: vec![] })
-
-    }
-
-    #[graphql(name = "taxClassCreate")]
-    async fn tax_class_create(&self, #[graphql(name = "input")] _arg_input: TaxClassCreateInput) -> Option<TaxClassCreate> {
-
-        Some(TaxClassCreate { errors: vec![], tax_class: None })
-
-    }
-
-    #[graphql(name = "taxClassDelete")]
-    async fn tax_class_delete(&self, #[graphql(name = "id")] _arg_id: ID) -> Option<TaxClassDelete> {
-
-        Some(TaxClassDelete { errors: vec![] })
-
-    }
-
-    #[graphql(name = "taxClassUpdate")]
-    async fn tax_class_update(&self, #[graphql(name = "id")] _arg_id: ID, #[graphql(name = "input")] _arg_input: TaxClassUpdateInput) -> Option<TaxClassUpdate> {
-
-        Some(TaxClassUpdate { errors: vec![], tax_class: None })
-
-    }
-
-    #[graphql(name = "taxCountryConfigurationUpdate")]
-    async fn tax_country_configuration_update(&self, #[graphql(name = "countryCode")] _arg_country_code: CountryCode, #[graphql(name = "updateTaxClassRates")] _arg_update_tax_class_rates: Vec<TaxClassRateInput>) -> Option<TaxCountryConfigurationUpdate> {
-
-        Some(TaxCountryConfigurationUpdate { errors: vec![] })
-
-    }
-
-    #[graphql(name = "taxCountryConfigurationDelete")]
-    async fn tax_country_configuration_delete(&self, #[graphql(name = "countryCode")] _arg_country_code: CountryCode) -> Option<TaxCountryConfigurationDelete> {
-
-        Some(TaxCountryConfigurationDelete { errors: vec![] })
-
-    }
-
     #[graphql(name = "shopAddressUpdate")]
     async fn shop_address_update(&self, #[graphql(name = "input")] _arg_input: Option<AddressInput>) -> Option<ShopAddressUpdate> {
 
@@ -29627,69 +29571,6 @@ impl GenMutation {
     async fn return_reason_reference_clear(&self) -> Option<ReturnReasonReferenceTypeClear> {
 
         Some(ReturnReasonReferenceTypeClear { errors: vec![] })
-
-    }
-
-    #[graphql(name = "shippingMethodChannelListingUpdate")]
-    async fn shipping_method_channel_listing_update(&self, #[graphql(name = "id")] _arg_id: ID, #[graphql(name = "input")] _arg_input: ShippingMethodChannelListingInput) -> Option<ShippingMethodChannelListingUpdate> {
-
-        Some(ShippingMethodChannelListingUpdate { shipping_method: None, errors: vec![] })
-
-    }
-
-    #[graphql(name = "shippingPriceCreate")]
-    async fn shipping_price_create(&self, #[graphql(name = "input")] _arg_input: ShippingPriceInput) -> Option<ShippingPriceCreate> {
-
-        Some(ShippingPriceCreate { shipping_zone: None, shipping_method: None, errors: vec![] })
-
-    }
-
-    #[graphql(name = "shippingPriceDelete")]
-    async fn shipping_price_delete(&self, #[graphql(name = "id")] _arg_id: ID) -> Option<ShippingPriceDelete> {
-
-        Some(ShippingPriceDelete { shipping_zone: None, errors: vec![] })
-
-    }
-
-    #[graphql(name = "shippingPriceUpdate")]
-    async fn shipping_price_update(&self, #[graphql(name = "id")] _arg_id: ID, #[graphql(name = "input")] _arg_input: ShippingPriceInput) -> Option<ShippingPriceUpdate> {
-
-        Some(ShippingPriceUpdate { shipping_method: None, errors: vec![] })
-
-    }
-
-    #[graphql(name = "shippingPriceExcludeProducts")]
-    async fn shipping_price_exclude_products(&self, #[graphql(name = "id")] _arg_id: ID, #[graphql(name = "input")] _arg_input: ShippingPriceExcludeProductsInput) -> Option<ShippingPriceExcludeProducts> {
-
-        Some(ShippingPriceExcludeProducts { errors: vec![] })
-
-    }
-
-    #[graphql(name = "shippingPriceRemoveProductFromExclude")]
-    async fn shipping_price_remove_product_from_exclude(&self, #[graphql(name = "id")] _arg_id: ID, #[graphql(name = "products")] _arg_products: Vec<ID>) -> Option<ShippingPriceRemoveProductFromExclude> {
-
-        Some(ShippingPriceRemoveProductFromExclude { errors: vec![] })
-
-    }
-
-    #[graphql(name = "shippingZoneCreate")]
-    async fn shipping_zone_create(&self, #[graphql(name = "input")] _arg_input: ShippingZoneCreateInput) -> Option<ShippingZoneCreate> {
-
-        Some(ShippingZoneCreate { errors: vec![], shipping_zone: None })
-
-    }
-
-    #[graphql(name = "shippingZoneDelete")]
-    async fn shipping_zone_delete(&self, #[graphql(name = "id")] _arg_id: ID) -> Option<ShippingZoneDelete> {
-
-        Some(ShippingZoneDelete { errors: vec![] })
-
-    }
-
-    #[graphql(name = "shippingZoneBulkDelete")]
-    async fn shipping_zone_bulk_delete(&self, #[graphql(name = "ids")] _arg_ids: Vec<ID>) -> Option<ShippingZoneBulkDelete> {
-
-        Some(ShippingZoneBulkDelete { errors: vec![] })
 
     }
 
@@ -29865,48 +29746,6 @@ impl GenMutation {
     async fn file_upload(&self, #[graphql(name = "file")] _arg_file: GenUpload) -> Option<FileUpload> {
 
         Some(FileUpload { uploaded_file: None, errors: vec![] })
-
-    }
-
-    #[graphql(name = "channelCreate")]
-    async fn channel_create(&self, #[graphql(name = "input")] _arg_input: ChannelCreateInput) -> Option<ChannelCreate> {
-
-        Some(ChannelCreate { errors: vec![], channel: None })
-
-    }
-
-    #[graphql(name = "channelUpdate")]
-    async fn channel_update(&self, #[graphql(name = "id")] _arg_id: ID, #[graphql(name = "input")] _arg_input: ChannelUpdateInput) -> Option<ChannelUpdate> {
-
-        Some(ChannelUpdate { errors: vec![], channel: None })
-
-    }
-
-    #[graphql(name = "channelDelete")]
-    async fn channel_delete(&self, #[graphql(name = "id")] _arg_id: ID, #[graphql(name = "input")] _arg_input: Option<ChannelDeleteInput>) -> Option<ChannelDelete> {
-
-        Some(ChannelDelete { errors: vec![] })
-
-    }
-
-    #[graphql(name = "channelActivate")]
-    async fn channel_activate(&self, #[graphql(name = "id")] _arg_id: ID) -> Option<ChannelActivate> {
-
-        Some(ChannelActivate { channel: None, errors: vec![] })
-
-    }
-
-    #[graphql(name = "channelDeactivate")]
-    async fn channel_deactivate(&self, #[graphql(name = "id")] _arg_id: ID) -> Option<ChannelDeactivate> {
-
-        Some(ChannelDeactivate { channel: None, errors: vec![] })
-
-    }
-
-    #[graphql(name = "channelReorderWarehouses")]
-    async fn channel_reorder_warehouses(&self, #[graphql(name = "channelId")] _arg_channel_id: ID, #[graphql(name = "moves")] _arg_moves: Vec<ReorderInput>) -> Option<ChannelReorderWarehouses> {
-
-        Some(ChannelReorderWarehouses { channel: None, errors: vec![] })
 
     }
 

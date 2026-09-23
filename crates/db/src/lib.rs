@@ -15,6 +15,7 @@ pub mod channels;
 pub mod checkout_store;
 pub mod commerce;
 pub mod content_writes;
+pub mod ship_tax_writes;
 pub mod complete;
 pub mod customer_types;
 pub mod drafts;

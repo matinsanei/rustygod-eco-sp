@@ -434,3 +434,99 @@ pub async fn allocate_order_lines(
     }
     Ok(())
 }
+
+/// Full warehouse update (Django `updateWarehouse`): slug/email/name +
+/// address row + click&collect/private/externalReference + zone links.
+#[allow(clippy::too_many_arguments)]
+pub async fn update_warehouse_full(
+    db: &DatabaseConnection,
+    warehouse_id: Uuid,
+    slug: Option<String>,
+    email: Option<String>,
+    name: Option<String>,
+    street: Option<String>,
+    city: Option<String>,
+    postal_code: Option<String>,
+    country: Option<String>,
+    cc_option: Option<String>,
+    is_private: Option<bool>,
+    external_reference: Option<String>,
+    zone_ids: Option<Vec<i32>>,
+) -> Result<warehouse_warehouse::Model> {
+    let txn = db.begin().await?;
+    let row = warehouse_warehouse::Entity::find_by_id(warehouse_id)
+        .one(&txn)
+        .await?
+        .ok_or_else(|| fail(format!("warehouse {warehouse_id} not found")))?;
+    if let Some(cc) = &cc_option {
+        if !valid_cc_option(cc) {
+            return Err(fail("click_and_collect_option must be disabled, local or all"));
+        }
+    }
+    if street.is_some() || city.is_some() || postal_code.is_some() || country.is_some() {
+        if let Some(addr) = account_address::Entity::find_by_id(row.address_id).one(&txn).await? {
+            let mut aam: account_address::ActiveModel = addr.into();
+            if let Some(s) = street {
+                aam.street_address_1 = Set(s);
+            }
+            if let Some(c) = city {
+                aam.city = Set(c);
+            }
+            if let Some(p) = postal_code {
+                aam.postal_code = Set(p);
+            }
+            if let Some(c) = country {
+                aam.country = Set(c);
+            }
+            aam.update(&txn).await?;
+        }
+    }
+    let mut am: warehouse_warehouse::ActiveModel = row.into();
+    if let Some(s) = slug {
+        if s.trim().is_empty() {
+            return Err(fail("slug cannot be empty"));
+        }
+        am.slug = Set(slugify_warehouse(&s));
+    }
+    if let Some(n) = name {
+        if n.trim().is_empty() {
+            return Err(fail("name cannot be empty"));
+        }
+        am.name = Set(n);
+    }
+    if let Some(e) = email {
+        am.email = Set(e);
+    }
+    if let Some(cc) = cc_option {
+        am.click_and_collect_option = Set(cc);
+    }
+    if let Some(p) = is_private {
+        am.is_private = Set(p);
+    }
+    if let Some(r) = external_reference {
+        am.external_reference = Set(Some(r));
+    }
+    let updated = am.update(&txn).await?;
+    if let Some(zones) = zone_ids {
+        use crate::entities::warehouse_warehouse_shipping_zones;
+        warehouse_warehouse_shipping_zones::Entity::delete_many()
+            .filter(warehouse_warehouse_shipping_zones::Column::WarehouseId.eq(warehouse_id))
+            .exec(&txn)
+            .await?;
+        for zid in zones {
+            warehouse_warehouse_shipping_zones::ActiveModel {
+                warehouse_id: Set(warehouse_id),
+                shippingzone_id: Set(zid),
+                ..Default::default()
+            }
+            .insert(&txn)
+            .await?;
+        }
+    }
+    txn.commit().await?;
+    Ok(updated)
+}
+
+fn slugify_warehouse(s: &str) -> String {
+    s.trim().to_lowercase().replace(' ', "-")
+}

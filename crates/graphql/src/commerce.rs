@@ -536,6 +536,262 @@ fn merr(field: Option<String>, message: String) -> gen::MenuError {
     gen::MenuError { field, message: Some(message), code: None }
 }
 
+fn ship_err(field: Option<String>, message: String) -> gen::ShippingError {
+    gen::ShippingError { field, message: Some(message), code: None, channels: vec![] }
+}
+
+fn wh_err(field: Option<String>, message: String) -> gen::WarehouseError {
+    gen::WarehouseError { field, message: Some(message), code: None }
+}
+
+fn ch_err(field: Option<String>, message: String) -> gen::ChannelError {
+    gen::ChannelError { field, message: Some(message), code: None }
+}
+
+/// WeightScalar ("3.5", "3.5kg", "3.5 kg") → kg float. Unit suffixes other
+/// than kg are an honest error (Django coerces via its Weight class; we
+/// store kg only, like the seed data).
+fn parse_weight(s: &str) -> Option<f64> {
+    let s = s.trim().to_lowercase();
+    let num: String = s.chars().take_while(|c| c.is_ascii_digit() || *c == '.' || *c == '-').collect();
+    let v: f64 = num.parse().ok()?;
+    let rest = s[num.len()..].trim();
+    if rest.is_empty() || rest == "kg" {
+        Some(v)
+    } else {
+        None
+    }
+}
+
+/// Method's zone id (for delete/create payloads).
+async fn zone_of_method(db: &sea_orm::DatabaseConnection, mid: i32) -> Result<i32, Error> {
+    use sea_orm::{EntityTrait, QuerySelect};
+    saleor_rustify_db::entities::shipping_shippingmethod::Entity::find_by_id(mid)
+        .select_only()
+        .column(saleor_rustify_db::entities::shipping_shippingmethod::Column::ShippingZoneId)
+        .into_tuple::<i32>()
+        .one(db)
+        .await
+        .map_err(|e| Error::new(e.to_string()))?
+        .ok_or_else(|| Error::new("shipping method not found"))
+}
+
+/// Currency for a method's listings (first listing's, else channel's, else USD).
+async fn method_currency(db: &sea_orm::DatabaseConnection, mid: i32) -> String {
+    use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QuerySelect};
+    if let Ok(Some(cur)) = saleor_rustify_db::entities::shipping_shippingmethodchannellisting::Entity::find()
+        .select_only()
+        .column(saleor_rustify_db::entities::shipping_shippingmethodchannellisting::Column::Currency)
+        .filter(saleor_rustify_db::entities::shipping_shippingmethodchannellisting::Column::ShippingMethodId.eq(mid))
+        .into_tuple::<String>()
+        .one(db)
+        .await
+    {
+        return cur;
+    }
+    "USD".to_string()
+}
+
+/// Shipping method assembly (listings + postal rules + weights).
+async fn assemble_method(db: &sea_orm::DatabaseConnection, mid: i32) -> Result<gen::ShippingMethodType, Error> {
+    use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
+    let m = saleor_rustify_db::entities::shipping_shippingmethod::Entity::find_by_id(mid)
+        .one(db)
+        .await
+        .map_err(|e| Error::new(e.to_string()))?
+        .ok_or_else(|| Error::new("shipping method not found"))?;
+    let listings = saleor_rustify_db::entities::shipping_shippingmethodchannellisting::Entity::find()
+        .filter(saleor_rustify_db::entities::shipping_shippingmethodchannellisting::Column::ShippingMethodId.eq(mid))
+        .all(db)
+        .await
+        .map_err(|e| Error::new(e.to_string()))?;
+    let mut channel_listings = vec![];
+    for l in listings {
+        let money = |a: Option<rust_decimal::Decimal>| {
+            a.map(|x| crate::common::Money { amount: x.to_string(), currency: l.currency.clone(), fraction_digits: None })
+        };
+        channel_listings.push(gen::ShippingMethodChannelListing {
+            id: Some(ID(crate::common::gid("ShippingMethodChannelListing", l.id))),
+            channel: None,
+            maximum_order_price: money(l.maximum_order_price_amount),
+            minimum_order_price: money(l.minimum_order_price_amount),
+            price: Some(crate::common::Money { amount: l.price_amount.to_string(), currency: l.currency.clone(), fraction_digits: None }),
+        });
+    }
+    let rules = saleor_rustify_db::entities::shipping_shippingmethodpostalcoderule::Entity::find()
+        .filter(saleor_rustify_db::entities::shipping_shippingmethodpostalcoderule::Column::ShippingMethodId.eq(mid))
+        .all(db)
+        .await
+        .map_err(|e| Error::new(e.to_string()))?;
+    let postal_code_rules = rules
+        .into_iter()
+        .map(|r| gen::ShippingMethodPostalCodeRule {
+            id: Some(ID(crate::common::gid("ShippingMethodPostalCodeRule", r.id))),
+            start: Some(r.start.clone()),
+            end: r.end.clone(),
+            inclusion_type: Some(r.inclusion_type.clone()),
+        })
+        .collect();
+    let weight = |v: Option<f64>| v.map(|x| gen::Weight { unit: Some("KG".into()), value: Some(x) });
+    let tax_class = match m.tax_class_id {
+        Some(tid) => Some(assemble_tax_class(db, tid).await?),
+        None => None,
+    };
+    Ok(gen::ShippingMethodType {
+        id: Some(ID(crate::common::gid("ShippingMethod", mid))),
+        private_metadata: vec![],
+        metadata: vec![],
+        name: Some(m.name.clone()),
+        description: m.description.clone().and_then(|v| v.as_str().map(|s| gen::GenJSONString(s.to_string()))),
+        r#type: Some(m.r#type.to_uppercase()),
+        channel_listings,
+        postal_code_rules,
+        minimum_order_weight: weight(m.minimum_order_weight),
+        maximum_order_weight: weight(m.maximum_order_weight),
+        maximum_delivery_days: m.maximum_delivery_days,
+        minimum_delivery_days: m.minimum_delivery_days,
+        tax_class,
+    })
+}
+
+/// Tax-class assembly (country rates embedded).
+async fn assemble_tax_class(db: &sea_orm::DatabaseConnection, tid: i32) -> Result<gen::TaxClass, Error> {
+    use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QuerySelect};
+    let name: Option<String> = saleor_rustify_db::entities::tax_taxclass::Entity::find_by_id(tid)
+        .select_only()
+        .column(saleor_rustify_db::entities::tax_taxclass::Column::Name)
+        .into_tuple()
+        .one(db)
+        .await
+        .map_err(|e| Error::new(e.to_string()))?
+        .unwrap_or(None);
+    let Some(name) = name else { return Err(Error::new("tax class not found")) };
+    let rates = saleor_rustify_db::entities::tax_taxclasscountryrate::Entity::find()
+        .filter(saleor_rustify_db::entities::tax_taxclasscountryrate::Column::TaxClassId.eq(Some(tid)))
+        .all(db)
+        .await
+        .map_err(|e| Error::new(e.to_string()))?;
+    let mut countries = vec![];
+    for r in rates {
+        countries.push(gen::TaxClassCountryRate {
+            country: Some(crate::common::GqlCountryDisplay { code: r.country.clone(), country: r.country.clone() }),
+            rate: Some(r.rate.to_string().parse::<f64>().unwrap_or(0.0)),
+            tax_class: None,
+        });
+    }
+    Ok(gen::TaxClass {
+        id: Some(ID(crate::common::gid("TaxClass", tid))),
+        private_metadata: vec![],
+        metadata: vec![],
+        name: Some(name),
+        countries,
+    })
+}
+
+/// Warehouse by id xor externalReference.
+async fn resolve_warehouse_id(
+    db: &sea_orm::DatabaseConnection,
+    id: Option<&ID>,
+    external_reference: Option<&str>,
+) -> std::result::Result<uuid::Uuid, String> {
+    if let Some(i) = id {
+        return crate::common::parse_uuid_gid(&i.0).ok_or_else(|| "bad warehouse id".to_string());
+    }
+    if let Some(r) = external_reference.filter(|s| !s.trim().is_empty()) {
+        use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QuerySelect};
+        return saleor_rustify_db::entities::warehouse_warehouse::Entity::find()
+            .select_only()
+            .column(saleor_rustify_db::entities::warehouse_warehouse::Column::Id)
+            .filter(saleor_rustify_db::entities::warehouse_warehouse::Column::ExternalReference.eq(r))
+            .into_tuple::<uuid::Uuid>()
+            .one(db)
+            .await
+            .map_err(|e| e.to_string())?
+            .ok_or_else(|| "warehouse not found".to_string());
+    }
+    Err("provide id or externalReference".to_string())
+}
+
+/// Channel id → slug (mutations address channels both ways).
+async fn channel_slug_of(db: &sea_orm::DatabaseConnection, cid: i32) -> Result<String, Error> {
+    use sea_orm::{EntityTrait, QuerySelect};
+    saleor_rustify_db::entities::channel_channel::Entity::find_by_id(cid)
+        .select_only()
+        .column(saleor_rustify_db::entities::channel_channel::Column::Slug)
+        .into_tuple::<String>()
+        .one(db)
+        .await
+        .map_err(|e| Error::new(e.to_string()))?
+        .ok_or_else(|| Error::new("channel not found"))
+}
+
+/// ChannelCreateInput settings → settings patch (applied, never dropped).
+async fn apply_channel_settings(
+    db: &sea_orm::DatabaseConnection,
+    slug: &str,
+    input: &gen::ChannelCreateInput,
+) -> std::result::Result<(), String> {
+    let patch = channel_settings_from(
+        input.order_settings.as_ref(),
+        input.stock_settings.as_ref(),
+        input.checkout_settings.as_ref(),
+        input.payment_settings.as_ref(),
+    );
+    match saleor_rustify_db::channels::update_channel_settings(db, slug, patch).await {
+        Ok(_) => Ok(()),
+        Err(e) if e.to_string() == "channel error: nothing to update" => Ok(()),
+        Err(e) => Err(e.to_string()),
+    }
+}
+
+fn channel_settings_from(
+    order: Option<&gen::OrderSettingsInput>,
+    stock: Option<&gen::StockSettingsInput>,
+    checkout: Option<&gen::CheckoutSettingsInput>,
+    payment: Option<&gen::PaymentSettingsInput>,
+) -> saleor_rustify_db::channels::ChannelSettingsPatch {
+    let mut p = saleor_rustify_db::channels::ChannelSettingsPatch::default();
+    if let Some(o) = order {
+        p.auto_confirm = o.automatically_confirm_all_new_orders;
+        p.auto_fulfill_gift = o.automatically_fulfill_non_shippable_gift_card;
+        p.mark_as_paid_strategy = o.mark_as_paid_strategy.as_ref().map(|s| match s {
+            gen::MarkAsPaidStrategyEnum::TRANSACTIONFLOW => "TRANSACTION_FLOW".to_string(),
+            gen::MarkAsPaidStrategyEnum::PAYMENTFLOW => "PAYMENT_FLOW".to_string(),
+        });
+        p.allow_unpaid_orders = o.allow_unpaid_orders;
+        p.expire_orders_after = o.expire_orders_after.map(Some);
+        p.delete_expired_after = o.delete_expired_orders_after.map(|d| d.to_string());
+    }
+    if let Some(s) = stock {
+        p.allocation_strategy = Some(match &s.allocation_strategy {
+            gen::AllocationStrategyEnum::PRIORITIZESORTINGORDER => "prioritize-sorting-order".to_string(),
+            gen::AllocationStrategyEnum::PRIORITIZEHIGHSTOCK => "prioritize-high-stock".to_string(),
+        });
+    }
+    if let Some(c) = checkout {
+        p.use_legacy_checkout_errors = c.use_legacy_error_flow;
+        p.auto_complete_checkouts = c.automatically_complete_fully_paid_checkouts;
+        p.allow_legacy_gift_card = c.allow_legacy_gift_card_use;
+    }
+    if let Some(pa) = payment {
+        p.default_transaction_flow = pa.default_transaction_flow_strategy.as_ref().map(|s| match s {
+            gen::TransactionFlowStrategyEnum::AUTHORIZATION => "AUTHORIZATION".to_string(),
+            gen::TransactionFlowStrategyEnum::CHARGE => "CHARGE".to_string(),
+        });
+        p.release_funds_expired = pa.release_funds_for_expired_checkouts;
+    }
+    p
+}
+
+fn channel_settings_patch(input: &gen::ChannelUpdateInput) -> saleor_rustify_db::channels::ChannelSettingsPatch {
+    channel_settings_from(
+        input.order_settings.as_ref(),
+        input.stock_settings.as_ref(),
+        input.checkout_settings.as_ref(),
+        input.payment_settings.as_ref(),
+    )
+}
+
 fn perr(field: Option<String>, message: String) -> gen::PageError {
     gen::PageError { field, message: Some(message), code: None, attributes: vec![] }
 }
@@ -2688,6 +2944,522 @@ impl CommerceMutation {
                 count: Some(0),
                 errors: vec![gen::VoucherCodeBulkDeleteError { path: None, message: Some(e.to_string()), code: None }],
             }),
+        }
+    }
+
+    /// Create a shipping zone (Django `shippingZoneCreate`).
+    async fn shipping_zone_create(&self, ctx: &Context<'_>, input: gen::ShippingZoneCreateInput) -> Result<gen::ShippingZoneCreate> {
+        let _ = crate::account::require_perm(ctx, "manage_shipping").await?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let err = |m: String| gen::ShippingZoneCreate { errors: vec![ship_err(None, m)], shipping_zone: None };
+        let name = input.name.clone().unwrap_or_default();
+        match saleor_rustify_db::ship_tax_writes::create_zone(db, &saleor_rustify_db::ship_tax_writes::NewZone {
+            name,
+            description: input.description.clone().unwrap_or_default(),
+            countries: input.countries.clone().unwrap_or_default(),
+            default: input.default.unwrap_or(false),
+            warehouse_ids: input.add_warehouses.clone().unwrap_or_default().iter().filter_map(|w| crate::common::parse_uuid_gid(&w.0)).collect(),
+            channel_ids: input.add_channels.clone().unwrap_or_default().iter().filter_map(|c| saleor_rustify_db::catalog::parse_gid(&c.0)).collect(),
+        }).await {
+            Ok(zid) => Ok(gen::ShippingZoneCreate { errors: vec![], shipping_zone: assemble_zone(db, zid).await? }),
+            Err(e) => Ok(err(e.to_string())),
+        }
+    }
+
+    /// Delete a shipping zone with its methods (Django `shippingZoneDelete`).
+    async fn shipping_zone_delete(&self, ctx: &Context<'_>, id: ID) -> Result<gen::ShippingZoneDelete> {
+        let _ = crate::account::require_perm(ctx, "manage_shipping").await?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let zid = saleor_rustify_db::catalog::parse_gid(&id.0).unwrap_or(-1);
+        match saleor_rustify_db::ship_tax_writes::delete_zone(db, zid).await {
+            Ok(()) => Ok(gen::ShippingZoneDelete { errors: vec![] }),
+            Err(e) => Ok(gen::ShippingZoneDelete { errors: vec![ship_err(None, e.to_string())] }),
+        }
+    }
+
+    /// Bulk zone delete (survivors commit).
+    async fn shipping_zone_bulk_delete(&self, ctx: &Context<'_>, ids: Vec<ID>) -> Result<gen::ShippingZoneBulkDelete> {
+        let _ = crate::account::require_perm(ctx, "manage_shipping").await?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let mut errors = vec![];
+        for i in &ids {
+            let zid = saleor_rustify_db::catalog::parse_gid(&i.0).unwrap_or(-1);
+            if let Err(e) = saleor_rustify_db::ship_tax_writes::delete_zone(db, zid).await {
+                errors.push(ship_err(Some(i.0.clone()), e.to_string()));
+            }
+        }
+        Ok(gen::ShippingZoneBulkDelete { errors })
+    }
+
+    /// Create a shipping method (Django `shippingPriceCreate`).
+    async fn shipping_price_create(&self, ctx: &Context<'_>, input: gen::ShippingPriceInput) -> Result<gen::ShippingPriceCreate> {
+        let _ = crate::account::require_perm(ctx, "manage_shipping").await?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let err = |m: String| gen::ShippingPriceCreate { shipping_zone: None, shipping_method: None, errors: vec![ship_err(None, m)] };
+        let zid = input.shipping_zone.as_ref().and_then(|z| saleor_rustify_db::catalog::parse_gid(&z.0)).unwrap_or(-1);
+        let mtype = match input.r#type.as_ref() {
+            Some(gen::ShippingMethodTypeEnum::PRICE) => "price",
+            Some(gen::ShippingMethodTypeEnum::WEIGHT) => "weight",
+            None => "price",
+        };
+        let inclusion = match input.inclusion_type.as_ref() {
+            Some(gen::PostalCodeRuleInclusionTypeEnum::INCLUDE) => Some("include".to_string()),
+            Some(gen::PostalCodeRuleInclusionTypeEnum::EXCLUDE) => Some("exclude".to_string()),
+            None => None,
+        };
+        let rules: Vec<(String, Option<String>)> = input.add_postal_code_rules.clone().unwrap_or_default().into_iter().map(|r| (r.start.clone(), r.end.clone())).collect();
+        match saleor_rustify_db::ship_tax_writes::create_method(db, &saleor_rustify_db::ship_tax_writes::NewMethod {
+            zone_id: zid,
+            name: input.name.clone().unwrap_or_default(),
+            description: input.description.as_ref().map(|d| d.0.clone()),
+            method_type: mtype.to_string(),
+            min_weight: input.minimum_order_weight.as_ref().and_then(|w| parse_weight(&w.0)),
+            max_weight: input.maximum_order_weight.as_ref().and_then(|w| parse_weight(&w.0)),
+            min_days: input.minimum_delivery_days,
+            max_days: input.maximum_delivery_days,
+            tax_class_id: input.tax_class.as_ref().and_then(|t| saleor_rustify_db::catalog::parse_gid(&t.0)),
+            postal_rules: rules,
+            inclusion,
+        }).await {
+            Ok(mid) => {
+                let zone = zone_of_method(db, mid).await?;
+                Ok(gen::ShippingPriceCreate {
+                    shipping_zone: assemble_zone(db, zone).await?,
+                    shipping_method: Some(assemble_method(db, mid).await?),
+                    errors: vec![],
+                })
+            }
+            Err(e) => Ok(err(e.to_string())),
+        }
+    }
+
+    /// Update a shipping method (Django `shippingPriceUpdate`).
+    async fn shipping_price_update(&self, ctx: &Context<'_>, id: ID, input: gen::ShippingPriceInput) -> Result<gen::ShippingPriceUpdate> {
+        let _ = crate::account::require_perm(ctx, "manage_shipping").await?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let mid = saleor_rustify_db::catalog::parse_gid(&id.0).unwrap_or(-1);
+        let rules: Vec<(String, Option<String>)> = input.add_postal_code_rules.clone().unwrap_or_default().into_iter().map(|r| (r.start.clone(), r.end.clone())).collect();
+        let del_rules: Vec<i32> = input.delete_postal_code_rules.clone().unwrap_or_default().iter().filter_map(|r| saleor_rustify_db::catalog::parse_gid(&r.0)).collect();
+        let patch = saleor_rustify_db::ship_tax_writes::MethodPatch {
+            name: input.name.clone(),
+            description: input.description.as_ref().map(|d| Some(d.0.clone())),
+            method_type: input.r#type.as_ref().map(|t| match t {
+                gen::ShippingMethodTypeEnum::PRICE => "price".to_string(),
+                gen::ShippingMethodTypeEnum::WEIGHT => "weight".to_string(),
+            }),
+            min_weight: input.minimum_order_weight.as_ref().map(|w| parse_weight(&w.0)),
+            max_weight: input.maximum_order_weight.as_ref().map(|w| parse_weight(&w.0)),
+            min_days: input.minimum_delivery_days.map(Some),
+            max_days: input.maximum_delivery_days.map(Some),
+            tax_class_id: input.tax_class.as_ref().map(|t| saleor_rustify_db::catalog::parse_gid(&t.0)),
+            add_postal_rules: rules,
+            delete_postal_rules: del_rules,
+            inclusion: input.inclusion_type.as_ref().map(|t| match t {
+                gen::PostalCodeRuleInclusionTypeEnum::INCLUDE => "include".to_string(),
+                gen::PostalCodeRuleInclusionTypeEnum::EXCLUDE => "exclude".to_string(),
+            }),
+        };
+        match saleor_rustify_db::ship_tax_writes::update_method(db, mid, &patch).await {
+            Ok(()) => Ok(gen::ShippingPriceUpdate { shipping_method: Some(assemble_method(db, mid).await?), errors: vec![] }),
+            Err(e) => Ok(gen::ShippingPriceUpdate { shipping_method: None, errors: vec![ship_err(None, e.to_string())] }),
+        }
+    }
+
+    /// Delete a shipping method (Django `shippingPriceDelete`).
+    async fn shipping_price_delete(&self, ctx: &Context<'_>, id: ID) -> Result<gen::ShippingPriceDelete> {
+        let _ = crate::account::require_perm(ctx, "manage_shipping").await?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let mid = saleor_rustify_db::catalog::parse_gid(&id.0).unwrap_or(-1);
+        let zone = zone_of_method(db, mid).await.unwrap_or(-1);
+        match saleor_rustify_db::ship_tax_writes::delete_method(db, mid).await {
+            Ok(()) => Ok(gen::ShippingPriceDelete {
+                shipping_zone: if zone > 0 { assemble_zone(db, zone).await? } else { None },
+                errors: vec![],
+            }),
+            Err(e) => Ok(gen::ShippingPriceDelete { shipping_zone: None, errors: vec![ship_err(None, e.to_string())] }),
+        }
+    }
+
+    /// Exclude products from a method (Django `shippingPriceExcludeProducts`).
+    async fn shipping_price_exclude_products(&self, ctx: &Context<'_>, id: ID, input: gen::ShippingPriceExcludeProductsInput) -> Result<gen::ShippingPriceExcludeProducts> {
+        let _ = crate::account::require_perm(ctx, "manage_shipping").await?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let mid = saleor_rustify_db::catalog::parse_gid(&id.0).unwrap_or(-1);
+        let pids: Vec<i32> = input.products.iter().filter_map(|p| saleor_rustify_db::catalog::parse_gid(&p.0)).collect();
+        match saleor_rustify_db::ship_tax_writes::exclude_products(db, mid, &pids).await {
+            Ok(()) => Ok(gen::ShippingPriceExcludeProducts { errors: vec![] }),
+            Err(e) => Ok(gen::ShippingPriceExcludeProducts { errors: vec![ship_err(None, e.to_string())] }),
+        }
+    }
+
+    /// Remove products from exclusion (Django `shippingPriceRemoveProductFromExclude`).
+    async fn shipping_price_remove_product_from_exclude(&self, ctx: &Context<'_>, id: ID, products: Vec<ID>) -> Result<gen::ShippingPriceRemoveProductFromExclude> {
+        let _ = crate::account::require_perm(ctx, "manage_shipping").await?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let mid = saleor_rustify_db::catalog::parse_gid(&id.0).unwrap_or(-1);
+        let pids: Vec<i32> = products.iter().filter_map(|p| saleor_rustify_db::catalog::parse_gid(&p.0)).collect();
+        match saleor_rustify_db::ship_tax_writes::include_products(db, mid, &pids).await {
+            Ok(()) => Ok(gen::ShippingPriceRemoveProductFromExclude { errors: vec![] }),
+            Err(e) => Ok(gen::ShippingPriceRemoveProductFromExclude { errors: vec![ship_err(None, e.to_string())] }),
+        }
+    }
+
+    /// Method channel listings (Django `shippingMethodChannelListingUpdate`).
+    async fn shipping_method_channel_listing_update(&self, ctx: &Context<'_>, id: ID, input: gen::ShippingMethodChannelListingInput) -> Result<gen::ShippingMethodChannelListingUpdate> {
+        let _ = crate::account::require_perm(ctx, "manage_shipping").await?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let mid = saleor_rustify_db::catalog::parse_gid(&id.0).unwrap_or(-1);
+        let mut add = vec![];
+        for l in input.add_channels.clone().unwrap_or_default() {
+            let ch = saleor_rustify_db::catalog::parse_gid(&l.channel_id.0).unwrap_or(-1);
+            if ch < 0 {
+                continue;
+            }
+            add.push(saleor_rustify_db::ship_tax_writes::ListingPatch {
+                channel_id: ch,
+                price: l.price.as_ref().and_then(|v| v.0.parse::<rust_decimal::Decimal>().ok()),
+                min_price: l.minimum_order_price.as_ref().map(|v| v.0.parse::<rust_decimal::Decimal>().ok()),
+                max_price: l.maximum_order_price.as_ref().map(|v| v.0.parse::<rust_decimal::Decimal>().ok()),
+            });
+        }
+        let remove: Vec<i32> = input.remove_channels.clone().unwrap_or_default().iter().filter_map(|c| saleor_rustify_db::catalog::parse_gid(&c.0)).collect();
+        let currency = method_currency(db, mid).await;
+        match saleor_rustify_db::ship_tax_writes::update_method_listings(db, mid, &add, &remove, &currency).await {
+            Ok(()) => Ok(gen::ShippingMethodChannelListingUpdate { shipping_method: Some(assemble_method(db, mid).await?), errors: vec![] }),
+            Err(e) => Ok(gen::ShippingMethodChannelListingUpdate { shipping_method: None, errors: vec![ship_err(None, e.to_string())] }),
+        }
+    }
+
+    /// Create a tax class (Django `taxClassCreate`).
+    async fn tax_class_create(&self, ctx: &Context<'_>, input: gen::TaxClassCreateInput) -> Result<gen::TaxClassCreate> {
+        let _ = crate::account::require_perm(ctx, "manage_taxes").await?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let err = |m: String| gen::TaxClassCreate {
+            errors: vec![gen::TaxClassCreateError { field: None, message: Some(m), code: None }],
+            tax_class: None,
+        };
+        let mut rates = vec![];
+        for r in input.create_country_rates.clone().unwrap_or_default() {
+            rates.push((format!("{:?}", r.country_code), rust_decimal::Decimal::from_f64_retain(r.rate).unwrap_or(rust_decimal::Decimal::ZERO)));
+        }
+        match saleor_rustify_db::ship_tax_writes::create_tax_class(db, &input.name, &rates).await {
+            Ok(tid) => Ok(gen::TaxClassCreate { errors: vec![], tax_class: Some(assemble_tax_class(db, tid).await?) }),
+            Err(e) => Ok(err(e.to_string())),
+        }
+    }
+
+    /// Update a tax class (Django `taxClassUpdate`).
+    async fn tax_class_update(&self, ctx: &Context<'_>, id: ID, input: gen::TaxClassUpdateInput) -> Result<gen::TaxClassUpdate> {
+        let _ = crate::account::require_perm(ctx, "manage_taxes").await?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let tid = saleor_rustify_db::catalog::parse_gid(&id.0).unwrap_or(-1);
+        let mut update_rates = vec![];
+        for r in input.update_country_rates.clone().unwrap_or_default() {
+            if let Some(rate) = r.rate {
+                update_rates.push((format!("{:?}", r.country_code), rust_decimal::Decimal::from_f64_retain(rate).unwrap_or(rust_decimal::Decimal::ZERO)));
+            }
+        }
+        let remove: Vec<String> = input.remove_country_rates.clone().unwrap_or_default().iter().map(|c| format!("{c:?}")).collect();
+        match saleor_rustify_db::ship_tax_writes::update_tax_class(db, tid, &saleor_rustify_db::ship_tax_writes::TaxClassPatch {
+            name: input.name.clone(),
+            update_rates,
+            remove_countries: remove,
+        }).await {
+            Ok(()) => Ok(gen::TaxClassUpdate { errors: vec![], tax_class: Some(assemble_tax_class(db, tid).await?) }),
+            Err(e) => Ok(gen::TaxClassUpdate {
+                errors: vec![gen::TaxClassUpdateError { field: None, message: Some(e.to_string()), code: None }],
+                tax_class: None,
+            }),
+        }
+    }
+
+    /// Delete a tax class (Django `taxClassDelete`; in-use refuses).
+    async fn tax_class_delete(&self, ctx: &Context<'_>, id: ID) -> Result<gen::TaxClassDelete> {
+        let _ = crate::account::require_perm(ctx, "manage_taxes").await?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let tid = saleor_rustify_db::catalog::parse_gid(&id.0).unwrap_or(-1);
+        match saleor_rustify_db::ship_tax_writes::delete_tax_class(db, tid).await {
+            Ok(()) => Ok(gen::TaxClassDelete { errors: vec![] }),
+            Err(e) => Ok(gen::TaxClassDelete {
+                errors: vec![gen::TaxClassDeleteError { field: None, message: Some(e.to_string()), code: None }],
+            }),
+        }
+    }
+
+    /// Country rates update (Django `taxCountryConfigurationUpdate`).
+    async fn tax_country_configuration_update(
+        &self, ctx: &Context<'_>,
+        #[graphql(name = "countryCode")] country_code: gen::CountryCode,
+        #[graphql(name = "updateTaxClassRates")] update_tax_class_rates: Vec<gen::TaxClassRateInput>,
+    ) -> Result<gen::TaxCountryConfigurationUpdate> {
+        let _ = crate::account::require_perm(ctx, "manage_taxes").await?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let cc = format!("{country_code:?}");
+        let mut rates = vec![];
+        for r in update_tax_class_rates {
+            let cid = r.tax_class_id.as_ref().and_then(|t| saleor_rustify_db::catalog::parse_gid(&t.0));
+            let rate = r.rate.map(|x| rust_decimal::Decimal::from_f64_retain(x).unwrap_or(rust_decimal::Decimal::ZERO));
+            rates.push((cid, rate));
+        }
+        match saleor_rustify_db::ship_tax_writes::update_country_rates(db, &cc, &rates).await {
+            Ok(()) => Ok(gen::TaxCountryConfigurationUpdate { errors: vec![] }),
+            Err(e) => Ok(gen::TaxCountryConfigurationUpdate {
+                errors: vec![gen::TaxCountryConfigurationUpdateError { field: None, message: Some(e.to_string()), code: None }],
+            }),
+        }
+    }
+
+    /// Delete a country's rate configuration (Django `taxCountryConfigurationDelete`).
+    async fn tax_country_configuration_delete(
+        &self, ctx: &Context<'_>,
+        #[graphql(name = "countryCode")] country_code: gen::CountryCode,
+    ) -> Result<gen::TaxCountryConfigurationDelete> {
+        let _ = crate::account::require_perm(ctx, "manage_taxes").await?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        match saleor_rustify_db::ship_tax_writes::delete_country_rates(db, &format!("{country_code:?}")).await {
+            Ok(()) => Ok(gen::TaxCountryConfigurationDelete { errors: vec![] }),
+            Err(e) => Ok(gen::TaxCountryConfigurationDelete {
+                errors: vec![gen::TaxCountryConfigurationDeleteError { field: None, message: Some(e.to_string()), code: None }],
+            }),
+        }
+    }
+
+    /// Create a warehouse (Django `createWarehouse`).
+    async fn create_warehouse(&self, ctx: &Context<'_>, input: gen::WarehouseCreateInput) -> Result<gen::WarehouseCreate> {
+        let _ = crate::account::require_perm(ctx, "manage_products").await?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let err = |m: String| gen::WarehouseCreate { errors: vec![wh_err(None, m)], warehouse: None };
+        let slug = input.slug.clone().filter(|s| !s.trim().is_empty()).unwrap_or_else(|| input.name.to_lowercase().replace(' ', "-"));
+        let a = &input.address;
+        let wh = match saleor_rustify_db::warehouses::create_warehouse(db, saleor_rustify_db::warehouses::NewWarehouse {
+            name: input.name.clone(),
+            slug,
+            email: input.email.clone().unwrap_or_default(),
+            street: a.street_address1.clone().unwrap_or_default(),
+            city: a.city.clone().unwrap_or_default(),
+            postal_code: a.postal_code.clone().unwrap_or_default(),
+            country: a.country.as_ref().map(|c| format!("{c:?}")).unwrap_or_default(),
+            is_private: false,
+            cc_option: "disabled".to_string(),
+        }).await {
+            Ok(w) => w,
+            Err(e) => return Ok(err(e.to_string())),
+        };
+        if let Some(zones) = input.shipping_zones.as_ref() {
+            let zids: Vec<i32> = zones.iter().filter_map(|z| saleor_rustify_db::catalog::parse_gid(&z.0)).collect();
+            use sea_orm::EntityTrait;
+            for zid in zids {
+                let _ = saleor_rustify_db::entities::warehouse_warehouse_shipping_zones::Entity::insert(
+                    saleor_rustify_db::entities::warehouse_warehouse_shipping_zones::ActiveModel {
+                        warehouse_id: sea_orm::Set(wh.id),
+                        shippingzone_id: sea_orm::Set(zid),
+                        ..Default::default()
+                    },
+                )
+                .exec(db)
+                .await;
+            }
+        }
+        Ok(gen::WarehouseCreate {
+            errors: vec![],
+            warehouse: warehouse_gen(db, wh.id).await.map_err(Error::new)?,
+        })
+    }
+
+    /// Update a warehouse (Django `updateWarehouse`): id xor externalReference.
+    async fn update_warehouse(
+        &self, ctx: &Context<'_>,
+        #[graphql(name = "externalReference")] external_reference: Option<String>,
+        id: Option<ID>, input: gen::WarehouseUpdateInput,
+    ) -> Result<gen::WarehouseUpdate> {
+        let _ = crate::account::require_perm(ctx, "manage_products").await?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let err = |m: String| gen::WarehouseUpdate { errors: vec![wh_err(None, m)], warehouse: None };
+        let wid = match resolve_warehouse_id(db, id.as_ref(), external_reference.as_deref()).await {
+            Ok(w) => w,
+            Err(e) => return Ok(err(e)),
+        };
+        let cc = input.click_and_collect_option.as_ref().map(|c| match c {
+            gen::WarehouseClickAndCollectOptionEnum::DISABLED => "disabled".to_string(),
+            gen::WarehouseClickAndCollectOptionEnum::LOCAL => "local_stock".to_string(),
+            gen::WarehouseClickAndCollectOptionEnum::ALL => "all_warehouses".to_string(),
+        });
+        let a = input.address.as_ref();
+        match saleor_rustify_db::warehouses::update_warehouse_full(
+            db, wid,
+            input.slug.clone(),
+            input.email.clone(),
+            input.name.clone(),
+            a.and_then(|x| x.street_address1.clone()),
+            a.and_then(|x| x.city.clone()),
+            a.and_then(|x| x.postal_code.clone()),
+            a.and_then(|x| x.country.as_ref().map(|c| format!("{c:?}"))),
+            cc,
+            input.is_private,
+            input.external_reference.clone(),
+            None,
+        ).await {
+            Ok(w) => Ok(gen::WarehouseUpdate {
+                errors: vec![],
+                warehouse: warehouse_gen(db, w.id).await.map_err(Error::new)?,
+            }),
+            Err(e) => Ok(err(e.to_string())),
+        }
+    }
+
+    /// Delete a warehouse (Django `deleteWarehouse`; stocked refuses).
+    async fn delete_warehouse(&self, ctx: &Context<'_>, id: ID) -> Result<gen::WarehouseDelete> {
+        let _ = crate::account::require_perm(ctx, "manage_products").await?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let wid = crate::common::parse_uuid_gid(&id.0).unwrap_or(uuid::Uuid::nil());
+        match saleor_rustify_db::warehouses::delete_warehouse(db, wid).await {
+            Ok(()) => Ok(gen::WarehouseDelete { errors: vec![] }),
+            Err(e) => Ok(gen::WarehouseDelete { errors: vec![wh_err(None, e.to_string())] }),
+        }
+    }
+
+    /// Create a channel (Django `channelCreate`).
+    async fn channel_create(&self, ctx: &Context<'_>, input: gen::ChannelCreateInput) -> Result<gen::ChannelCreate> {
+        let _ = crate::account::require_perm(ctx, "manage_channels").await?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let err = |m: String| gen::ChannelCreate { errors: vec![ch_err(None, m)], channel: None };
+        let strategy = match input.stock_settings.as_ref().map(|s| &s.allocation_strategy) {
+            Some(gen::AllocationStrategyEnum::PRIORITIZESORTINGORDER) => "prioritize-sorting-order".to_string(),
+            Some(gen::AllocationStrategyEnum::PRIORITIZEHIGHSTOCK) => "prioritize-high-stock".to_string(),
+            None => "prioritize-sorting-order".to_string(),
+        };
+        let default_country = "US".to_string();
+        let view = match saleor_rustify_db::channels::create_channel(db, saleor_rustify_db::channels::NewChannel {
+            name: input.name.clone(),
+            slug: input.slug.clone(),
+            currency_code: input.currency_code.clone(),
+            default_country,
+            allocation_strategy: strategy,
+        }).await {
+            Ok(v) => v,
+            Err(e) => return Ok(err(e.to_string())),
+        };
+        if let Some(zones) = input.add_shipping_zones.as_ref() {
+            let zids: Vec<i32> = zones.iter().filter_map(|z| saleor_rustify_db::catalog::parse_gid(&z.0)).collect();
+            if let Err(e) = saleor_rustify_db::channels::add_channel_zones(db, view.id, &zids).await {
+                return Ok(err(e.to_string()));
+            }
+        }
+        if let Some(whs) = input.add_warehouses.as_ref() {
+            let wids: Vec<uuid::Uuid> = whs.iter().filter_map(|w| crate::common::parse_uuid_gid(&w.0)).collect();
+            if let Err(e) = saleor_rustify_db::ship_tax_writes::add_channel_warehouses(db, view.id, &wids).await {
+                return Ok(err(e.to_string()));
+            }
+        }
+        if let Err(e) = apply_channel_settings(db, &view.slug, &input).await {
+            return Ok(err(e));
+        }
+        Ok(gen::ChannelCreate {
+            errors: vec![],
+            channel: assemble_channel(db, view.id).await.map_err(Error::new)?,
+        })
+    }
+
+    /// Update a channel (Django `channelUpdate`).
+    async fn channel_update(&self, ctx: &Context<'_>, id: ID, input: gen::ChannelUpdateInput) -> Result<gen::ChannelUpdate> {
+        let _ = crate::account::require_perm(ctx, "manage_channels").await?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let err = |m: String| gen::ChannelUpdate { errors: vec![ch_err(None, m)], channel: None };
+        let cid = saleor_rustify_db::catalog::parse_gid(&id.0).unwrap_or(-1);
+        let slug = channel_slug_of(db, cid).await?;
+        if input.name.is_some() || input.is_active.is_some() || input.default_country.is_some() || input.stock_settings.is_some() {
+            let strategy = input.stock_settings.as_ref().map(|s| match &s.allocation_strategy {
+                gen::AllocationStrategyEnum::PRIORITIZESORTINGORDER => "prioritize-sorting-order".to_string(),
+                gen::AllocationStrategyEnum::PRIORITIZEHIGHSTOCK => "prioritize-high-stock".to_string(),
+            });
+            if let Err(e) = saleor_rustify_db::channels::update_channel(db, &slug, saleor_rustify_db::channels::ChannelPatch {
+                name: input.name.clone(),
+                is_active: input.is_active,
+                default_country: input.default_country.as_ref().map(|c| format!("{c:?}")),
+                allocation_strategy: strategy,
+                auto_confirm: input.order_settings.as_ref().and_then(|o| o.automatically_confirm_all_new_orders),
+            }).await {
+                return Ok(err(e.to_string()));
+            }
+        }
+        if let Some(zones) = input.add_shipping_zones.as_ref() {
+            let zids: Vec<i32> = zones.iter().filter_map(|z| saleor_rustify_db::catalog::parse_gid(&z.0)).collect();
+            if let Err(e) = saleor_rustify_db::channels::add_channel_zones(db, cid, &zids).await {
+                return Ok(err(e.to_string()));
+            }
+        }
+        if let Some(whs) = input.add_warehouses.as_ref() {
+            let wids: Vec<uuid::Uuid> = whs.iter().filter_map(|w| crate::common::parse_uuid_gid(&w.0)).collect();
+            if let Err(e) = saleor_rustify_db::ship_tax_writes::add_channel_warehouses(db, cid, &wids).await {
+                return Ok(err(e.to_string()));
+            }
+        }
+        // Settings inputs → settings patch (never silently dropped).
+        let settings = channel_settings_patch(&input);
+        if let Err(e) = saleor_rustify_db::channels::update_channel_settings(db, &slug, settings).await {
+            // "nothing to update" just means no settings were sent.
+            if e.to_string() != "channel error: nothing to update" {
+                return Ok(err(e.to_string()));
+            }
+        }
+        Ok(gen::ChannelUpdate {
+            errors: vec![],
+            channel: assemble_channel(db, cid).await.map_err(Error::new)?,
+        })
+    }
+
+    /// Delete a channel (Django `channelDelete`; orders/checkouts refuse).
+    async fn channel_delete(&self, ctx: &Context<'_>, id: ID, input: Option<gen::ChannelDeleteInput>) -> Result<gen::ChannelDelete> {
+        let _ = crate::account::require_perm(ctx, "manage_channels").await?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let _ = input;
+        let cid = saleor_rustify_db::catalog::parse_gid(&id.0).unwrap_or(-1);
+        let slug = channel_slug_of(db, cid).await?;
+        match saleor_rustify_db::channels::delete_channel(db, &slug).await {
+            Ok(()) => Ok(gen::ChannelDelete { errors: vec![] }),
+            Err(e) => Ok(gen::ChannelDelete { errors: vec![ch_err(None, e.to_string())] }),
+        }
+    }
+
+    /// Activate a channel.
+    async fn channel_activate(&self, ctx: &Context<'_>, id: ID) -> Result<gen::ChannelActivate> {
+        let _ = crate::account::require_perm(ctx, "manage_channels").await?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let cid = saleor_rustify_db::catalog::parse_gid(&id.0).unwrap_or(-1);
+        let slug = channel_slug_of(db, cid).await?;
+        match saleor_rustify_db::channels::update_channel(db, &slug, saleor_rustify_db::channels::ChannelPatch {
+            name: None, is_active: Some(true), default_country: None, allocation_strategy: None, auto_confirm: None,
+        }).await {
+            Ok(_) => Ok(gen::ChannelActivate { channel: assemble_channel(db, cid).await.map_err(Error::new)?, errors: vec![] }),
+            Err(e) => Ok(gen::ChannelActivate { channel: None, errors: vec![ch_err(None, e.to_string())] }),
+        }
+    }
+
+    /// Deactivate a channel.
+    async fn channel_deactivate(&self, ctx: &Context<'_>, id: ID) -> Result<gen::ChannelDeactivate> {
+        let _ = crate::account::require_perm(ctx, "manage_channels").await?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let cid = saleor_rustify_db::catalog::parse_gid(&id.0).unwrap_or(-1);
+        let slug = channel_slug_of(db, cid).await?;
+        match saleor_rustify_db::channels::update_channel(db, &slug, saleor_rustify_db::channels::ChannelPatch {
+            name: None, is_active: Some(false), default_country: None, allocation_strategy: None, auto_confirm: None,
+        }).await {
+            Ok(_) => Ok(gen::ChannelDeactivate { channel: assemble_channel(db, cid).await.map_err(Error::new)?, errors: vec![] }),
+            Err(e) => Ok(gen::ChannelDeactivate { channel: None, errors: vec![ch_err(None, e.to_string())] }),
+        }
+    }
+
+    /// Reorder a channel's warehouses (Django `channelReorderWarehouses`).
+    async fn channel_reorder_warehouses(&self, ctx: &Context<'_>, #[graphql(name = "channelId")] channel_id: ID, moves: Vec<gen::ReorderInput>) -> Result<gen::ChannelReorderWarehouses> {
+        let _ = crate::account::require_perm(ctx, "manage_channels").await?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let cid = saleor_rustify_db::catalog::parse_gid(&channel_id.0).unwrap_or(-1);
+        let mv: Vec<(uuid::Uuid, i32)> = moves.iter().filter_map(|m| {
+            crate::common::parse_uuid_gid(&m.id.0).map(|w| (w, m.sort_order.unwrap_or(0)))
+        }).collect();
+        match saleor_rustify_db::ship_tax_writes::reorder_channel_warehouses(db, cid, &mv).await {
+            Ok(()) => Ok(gen::ChannelReorderWarehouses { channel: assemble_channel(db, cid).await.map_err(Error::new)?, errors: vec![] }),
+            Err(e) => Ok(gen::ChannelReorderWarehouses { channel: None, errors: vec![ch_err(None, e.to_string())] }),
         }
     }
 

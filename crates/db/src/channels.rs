@@ -20,7 +20,7 @@ use crate::{
     entities::{
         channel_channel, checkout_checkout, order_order, product_product,
         product_productchannellisting, product_productvariant,
-        product_productvariantchannellisting,
+        product_productvariantchannellisting, shipping_shippingzone_channels,
     },
     DbError, Result,
 };
@@ -390,4 +390,144 @@ pub async fn set_variant_price(
 /// Refuses channels that gained orders/checkouts since creation.
 pub async fn delete_channel_deep(db: &DatabaseConnection, slug: &str) -> Result<()> {
     delete_channel(db, slug).await
+}
+
+/// Full settings patch (Django `ChannelUpdateInput` order/stock/checkout/
+/// payment settings + metadata). Column-direct; validated like the header
+/// patch. Zones/warehouses ride the link helpers.
+#[derive(Default)]
+pub struct ChannelSettingsPatch {
+    pub auto_confirm: Option<bool>,
+    pub auto_fulfill_gift: Option<bool>,
+    pub mark_as_paid_strategy: Option<String>,
+    pub allow_unpaid_orders: Option<bool>,
+    pub expire_orders_after: Option<Option<i32>>,
+    pub delete_expired_after: Option<String>,
+    pub allocation_strategy: Option<String>,
+    pub default_transaction_flow: Option<String>,
+    pub use_legacy_checkout_errors: Option<bool>,
+    pub auto_complete_checkouts: Option<bool>,
+    pub allow_legacy_gift_card: Option<bool>,
+    pub release_funds_expired: Option<bool>,
+}
+
+/// Apply settings to a channel by slug (Django `channelUpdate` settings).
+pub async fn update_channel_settings(
+    db: &DatabaseConnection,
+    slug: &str,
+    patch: ChannelSettingsPatch,
+) -> Result<ChannelView> {
+    use sea_orm::TransactionTrait;
+    let txn = db.begin().await?;
+    let row: i32 = channel_channel::Entity::find()
+        .filter(channel_channel::Column::Slug.eq(slug))
+        .select_only()
+        .column(channel_channel::Column::Id)
+        .into_tuple::<i32>()
+        .one(&txn)
+        .await?
+        .ok_or_else(|| fail(format!("channel '{slug}' not found")))?;
+    if let Some(s) = &patch.allocation_strategy {
+        if !valid_allocation_strategy(s) {
+            return Err(fail("unknown allocation strategy"));
+        }
+    }
+    if let Some(s) = &patch.mark_as_paid_strategy {
+        if s != "PAYMENT_FLOW" && s != "TRANSACTION_FLOW" {
+            return Err(fail("unknown mark_as_paid strategy"));
+        }
+    }
+    if let Some(s) = &patch.default_transaction_flow {
+        if s != "AUTHORIZATION" && s != "CHARGE" {
+            return Err(fail("unknown transaction flow strategy"));
+        }
+    }
+    let mut sets: Vec<String> = vec![];
+    let mut vals: Vec<sea_orm::Value> = vec![];
+    let mut push = |col: &str, v: sea_orm::Value| {
+        vals.push(v);
+        sets.push(format!("{col} = ${}", vals.len()));
+    };
+    if let Some(x) = patch.auto_confirm {
+        push("automatically_confirm_all_new_orders", x.into());
+    }
+    if let Some(x) = patch.auto_fulfill_gift {
+        push("automatically_fulfill_non_shippable_gift_card", x.into());
+    }
+    if let Some(s) = patch.mark_as_paid_strategy {
+        push("order_mark_as_paid_strategy", s.into());
+    }
+    if let Some(x) = patch.allow_unpaid_orders {
+        push("allow_unpaid_orders", x.into());
+    }
+    if let Some(x) = patch.expire_orders_after {
+        push("expire_orders_after", x.into());
+    }
+    if let Some(s) = patch.delete_expired_after {
+        push("delete_expired_orders_after", s.into());
+    }
+    if let Some(s) = patch.allocation_strategy {
+        push("allocation_strategy", s.into());
+    }
+    if let Some(s) = patch.default_transaction_flow {
+        push("default_transaction_flow_strategy", s.into());
+    }
+    if let Some(x) = patch.use_legacy_checkout_errors {
+        push("use_legacy_error_flow_for_checkout", x.into());
+    }
+    if let Some(x) = patch.auto_complete_checkouts {
+        push("automatically_complete_fully_paid_checkouts", x.into());
+    }
+    if let Some(x) = patch.allow_legacy_gift_card {
+        push("allow_legacy_gift_card_use", x.into());
+    }
+    if let Some(x) = patch.release_funds_expired {
+        push("release_funds_for_expired_checkouts", x.into());
+    }
+    if sets.is_empty() {
+        return Err(fail("nothing to update"));
+    }
+    vals.push(row.into());
+    let sql = format!(
+        "UPDATE channel_channel SET {} WHERE id = ${}",
+        sets.join(", "),
+        vals.len()
+    );
+    txn.execute(sea_orm::Statement::from_sql_and_values(
+        sea_orm::DatabaseBackend::Postgres,
+        sql,
+        vals,
+    ))
+    .await?;
+    txn.commit().await?;
+    channel_view(db, row).await
+}
+
+/// Attach shipping zones to a channel (Django `addShippingZones`).
+pub async fn add_channel_zones(
+    db: &DatabaseConnection,
+    channel_id: i32,
+    zone_ids: &[i32],
+) -> Result<()> {
+    use crate::entities::shipping_shippingzone_channels;
+    let txn = db.begin().await?;
+    for zid in zone_ids {
+        let exists = shipping_shippingzone_channels::Entity::find()
+            .filter(shipping_shippingzone_channels::Column::ShippingzoneId.eq(*zid))
+            .filter(shipping_shippingzone_channels::Column::ChannelId.eq(channel_id))
+            .one(&txn)
+            .await?
+            .is_some();
+        if !exists {
+            shipping_shippingzone_channels::ActiveModel {
+                shippingzone_id: Set(*zid),
+                channel_id: Set(channel_id),
+                ..Default::default()
+            }
+            .insert(&txn)
+            .await?;
+        }
+    }
+    txn.commit().await?;
+    Ok(())
 }
