@@ -146,7 +146,7 @@ async fn am_channel(txn: &impl ConnectionTrait, order_id: Uuid) -> Result<i32> {
 
 /// Refresh the order's money columns from its transaction sums (Django's
 /// `update_order_charge_status` also writes these, not just the statuses).
-async fn refresh_order_money(db: &sea_orm::DatabaseConnection, order_id: Uuid) -> Result<()> {
+pub async fn refresh_order_money(db: &sea_orm::DatabaseConnection, order_id: Uuid) -> Result<()> {
     let txns = payment_transactionitem::Entity::find()
         .filter(payment_transactionitem::Column::OrderId.eq(order_id))
         .all(db)

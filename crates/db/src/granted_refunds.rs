@@ -427,3 +427,120 @@ pub async fn refund_across_charged_in(
     debug_assert!(remaining <= Decimal::ZERO);
     Ok(out)
 }
+
+pub struct UpdateGrant {
+    pub amount: Option<Decimal>,
+    pub reason: Option<String>,
+    pub transaction_item_id: Option<Option<i32>>,
+    pub grant_refund_for_shipping: bool,
+    pub add_lines: Vec<GrantLineInput>,
+    pub remove_line_ids: Vec<i32>,
+}
+
+/// Update a granted refund (Django `orderGrantRefundUpdate`):
+/// - at least one field required;
+/// - status pending/success → only reason editable;
+/// - remove_lines are `OrderGrantedRefundLine` pks of THIS grant;
+/// - added lines re-run the grantable-remainder guard.
+pub async fn update_granted_refund(
+    db: &DatabaseConnection,
+    grant_id: i32,
+    upd: &UpdateGrant,
+) -> Result<GrantView> {
+    use sea_orm::TransactionTrait;
+    let touched = upd.amount.is_some()
+        || upd.reason.is_some()
+        || upd.transaction_item_id.is_some()
+        || upd.grant_refund_for_shipping
+        || !upd.add_lines.is_empty()
+        || !upd.remove_line_ids.is_empty();
+    if !touched {
+        return Err(fail("at least one field needs to be provided to process update"));
+    }
+    let txn = db.begin().await?;
+    let g = order_ordergrantedrefund::Entity::find_by_id(grant_id)
+        .one(&txn)
+        .await?
+        .ok_or_else(|| fail(format!("granted refund {grant_id} not found")))?;
+    let locked = g.status == "pending" || g.status == "success";
+    if locked && (upd.amount.is_some() || upd.transaction_item_id.is_some() || upd.grant_refund_for_shipping || !upd.add_lines.is_empty() || !upd.remove_line_ids.is_empty()) {
+        return Err(fail("only reason can be updated when status is pending or success"));
+    }
+    let order = order_order::Entity::find_by_id(g.order_id)
+        .one(&txn)
+        .await?
+        .ok_or_else(|| fail("order not found"))?;
+    let mut am: order_ordergrantedrefund::ActiveModel = g.into();
+    if let Some(r) = upd.reason.clone() {
+        if r.is_empty() {
+            return Err(fail("reason cannot be empty"));
+        }
+        am.reason = Set(r);
+    }
+    if let Some(a) = upd.amount {
+        if a <= Decimal::ZERO {
+            return Err(fail("amount must be positive"));
+        }
+        am.amount_value = Set(a);
+    }
+    if let Some(t) = upd.transaction_item_id {
+        if let Some(tid) = t {
+            let row = payment_transactionitem::Entity::find_by_id(tid)
+                .one(&txn)
+                .await?
+                .ok_or_else(|| fail(format!("transaction {tid} not found")))?;
+            if row.currency != order.currency {
+                return Err(fail("transaction currency must match the order"));
+            }
+        }
+        am.transaction_item_id = Set(t);
+    }
+    if upd.grant_refund_for_shipping {
+        am.shipping_costs_included = Set(true);
+    }
+    am.updated_at = Set(Utc::now().into());
+    am.update(&txn).await?;
+    for lid in &upd.remove_line_ids {
+        let l = order_ordergrantedrefundline::Entity::find_by_id(*lid)
+            .one(&txn)
+            .await?
+            .ok_or_else(|| fail(format!("granted refund line {lid} not found")))?;
+        if l.granted_refund_id != grant_id {
+            return Err(fail(format!("line {lid} does not belong to this granted refund")));
+        }
+        let dam: order_ordergrantedrefundline::ActiveModel = l.into();
+        dam.delete(&txn).await?;
+    }
+    for l in &upd.add_lines {
+        if l.quantity <= 0 {
+            return Err(fail("line quantity must be positive"));
+        }
+        let ol = order_orderline::Entity::find_by_id(l.order_line_id)
+            .one(&txn)
+            .await?
+            .ok_or_else(|| fail(format!("order line {} not found", l.order_line_id)))?;
+        if ol.order_id != order.id {
+            return Err(fail("order line does not belong to this order"));
+        }
+        let already = granted_qty_for_line(&txn, order.id, l.order_line_id).await?;
+        if l.quantity > ol.quantity - already {
+            return Err(fail(format!(
+                "line {} only has {} grantable units left",
+                l.order_line_id,
+                ol.quantity - already
+            )));
+        }
+        order_ordergrantedrefundline::ActiveModel {
+            quantity: Set(l.quantity),
+            granted_refund_id: Set(grant_id),
+            order_line_id: Set(l.order_line_id),
+            reason: Set(None),
+            reason_reference_id: Set(None),
+            ..Default::default()
+        }
+        .insert(&txn)
+        .await?;
+    }
+    txn.commit().await?;
+    view(db, grant_id).await
+}

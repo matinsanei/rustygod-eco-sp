@@ -29840,20 +29840,6 @@ impl GenMutation {
 
     }
 
-    #[graphql(name = "transactionCreate")]
-    async fn transaction_create(&self, #[graphql(name = "id")] _arg_id: ID, #[graphql(name = "transaction")] _arg_transaction: TransactionCreateInput, #[graphql(name = "transactionEvent")] _arg_transaction_event: Option<TransactionEventInput>) -> Option<TransactionCreate> {
-
-        Some(TransactionCreate { transaction: None, errors: vec![] })
-
-    }
-
-    #[graphql(name = "transactionRequestRefundForGrantedRefund")]
-    async fn transaction_request_refund_for_granted_refund(&self, #[graphql(name = "grantedRefundId")] _arg_granted_refund_id: ID, #[graphql(name = "id")] _arg_id: Option<ID>, #[graphql(name = "token")] _arg_token: Option<String>) -> Option<TransactionRequestRefundForGrantedRefund> {
-
-        Some(TransactionRequestRefundForGrantedRefund { transaction: None, errors: vec![] })
-
-    }
-
     #[graphql(name = "pageCreate")]
     async fn page_create(&self, #[graphql(name = "input")] _arg_input: PageCreateInput) -> Option<PageCreate> {
 
@@ -29970,55 +29956,6 @@ impl GenMutation {
     async fn draft_order_update(&self, #[graphql(name = "externalReference")] _arg_external_reference: Option<String>, #[graphql(name = "id")] _arg_id: Option<ID>, #[graphql(name = "input")] _arg_input: DraftOrderInput) -> Option<DraftOrderUpdate> {
 
         Some(DraftOrderUpdate { errors: vec![], order: None })
-
-    }
-
-    #[graphql(name = "orderFulfillmentCancel")]
-    async fn order_fulfillment_cancel(&self, #[graphql(name = "id")] _arg_id: ID, #[graphql(name = "input")] _arg_input: Option<FulfillmentCancelInput>) -> Option<FulfillmentCancel> {
-
-        Some(FulfillmentCancel { order: None, errors: vec![] })
-
-    }
-
-    #[graphql(name = "orderFulfillmentApprove")]
-    async fn order_fulfillment_approve(&self, #[graphql(name = "allowStockToBeExceeded")] _arg_allow_stock_to_be_exceeded: Option<bool>, #[graphql(name = "id")] _arg_id: ID, #[graphql(name = "notifyCustomer")] _arg_notify_customer: bool) -> Option<FulfillmentApprove> {
-
-        Some(FulfillmentApprove { order: None, errors: vec![] })
-
-    }
-
-    #[graphql(name = "orderFulfillmentUpdateTracking")]
-    async fn order_fulfillment_update_tracking(&self, #[graphql(name = "id")] _arg_id: ID, #[graphql(name = "input")] _arg_input: FulfillmentUpdateTrackingInput) -> Option<FulfillmentUpdateTracking> {
-
-        Some(FulfillmentUpdateTracking { order: None, errors: vec![] })
-
-    }
-
-    #[graphql(name = "orderFulfillmentRefundProducts")]
-    async fn order_fulfillment_refund_products(&self, #[graphql(name = "input")] _arg_input: OrderRefundProductsInput, #[graphql(name = "order")] _arg_order: ID) -> Option<FulfillmentRefundProducts> {
-
-        Some(FulfillmentRefundProducts { fulfillment: None, order: None, errors: vec![] })
-
-    }
-
-    #[graphql(name = "orderFulfillmentReturnProducts")]
-    async fn order_fulfillment_return_products(&self, #[graphql(name = "input")] _arg_input: OrderReturnProductsInput, #[graphql(name = "order")] _arg_order: ID) -> Option<FulfillmentReturnProducts> {
-
-        Some(FulfillmentReturnProducts { order: None, replace_order: None, errors: vec![] })
-
-    }
-
-    #[graphql(name = "orderGrantRefundCreate")]
-    async fn order_grant_refund_create(&self, #[graphql(name = "id")] _arg_id: ID, #[graphql(name = "input")] _arg_input: OrderGrantRefundCreateInput) -> Option<OrderGrantRefundCreate> {
-
-        Some(OrderGrantRefundCreate { order: None, granted_refund: None, errors: vec![] })
-
-    }
-
-    #[graphql(name = "orderGrantRefundUpdate")]
-    async fn order_grant_refund_update(&self, #[graphql(name = "id")] _arg_id: ID, #[graphql(name = "input")] _arg_input: OrderGrantRefundUpdateInput) -> Option<OrderGrantRefundUpdate> {
-
-        Some(OrderGrantRefundUpdate { order: None, errors: vec![] })
 
     }
 

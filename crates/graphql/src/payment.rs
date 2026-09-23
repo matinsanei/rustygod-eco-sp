@@ -56,7 +56,7 @@ fn money_of(amount: rust_decimal::Decimal, currency: &str) -> crate::common::Mon
 }
 
 /// Full TransactionItem assembly (amounts, actions, audit events).
-async fn assemble_item(db: &sea_orm::DatabaseConnection, tid: i32) -> Result<gen::TransactionItem, String> {
+pub(crate) async fn assemble_item(db: &sea_orm::DatabaseConnection, tid: i32) -> Result<gen::TransactionItem, String> {
     use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QueryOrder};
     let m = saleor_rustify_db::entities::payment_transactionitem::Entity::find_by_id(tid)
         .one(db).await.map_err(|e| e.to_string())?
@@ -860,6 +860,167 @@ impl PaymentMutation {
                 None => Ok(err("stripe selected but STRIPE_SECRET_KEY is unset".into())),
             },
             other => Ok(err(format!("gateway {other} is not configured"))),
+        }
+    }
+
+    /// App transaction creation (Django `transactionCreate`): books the item
+    /// on a checkout or order, then records any nonzero opening buckets as
+    /// `*_success` events (same recalc path as live PSP reports). An
+    /// optional `transactionEvent` lands as a math-excluded INFO record.
+    async fn transaction_create(
+        &self, ctx: &Context<'_>,
+        id: ID,
+        transaction: gen::TransactionCreateInput,
+        #[graphql(name = "transactionEvent")] transaction_event: Option<gen::TransactionEventInput>,
+    ) -> Result<gen::TransactionCreate> {
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let _ = crate::account::require_perm(ctx, "handle_payments").await?;
+        let err = |m: String| gen::TransactionCreate {
+            transaction: None,
+            errors: vec![gen::TransactionCreateError { field: None, message: Some(m), code: None }],
+        };
+        // Parent: checkout xor order (Django accepts both id flavors).
+        let raw = crate::common::parse_uuid_gid(&id.0);
+        let (checkout_id, order_id) = match raw {
+            Some(u) => {
+                use sea_orm::EntityTrait;
+                if saleor_rustify_db::entities::checkout_checkout::Entity::find_by_id(u).one(db).await.map_err(|e| Error::new(e.to_string()))?.is_some() {
+                    (Some(u), None)
+                } else if saleor_rustify_db::entities::order_order::Entity::find_by_id(u).one(db).await.map_err(|e| Error::new(e.to_string()))?.is_some() {
+                    (None, Some(u))
+                } else {
+                    return Ok(err("checkout or order not found".into()));
+                }
+            }
+            None => return Ok(err("bad id".into())),
+        };
+        let money = |m: &Option<gen::MoneyInput>| -> Option<(rust_decimal::Decimal, String)> {
+            m.as_ref().and_then(|x| x.amount.0.parse::<rust_decimal::Decimal>().ok().map(|a| (a, x.currency.clone())))
+        };
+        let auth = money(&transaction.amount_authorized);
+        let charged = money(&transaction.amount_charged);
+        let refunded = money(&transaction.amount_refunded);
+        let canceled = money(&transaction.amount_canceled);
+        for (a, _) in [auth.clone(), charged.clone(), refunded.clone(), canceled.clone()].into_iter().flatten() {
+            if a < rust_decimal::Decimal::ZERO {
+                return Ok(err("opening amounts cannot be negative".into()));
+            }
+        }
+        let currency = auth.clone().or(charged.clone()).or(refunded.clone()).or(canceled.clone()).map(|(_, c)| c).unwrap_or_else(|| "USD".to_string());
+        let actions: Vec<String> = transaction.available_actions.clone().unwrap_or_default().into_iter().map(|a| match a {
+            gen::TransactionActionEnum::CHARGE => "charge".to_string(),
+            gen::TransactionActionEnum::REFUND => "refund".to_string(),
+            gen::TransactionActionEnum::CANCEL => "cancel".to_string(),
+        }).collect();
+        let created = match saleor_rustify_db::payments::create_transaction(db, &saleor_rustify_db::payments::NewTransaction {
+            checkout_id,
+            order_id,
+            currency: currency.clone(),
+            name: transaction.name.clone().unwrap_or_default(),
+            app_identifier: None,
+            idempotency_key: None,
+            available_actions: actions,
+        }).await {
+            Ok(v) => v,
+            Err(e) => return Ok(err(e.to_string())),
+        };
+        // Extras the ledger ctor doesn't take (columns exist on the item).
+        {
+            use sea_orm::{ActiveModelTrait, EntityTrait, Set};
+            if let Some(row) = saleor_rustify_db::entities::payment_transactionitem::Entity::find_by_id(created.id).one(db).await.map_err(|e| Error::new(e.to_string()))? {
+                let mut am: saleor_rustify_db::entities::payment_transactionitem::ActiveModel = row.into();
+                if transaction.psp_reference.is_some() { am.psp_reference = Set(transaction.psp_reference.clone()); }
+                if transaction.message.is_some() { am.message = Set(transaction.message.clone()); }
+                if transaction.external_url.is_some() { am.external_url = Set(transaction.external_url.clone()); }
+                am.update(db).await.map_err(|e| Error::new(e.to_string()))?;
+            }
+        }
+        let report = |typ: &str, amt: rust_decimal::Decimal, cur: String| {
+            saleor_rustify_db::payments::NewEvent {
+                event_type: typ.to_string(),
+                amount: amt,
+                currency: cur,
+                psp_reference: transaction.psp_reference.clone(),
+                message: transaction.message.clone().unwrap_or_default(),
+                idempotency_key: None,
+                include_in_calculations: true,
+                related_granted_refund_id: None,
+                external_url: transaction.external_url.clone(),
+            }
+        };
+        // report_event is async; run the steps inline instead of a closure.
+        let mut failed: Option<String> = None;
+        if let Some((a, c)) = auth { if a > rust_decimal::Decimal::ZERO && failed.is_none() {
+            if let Err(e) = saleor_rustify_db::payments::report_event(db, created.id, &report("authorization_success", a, c)).await { failed = Some(e.to_string()); } } }
+        if let Some((a, c)) = charged { if a > rust_decimal::Decimal::ZERO && failed.is_none() {
+            if let Err(e) = saleor_rustify_db::payments::report_event(db, created.id, &report("charge_success", a, c)).await { failed = Some(e.to_string()); } } }
+        if let Some((a, c)) = refunded { if a > rust_decimal::Decimal::ZERO && failed.is_none() {
+            if let Err(e) = saleor_rustify_db::payments::report_event(db, created.id, &report("refund_success", a, c)).await { failed = Some(e.to_string()); } } }
+        if let Some((a, c)) = canceled { if a > rust_decimal::Decimal::ZERO && failed.is_none() {
+            if let Err(e) = saleor_rustify_db::payments::report_event(db, created.id, &report("cancel_success", a, c)).await { failed = Some(e.to_string()); } } }
+        if let Some(ev) = transaction_event.as_ref() {
+            if failed.is_none() {
+                let info = saleor_rustify_db::payments::NewEvent {
+                    event_type: "info".to_string(),
+                    amount: rust_decimal::Decimal::ZERO,
+                    currency: currency.clone(),
+                    psp_reference: ev.psp_reference.clone(),
+                    message: ev.message.clone().unwrap_or_default(),
+                    idempotency_key: None,
+                    include_in_calculations: false,
+                    related_granted_refund_id: None,
+                    external_url: None,
+                };
+                if let Err(e) = saleor_rustify_db::payments::report_event(db, created.id, &info).await { failed = Some(e.to_string()); }
+            }
+        }
+        if let Some(m) = failed {
+            return Ok(err(m));
+        }
+        match assemble_item(db, created.id).await {
+            Ok(t) => Ok(gen::TransactionCreate { transaction: Some(t), errors: vec![] }),
+            Err(e) => Ok(err(e)),
+        }
+    }
+
+    /// Execute a granted refund's money move (Django
+    /// `transactionRequestRefundForGrantedRefund`): resolves the transaction
+    /// (arg wins, else the grant's link) and refunds the granted amount with
+    /// the event linked back to the grant.
+    async fn transaction_request_refund_for_granted_refund(
+        &self, ctx: &Context<'_>,
+        #[graphql(name = "grantedRefundId")] granted_refund_id: ID,
+        id: Option<ID>,
+        token: Option<String>,
+    ) -> Result<gen::TransactionRequestRefundForGrantedRefund> {
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let _ = crate::account::require_perm(ctx, "handle_payments").await?;
+        let err = |m: String| gen::TransactionRequestRefundForGrantedRefund {
+            transaction: None,
+            errors: vec![gen::TransactionRequestRefundForGrantedRefundError { field: None, message: Some(m), code: None }],
+        };
+        let gid = saleor_rustify_db::catalog::parse_gid(&granted_refund_id.0).unwrap_or(-1);
+        let grant = match saleor_rustify_db::granted_refunds::view(db, gid).await {
+            Ok(v) => v,
+            Err(e) => return Ok(err(e.to_string())),
+        };
+        let tid = match resolve_tid(db, id, token).await {
+            Ok(t) => t,
+            Err(_) => match grant.transaction_item_id {
+                Some(t) => t,
+                None => return Ok(err("pass transaction id/token or link one on the grant".into())),
+            },
+        };
+        if let Err(e) = txn_access(ctx, db, tid).await {
+            return Ok(err(e));
+        }
+        let key = format!("grant-exec-{gid}-{tid}");
+        match saleor_rustify_db::payments::refund_for_grant(db, tid, grant.amount, &key, gid).await {
+            Ok(_) => match assemble_item(db, tid).await {
+                Ok(t) => Ok(gen::TransactionRequestRefundForGrantedRefund { transaction: Some(t), errors: vec![] }),
+                Err(e) => Ok(err(e)),
+            },
+            Err(e) => Ok(err(e.to_string())),
         }
     }
 }

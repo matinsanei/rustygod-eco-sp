@@ -574,6 +574,23 @@ pub async fn return_and_refund(
     restock: bool,
     transaction_item_id: Option<i32>,
 ) -> Result<ReturnRefundView> {
+    return_and_refund_full(db, order_id, items, reason, restock, transaction_item_id, false, None).await
+}
+
+/// Full variant: `include_shipping` adds the order's shipping price into the
+/// granted amount (Django `includeShippingCosts`), `amount_override` books
+/// an explicit figure instead (Django `amountToRefund`).
+#[allow(clippy::too_many_arguments)]
+pub async fn return_and_refund_full(
+    db: &DatabaseConnection,
+    order_id: Uuid,
+    items: &[FulfillItem],
+    reason: &str,
+    restock: bool,
+    transaction_item_id: Option<i32>,
+    include_shipping: bool,
+    amount_override: Option<rust_decimal::Decimal>,
+) -> Result<ReturnRefundView> {
     use sea_orm::{sea_query::LockType, TransactionTrait};
     let txn = db.begin().await?;
     // Shared lock contract: the order row first.
@@ -628,7 +645,7 @@ pub async fn return_and_refund(
         &crate::granted_refunds::NewGrant {
             order_id,
             transaction_item_id: Some(txn_id),
-            amount: None, // derived from the returned lines
+            amount: amount_override,
             lines: items
                 .iter()
                 .map(|i| crate::granted_refunds::GrantLineInput {
@@ -637,7 +654,7 @@ pub async fn return_and_refund(
                 })
                 .collect(),
             reason: reason.to_string(),
-            shipping_costs_included: false,
+            shipping_costs_included: include_shipping,
             user_id: None,
             app_id: None,
         },
@@ -648,7 +665,6 @@ pub async fn return_and_refund(
         .await?;
     crate::granted_refunds::refresh_grant_status(&txn, grant_id).await?;
     crate::payments::refresh_order_statuses(&txn, Some(order_id)).await?;
-
     let payload = serde_json::json!({
         "id": order_id.to_string(),
         "fulfillment_id": fulfillment_id,
@@ -661,6 +677,7 @@ pub async fn return_and_refund(
         crate::webhooks::trigger_event_tx(&txn, "fulfillment_returned", ch_slug.as_deref(), &payload).await?,
     );
     txn.commit().await?;
+    crate::order_ops::refresh_order_money(db, order_id).await?;
     Ok(ReturnRefundView { fulfillment_id, granted_refund_id: grant_id, amount })
 }
 
@@ -679,4 +696,153 @@ pub async fn stock_for_variant_warehouse(
         .one(db)
         .await?
         .map(|s| s.id))
+}
+
+/// Approve a waiting-for-approval fulfillment (Django `approve_fulfillment`):
+/// guard status, decrease tracked stock now (approval is when Django moves
+/// inventory for waiting rows), status → fulfilled, order status refreshed.
+///
+/// Our `create_fulfillment` books `fulfilled` directly, so waiting rows only
+/// arrive from Django-shared flows — no double-decrease inside our paths.
+pub async fn approve_fulfillment(
+    db: &DatabaseConnection,
+    fulfillment_id: i32,
+    allow_exceeded: bool,
+) -> Result<FulfillmentView> {
+    use sea_orm::TransactionTrait;
+    let txn = db.begin().await?;
+    let f = order_fulfillment::Entity::find_by_id(fulfillment_id)
+        .one(&txn)
+        .await?
+        .ok_or_else(|| fail("fulfillment not found"))?;
+    if f.status != "waiting_for_approval" {
+        return Err(fail("only fulfillments waiting for approval can be approved"));
+    }
+    let order_id = f.order_id;
+    let lines = order_fulfillmentline::Entity::find()
+        .filter(order_fulfillmentline::Column::FulfillmentId.eq(fulfillment_id))
+        .all(&txn)
+        .await?;
+    let vids: Vec<i32> = {
+        let mut v = vec![];
+        for fl in &lines {
+            if let Some(l) = order_orderline::Entity::find_by_id(fl.order_line_id).one(&txn).await? {
+                if let Some(vid) = l.variant_id {
+                    v.push(vid);
+                }
+            }
+        }
+        v
+    };
+    let tracked = tracked_map(&txn, &vids).await?;
+    for fl in &lines {
+        let Some(l) = order_orderline::Entity::find_by_id(fl.order_line_id).one(&txn).await? else {
+            continue;
+        };
+        let Some(vid) = l.variant_id else { continue };
+        if !tracked.get(&vid).copied().unwrap_or(true) {
+            continue;
+        }
+        let sid = match fl.stock_id {
+            Some(s) => s,
+            None => pick_stock(&txn, vid, fl.quantity).await?,
+        };
+        if allow_exceeded {
+            let s = warehouse_stock::Entity::find_by_id(sid)
+                .one(&txn)
+                .await?
+                .ok_or_else(|| fail("stock not found"))?;
+            let mut am: warehouse_stock::ActiveModel = s.into();
+            am.quantity = Set(am.quantity.clone().unwrap() - fl.quantity);
+            am.update(&txn).await?;
+        } else {
+            decrease_stock_qty(&txn, sid, fl.quantity).await?;
+        }
+    }
+    let mut fam: order_fulfillment::ActiveModel = f.into();
+    fam.status = Set("fulfilled".to_string());
+    fam.update(&txn).await?;
+    refresh_order_status(&txn, order_id).await?;
+    txn.commit().await?;
+    view(db, fulfillment_id).await
+}
+
+/// Update the tracking number (Django `orderFulfillmentUpdateTracking`;
+/// the customer email is an SMTP-side effect, out of scope — recorded
+/// in the fulfillment row only).
+pub async fn update_tracking(
+    db: &DatabaseConnection,
+    fulfillment_id: i32,
+    tracking_number: &str,
+) -> Result<FulfillmentView> {
+    let f = order_fulfillment::Entity::find_by_id(fulfillment_id)
+        .one(db)
+        .await?
+        .ok_or_else(|| fail("fulfillment not found"))?;
+    if f.status == "canceled" {
+        return Err(fail("canceled fulfillments cannot be updated"));
+    }
+    let mut am: order_fulfillment::ActiveModel = f.into();
+    am.tracking_number = Set(tracking_number.to_string());
+    am.update(db).await?;
+    view(db, fulfillment_id).await
+}
+
+/// Cancel with an optional restock-warehouse override (Django
+/// `FulfillmentCancelInput.warehouseId`): credits that warehouse's stock
+/// row for each tracked variant, else the line's original stock. Missing
+/// stock rows in the target warehouse are an honest error (Django would
+/// create negative/inconsistent piles; we refuse instead).
+pub async fn cancel_fulfillment_to(
+    db: &DatabaseConnection,
+    fulfillment_id: i32,
+    warehouse_id: Option<Uuid>,
+) -> Result<FulfillmentView> {
+    use sea_orm::TransactionTrait;
+    let txn = db.begin().await?;
+    let f = order_fulfillment::Entity::find_by_id(fulfillment_id)
+        .one(&txn)
+        .await?
+        .ok_or_else(|| fail("fulfillment not found"))?;
+    if f.status == "canceled" {
+        txn.commit().await?;
+        return view(db, fulfillment_id).await;
+    }
+    if f.status == "refunded" || f.status == "returned" {
+        return Err(fail(format!("{} fulfillments cannot be canceled", f.status)));
+    }
+    let order_id = f.order_id;
+    let lines = order_fulfillmentline::Entity::find()
+        .filter(order_fulfillmentline::Column::FulfillmentId.eq(fulfillment_id))
+        .all(&txn)
+        .await?;
+    for fl in &lines {
+        let line = order_orderline::Entity::find_by_id(fl.order_line_id)
+            .one(&txn)
+            .await?
+            .ok_or_else(|| fail("order line not found"))?;
+        let mut lam: order_orderline::ActiveModel = line.into();
+        lam.quantity_fulfilled = Set((lam.quantity_fulfilled.clone().unwrap() - fl.quantity).max(0));
+        lam.update(&txn).await?;
+        let vid: Option<i32> = order_orderline::Entity::find_by_id(fl.order_line_id)
+            .one(&txn)
+            .await?
+            .and_then(|l| l.variant_id);
+        let sid = match (warehouse_id, vid) {
+            (Some(wid), Some(vid)) => stock_for_variant_warehouse(&txn, vid, wid)
+                .await?
+                .ok_or_else(|| fail(format!("variant {vid} is not stocked in the chosen warehouse")))?,
+            _ => match fl.stock_id {
+                Some(s) => s,
+                None => continue,
+            },
+        };
+        increase_stock_qty(&txn, sid, fl.quantity).await?;
+    }
+    let mut fam: order_fulfillment::ActiveModel = f.into();
+    fam.status = Set("canceled".to_string());
+    fam.update(&txn).await?;
+    refresh_order_status(&txn, order_id).await?;
+    txn.commit().await?;
+    view(db, fulfillment_id).await
 }
