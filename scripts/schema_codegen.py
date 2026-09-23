@@ -202,6 +202,20 @@ def load_docs():
                         continue
                     ops.append({"kind": kind, "name": name, "sel": sels,
                                 "vars": var_types, "page": f.split("dashboard/src/")[-1].split("/")[0]})
+            # Executed raw template queries (Product Doctor public-API check —
+            # plain fetch, no gql tag; keep in sync with schema_examine.py).
+            for m in re.finditer(r"const PUBLIC_API_\w+\s*=\s*`(.*?)`", t, re.S):
+                doc = m.group(1)
+                for om in re.finditer(r"^\s*(query|mutation|subscription)\s+(\w+)", doc, re.M):
+                    kind, name = om.groups()
+                    j = doc.find("{", om.end())
+                    var_types = dict(re.findall(r"\$(\w+)\s*:\s*([A-Za-z_][A-Za-z0-9_\[\]!]*)", doc[:j]))
+                    try:
+                        sels, _ = parse_selection(tokenize(doc[j:]))
+                    except (AssertionError, IndexError):
+                        continue
+                    ops.append({"kind": kind, "name": name, "sel": sels,
+                                "vars": var_types, "page": f.split("dashboard/src/")[-1].split("/")[0]})
     return ops, frags
 
 
@@ -668,6 +682,10 @@ REAL_METHODS = {
     # Collection products tab + background image.
     ("Collection", "products"): """{\n        let db = match ctx.data_opt::<crate::context::GqlContext>().and_then(|g| g.db().ok()) {\n            Some(d) => d.clone(),\n            None => return None,\n        };\n        let gid = self.id.as_ref().map(|i| i.0.clone()).unwrap_or_default();\n        crate::catalog::collection_products(&db, &gid, _arg_first.clone(), _arg_after.clone()).await\n    }""",
     ("Collection", "backgroundImage"): """{\n        let db = match ctx.data_opt::<crate::context::GqlContext>().and_then(|g| g.db().ok()) {\n            Some(d) => d.clone(),\n            None => return None,\n        };\n        let gid = self.id.as_ref().map(|i| i.0.clone()).unwrap_or_default();\n        crate::catalog::collection_bg_image(&db, &gid).await\n    }""",
+    # Attribute details relations.
+    ("Attribute", "choices"): """{\n        let db = match ctx.data_opt::<crate::context::GqlContext>().and_then(|g| g.db().ok()) {\n            Some(d) => d.clone(),\n            None => return None,\n        };\n        let gid = self.id.as_ref().map(|i| i.0.clone()).unwrap_or_default();\n        let search = _arg_search.clone();\n        crate::catalog::attribute_choices(&db, &gid, search, _arg_first.clone(), _arg_after.clone()).await\n    }""",
+    ("Attribute", "productTypes"): """{\n        let db = match ctx.data_opt::<crate::context::GqlContext>().and_then(|g| g.db().ok()) {\n            Some(d) => d.clone(),\n            None => return None,\n        };\n        let gid = self.id.as_ref().map(|i| i.0.clone()).unwrap_or_default();\n        crate::catalog::attribute_assigned_types(&db, &gid, false).await\n    }""",
+    ("Attribute", "productVariantTypes"): """{\n        let db = match ctx.data_opt::<crate::context::GqlContext>().and_then(|g| g.db().ok()) {\n            Some(d) => d.clone(),\n            None => return None,\n        };\n        let gid = self.id.as_ref().map(|i| i.0.clone()).unwrap_or_default();\n        crate::catalog::attribute_assigned_types(&db, &gid, true).await\n    }""",
     # Dashboard customer rows read `orders { totalCount }` unconditionally.
     ("User", "orders"): """{
         use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QuerySelect};

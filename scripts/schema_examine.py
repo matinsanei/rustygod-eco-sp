@@ -221,6 +221,23 @@ def parse_dashboard():
                     continue
                 ops.append({"kind": kind, "name": name, "root": sels[0][0] if sels else None,
                             "sel": sels, "page": page})
+        # Raw (untagged) template queries that ARE executed at runtime.
+        # Product Doctor's public-API verification fires a plain fetch with a
+        # template string (no gql tag) — the harness was blind to it and the
+        # page failed on `availableForPurchaseAt` while TESTED stayed green.
+        for m in re.finditer(r"const PUBLIC_API_\w+\s*=\s*`(.*?)`", t, re.S):
+            doc = m.group(1)
+            page = f.split("dashboard/src/")[-1].split("/")[0]
+            for om in re.finditer(r"^\s*(query|mutation|subscription)\s+(\w+)", doc, re.M):
+                kind, name = om.groups()
+                j = doc.find("{", om.end())
+                toks = tokenize(doc[j:])
+                try:
+                    sels, _ = parse_selection(toks)
+                except (AssertionError, IndexError):
+                    continue
+                ops.append({"kind": kind, "name": name, "root": sels[0][0] if sels else None,
+                            "sel": sels, "page": page})
     return ops, frags
 
 

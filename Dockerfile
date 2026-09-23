@@ -1,7 +1,7 @@
 # rustygod-saleor — multi-stage. Runtime is busybox:glibc (~4MB) +
 # the ~20MB release binary: total well under the 100MB Phase-2 budget.
 # (gcr distroless would be equivalent; unreachable from this network.)
-ARG RUST_VERSION=1.89
+ARG RUST_VERSION=1.93
 
 FROM rust:${RUST_VERSION}-bookworm AS builder
 WORKDIR /build
@@ -17,7 +17,8 @@ FROM busybox:glibc
 COPY --from=builder /lib/x86_64-linux-gnu/libgcc_s.so.1 /lib/x86_64-linux-gnu/
 COPY --from=builder /build/target/release/rustygod-server /rustygod-server
 ENV RUSTYGOD_ADDR=0.0.0.0:50051 \
+    RUSTYGOD_GRAPHQL_ADDR=0.0.0.0:8000 \
     RUSTYGOD_METRICS_ADDR=0.0.0.0:9000 \
     RUST_LOG=info
-EXPOSE 50051 9000
+EXPOSE 50051 8000 9000
 ENTRYPOINT ["/rustygod-server"]

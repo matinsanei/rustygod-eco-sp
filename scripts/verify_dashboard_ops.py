@@ -51,6 +51,10 @@ def gql_docs():
                 continue
             for m in re.finditer(r"gql`(.*?)`", t, re.S):
                 docs.append((base, m.group(1)))
+            # Executed raw template queries (Product Doctor public-API check —
+            # plain fetch, no gql tag; see schema_examine.py).
+            for m in re.finditer(r"const PUBLIC_API_\w+\s*=\s*`(.*?)`", t, re.S):
+                docs.append((base, m.group(1)))
     return docs
 
 

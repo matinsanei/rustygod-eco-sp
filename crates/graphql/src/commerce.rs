@@ -212,7 +212,9 @@ async fn to_gen_shop(ctx: &Context<'_>) -> Result<gen::Shop, async_graphql::Erro
             allowed_usage: GqlLimits { channels: Some(100), orders: Some(10000), product_variants: Some(10000), staff_users: Some(100), warehouses: Some(100) },
         }),
         announcements: vec![],
-        version: Some("3.24.0-a.0".into()),
+        // API-compat version (matches the dashboard schema we implement) +
+        // engine tag. Displayed as `core v3.23.33-rustyfi` in Configuration.
+        version: Some("3.23.33-rustyfi".into()),
         available_tax_apps: vec![],
         preserve_all_address_fields: Some(false),
         password_login_mode: Some("ENABLED".into()),
@@ -338,7 +340,13 @@ impl CommerceQuery {
         }))
     }
 
-    /// Saleor `shippingZone(id)`.
+    /// Saleor `giftCard(id)` — details page (was a None stub).
+    async fn gift_card(&self, ctx: &Context<'_>, id: ID) -> Result<Option<gen::GiftCard>> {
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let Some(gid) = rustygod_db::catalog::parse_gid(&id.0) else { return Ok(None) };
+        Ok(assemble_gift_card(db, gid).await.map_err(Error::new)?)
+    }
+
     /// Saleor `shippingZone(id)`.
     async fn shipping_zone(&self, ctx: &Context<'_>, id: ID) -> Result<Option<gen::ShippingZone>> {
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
@@ -1053,7 +1061,9 @@ async fn assemble_channel(
         has_orders: r.try_get::<bool>("", "has_orders").ok(),
         default_country: Some(GqlCountryDisplay { code: dc.clone(), country: dc }),
         warehouses,
-        stock_settings: Some(GqlStockSettings { allocation_strategy: get("allocation_strategy").unwrap_or_else(|| "PRIORITIZE_SORTING_ORDER".into()) }),
+        // Saleor outputs the enum NAME (PRIORITIZE_HIGH_STOCK); the DB stores
+        // the lowercase value — same round-trip class as Promotion.type.
+        stock_settings: Some(GqlStockSettings { allocation_strategy: get("allocation_strategy").map(|s| s.to_uppercase()).unwrap_or_else(|| "PRIORITIZE_SORTING_ORDER".into()) }),
         order_settings: Some(gen::OrderSettings {
             automatically_confirm_all_new_orders: getb("automatically_confirm_all_new_orders"),
             automatically_fulfill_non_shippable_gift_card: getb("automatically_fulfill_non_shippable_gift_card"),
@@ -1190,5 +1200,241 @@ async fn assemble_zone(
         warehouses,
         channels,
         description: z.try_get::<String>("", "description").ok(),
+    }))
+}
+
+/// Minimal user object for gift-card relations (id/email/names only).
+async fn gc_users(
+    db: &sea_orm::DatabaseConnection,
+    ids: &[i32],
+) -> std::collections::HashMap<i32, gen::User> {
+    use sea_orm::{ConnectionTrait, Statement};
+    let mut out = std::collections::HashMap::new();
+    if ids.is_empty() {
+        return out;
+    }
+    let list = (1..=ids.len()).map(|i| format!("${i}")).collect::<Vec<_>>().join(", ");
+    let rows = db.query_all(Statement::from_sql_and_values(
+        sea_orm::DatabaseBackend::Postgres,
+        format!("SELECT id, email, first_name, last_name FROM account_user WHERE id IN ({list})"),
+        ids.iter().map(|i| (*i).into()).collect::<Vec<sea_orm::Value>>(),
+    )).await.unwrap_or_default();
+    for r in rows {
+        if let (Ok(uid), Ok(email)) = (r.try_get::<i32>("", "id"), r.try_get::<String>("", "email")) {
+            let mut u = crate::metadata::lit_user(crate::common::gid("User", uid), vec![], vec![]);
+            u.email = Some(email);
+            u.first_name = Some(r.try_get::<String>("", "first_name").unwrap_or_default());
+            u.last_name = Some(r.try_get::<String>("", "last_name").unwrap_or_default());
+            out.insert(uid, u);
+        }
+    }
+    out
+}
+
+/// Full gift-card details (dashboard GiftCardData + events).
+async fn assemble_gift_card(
+    db: &sea_orm::DatabaseConnection,
+    gid_int: i32,
+) -> Result<Option<gen::GiftCard>, String> {
+    use sea_orm::{ConnectionTrait, Statement};
+    use std::collections::HashMap;
+    let rows = db.query_all(Statement::from_sql_and_values(
+        sea_orm::DatabaseBackend::Postgres,
+        "SELECT id, code, created_at, last_used_on, is_active, initial_balance_amount, \
+                current_balance_amount, currency, app_id, created_by_id, created_by_email, \
+                expiry_date, metadata, private_metadata, product_id, assigned_to_id, \
+                assigned_to_email FROM giftcard_giftcard WHERE id = $1",
+        [gid_int.into()],
+    )).await.map_err(|e| e.to_string())?;
+    let Some(r) = rows.into_iter().next() else { return Ok(None) };
+    let meta = |c: &str| {
+        r.try_get::<serde_json::Value>("", c).ok()
+            .map(|v| crate::common::json_to_metadata_items(&v)).unwrap_or_default()
+    };
+    let money = |a: rust_decimal::Decimal, cur: String| crate::common::Money { amount: a.to_string(), currency: cur, fraction_digits: None };
+    let cur = r.try_get::<String>("", "currency").unwrap_or_else(|_| "USD".into());
+    let code: String = r.try_get::<String>("", "code").unwrap_or_default();
+    let last4: String = code.chars().rev().take(4).collect::<String>().chars().rev().collect();
+    // users + product + tags, batched
+    let mut uids: Vec<i32> = vec![];
+    for c in ["created_by_id", "assigned_to_id"] {
+        if let Some(u) = r.try_get::<Option<i32>>("", c).ok().flatten() {
+            uids.push(u);
+        }
+    }
+    let pid = r.try_get::<Option<i32>>("", "product_id").ok().flatten();
+    let mut product = None;
+    if let Some(p) = pid {
+        let prows = db.query_all(Statement::from_sql_and_values(
+            sea_orm::DatabaseBackend::Postgres,
+            "SELECT id, name FROM product_product WHERE id = $1",
+            [p.into()],
+        )).await.map_err(|e| e.to_string())?;
+        if let Some(pr) = prows.into_iter().next() {
+            let mut pp = crate::metadata::lit_product(crate::common::gid("Product", p), vec![], vec![]);
+            pp.name = pr.try_get::<String>("", "name").ok();
+            product = Some(pp);
+        }
+    }
+    let mut tags = vec![];
+    for t in db.query_all(Statement::from_sql_and_values(
+        sea_orm::DatabaseBackend::Postgres,
+        "SELECT t.id, t.name FROM giftcard_giftcard_tags gt JOIN giftcard_giftcardtag t ON t.id = gt.giftcardtag_id WHERE gt.giftcard_id = $1",
+        [gid_int.into()],
+    )).await.map_err(|e| e.to_string())? {
+        if let (Ok(tid), Ok(tname)) = (t.try_get::<i32>("", "id"), t.try_get::<String>("", "name")) {
+            tags.push(gen::GiftCardTag { id: Some(ID(crate::common::gid("GiftCardTag", tid))), name: Some(tname) });
+        }
+    }
+    // events with JSON parameters (Saleor resolvers read `parameters.*`)
+    let erows = db.query_all(Statement::from_sql_and_values(
+        sea_orm::DatabaseBackend::Postgres,
+        "SELECT id, date, type, parameters, app_id, user_id, order_id FROM giftcard_giftcardevent WHERE gift_card_id = $1 ORDER BY date, id",
+        [gid_int.into()],
+    )).await.map_err(|e| e.to_string())?;
+    // users/apps/orders referenced by events
+    let mut euids: Vec<i32> = uids.clone();
+    let mut eappids: Vec<i32> = vec![];
+    let mut eoids: Vec<String> = vec![];
+    let mut evs: Vec<(i32, String, serde_json::Value, Option<i32>, Option<i32>, Option<String>)> = vec![];
+    for e in &erows {
+        let eid: i32 = match e.try_get::<i32>("", "id") { Ok(v) => v, Err(_) => continue };
+        let params: serde_json::Value = e.try_get::<serde_json::Value>("", "parameters").unwrap_or(serde_json::Value::Null);
+        let get_int = |k: &str| params.get(k).and_then(|v| v.as_i64()).map(|v| v as i32);
+        if let Some(u) = e.try_get::<Option<i32>>("", "user_id").ok().flatten() { euids.push(u); }
+        if let Some(a) = e.try_get::<Option<i32>>("", "app_id").ok().flatten() { eappids.push(a); }
+        for k in ["assigned_to_id", "previous_assigned_to_id"] {
+            if let Some(u) = get_int(k) { euids.push(u); }
+        }
+        if let Some(o) = e.try_get::<Option<uuid::Uuid>>("", "order_id").ok().flatten() {
+            eoids.push(o.to_string());
+        }
+        evs.push((eid,
+            e.try_get::<String>("", "type").unwrap_or_default(),
+            params,
+            e.try_get::<Option<i32>>("", "user_id").ok().flatten(),
+            e.try_get::<Option<i32>>("", "app_id").ok().flatten(),
+            e.try_get::<Option<uuid::Uuid>>("", "order_id").ok().flatten().map(|u| u.to_string())));
+    }
+    euids.sort_unstable();
+    euids.dedup();
+    let users = gc_users(db, &euids).await;
+    let mut apps: HashMap<i32, gen::App> = HashMap::new();
+    if !eappids.is_empty() {
+        eappids.sort_unstable();
+        eappids.dedup();
+        let list = (1..=eappids.len()).map(|i| format!("${i}")).collect::<Vec<_>>().join(", ");
+        for a in db.query_all(Statement::from_sql_and_values(
+            sea_orm::DatabaseBackend::Postgres,
+            format!("SELECT id, name FROM app_app WHERE id IN ({list})"),
+            eappids.iter().map(|i| (*i).into()).collect::<Vec<sea_orm::Value>>(),
+        )).await.map_err(|e| e.to_string())? {
+            if let (Ok(aid), Ok(aname)) = (a.try_get::<i32>("", "id"), a.try_get::<String>("", "name")) {
+                let mut app = crate::metadata::lit_app(crate::common::gid("App", aid), vec![], vec![]);
+                app.name = Some(aname);
+                apps.insert(aid, app);
+            }
+        }
+    }
+    let mut onums: HashMap<String, i32> = HashMap::new();
+    if !eoids.is_empty() {
+        let list = eoids.iter().enumerate().map(|(i, _)| format!("${}::uuid", i + 1)).collect::<Vec<_>>().join(", ");
+        for o in db.query_all(Statement::from_sql_and_values(
+            sea_orm::DatabaseBackend::Postgres,
+            format!("SELECT id::text AS id, number FROM order_order WHERE id IN ({list})"),
+            eoids.iter().map(|s| s.clone().into()).collect::<Vec<sea_orm::Value>>(),
+        )).await.map_err(|e| e.to_string())? {
+            if let (Ok(oid), Ok(num)) = (o.try_get::<String>("", "id"), o.try_get::<i32>("", "number")) {
+                onums.insert(oid, num);
+            }
+        }
+    }
+    let mnode = |o: &serde_json::Value, cur: &str| {
+        o.as_str().and_then(|s| s.parse::<rust_decimal::Decimal>().ok())
+            .or_else(|| o.as_f64().and_then(|f| rust_decimal::Decimal::from_f64_retain(f)))
+            .map(|d| money(d, cur.to_string()))
+    };
+    let mut events = vec![];
+    for (eid, etype, params, euid, eaid, eoid) in &evs {
+        let bal = params.get("balance");
+        let bal_cur = bal.and_then(|b| b.get("currency")).and_then(|c| c.as_str()).unwrap_or(&cur).to_string();
+        let get_bal = |k: &str| bal.and_then(|b| b.get(k)).and_then(|v| mnode(v, &bal_cur));
+        let asg = if etype == "ASSIGNED_TO_USER" || etype == "UNASSIGNED_FROM_USER" {
+            Some(gen::GiftCardEventAssignment {
+                old_assigned_to: params.get("previous_assigned_to_id").and_then(|v| v.as_i64()).map(|v| v as i32)
+                    .and_then(|u| users.get(&u)).map(|u| Box::new(u.clone())),
+                current_assigned_to: params.get("assigned_to_id").and_then(|v| v.as_i64()).map(|v| v as i32)
+                    .and_then(|u| users.get(&u)).map(|u| Box::new(u.clone())),
+                old_assigned_to_email: params.get("previous_assigned_to_email").and_then(|v| v.as_str()).map(|s| s.to_string()),
+                current_assigned_to_email: params.get("assigned_to_email").and_then(|v| v.as_str()).map(|s| s.to_string()),
+            })
+        } else { None };
+        let parse_day = |k: &str| {
+            params.get(k).and_then(|v| v.as_str())
+                .and_then(|s| chrono::NaiveDate::parse_from_str(s, "%Y-%m-%d").ok())
+                .and_then(|d| d.and_hms_opt(0, 0, 0))
+                .map(|n| chrono::DateTime::<chrono::Utc>::from_naive_utc_and_offset(n, chrono::Utc))
+        };
+        events.push(gen::GiftCardEvent {
+            id: Some(ID(crate::common::gid("GiftCardEvent", eid))),
+            date: None,
+            r#type: Some(etype.clone()),
+            user: euid.and_then(|u| users.get(&u)).map(|u| Box::new(u.clone())),
+            app: eaid.and_then(|a| apps.get(&a)).cloned(),
+            message: params.get("message").and_then(|v| v.as_str()).map(|s| s.to_string()),
+            email: params.get("email").and_then(|v| v.as_str()).map(|s| s.to_string()),
+            order_id: eoid.clone().map(|o| ID(crate::common::gid("Order", o))),
+            order_number: eoid.clone().and_then(|o| onums.get(&o)).map(|n| n.to_string()),
+            tags: params.get("tags").and_then(|v| v.as_array()).map(|a| a.iter().filter_map(|x| x.as_str().map(|s| s.to_string())).collect()).unwrap_or_default(),
+            old_tags: params.get("old_tags").and_then(|v| v.as_array()).map(|a| a.iter().filter_map(|x| x.as_str().map(|s| s.to_string())).collect()).unwrap_or_default(),
+            balance: bal.map(|_| gen::GiftCardEventBalance {
+                initial_balance: get_bal("initial_balance"),
+                current_balance: get_bal("current_balance"),
+                old_initial_balance: get_bal("old_initial_balance"),
+                old_current_balance: get_bal("old_current_balance"),
+            }),
+            assigned_to: asg,
+            expiry_date: parse_day("expiry_date"),
+            old_expiry_date: parse_day("old_expiry_date"),
+        });
+    }
+    let to_dt = |c: &str| r.try_get::<Option<chrono::DateTime<chrono::Utc>>>("", c).ok().flatten();
+    let exp: Option<chrono::DateTime<chrono::Utc>> = r.try_get::<Option<chrono::NaiveDate>>("", "expiry_date").ok().flatten()
+        .and_then(|d| d.and_hms_opt(0, 0, 0)).map(|n| chrono::DateTime::<chrono::Utc>::from_naive_utc_and_offset(n, chrono::Utc));
+    // bought-in channel: BOUGHT event -> order -> channel slug (Saleor parity)
+    let bought_oid: Option<String> = evs.iter()
+        .find(|(_, t, _, _, _, _)| t == "BOUGHT")
+        .and_then(|(_, _, _, _, _, o)| o.clone());
+    let mut bought_in_channel = None;
+    if let Some(oid) = bought_oid {
+        let corows = db.query_all(Statement::from_sql_and_values(
+            sea_orm::DatabaseBackend::Postgres,
+            "SELECT c.slug FROM order_order o JOIN channel_channel c ON c.id = o.channel_id WHERE o.id = $1::uuid",
+            [oid.into()],
+        )).await.map_err(|e| e.to_string())?;
+        bought_in_channel = corows.into_iter().next().and_then(|r| r.try_get::<String>("", "slug").ok());
+    }
+    Ok(Some(gen::GiftCard {
+        id: Some(ID(crate::common::gid("GiftCard", gid_int))),
+        private_metadata: meta("private_metadata"),
+        metadata: meta("metadata"),
+        display_code: Some(last4.clone()),
+        last4_code_chars: Some(last4),
+        code: Some(code),
+        created: to_dt("created_at"),
+        created_by: r.try_get::<Option<i32>>("", "created_by_id").ok().flatten().and_then(|u| users.get(&u)).cloned().map(Box::new),
+        created_by_email: r.try_get::<Option<String>>("", "created_by_email").ok().flatten(),
+        assigned_to: r.try_get::<Option<i32>>("", "assigned_to_id").ok().flatten().and_then(|u| users.get(&u)).cloned().map(Box::new),
+        assigned_to_email: r.try_get::<Option<String>>("", "assigned_to_email").ok().flatten(),
+        last_used_on: to_dt("last_used_on"),
+        expiry_date: exp,
+        app: r.try_get::<Option<i32>>("", "app_id").ok().flatten().and_then(|a| apps.get(&a)).cloned(),
+        product,
+        events,
+        tags,
+        bought_in_channel,
+        is_active: r.try_get::<bool>("", "is_active").ok(),
+        initial_balance: r.try_get::<rust_decimal::Decimal>("", "initial_balance_amount").ok().map(|d| money(d, cur.clone())),
+        current_balance: r.try_get::<rust_decimal::Decimal>("", "current_balance_amount").ok().map(|d| money(d, cur.clone())),
     }))
 }

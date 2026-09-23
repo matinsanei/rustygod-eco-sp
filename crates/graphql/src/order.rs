@@ -141,6 +141,7 @@ async fn to_gen_order(
                 if let Some((pid, pname, pslug, pseo_t, pseo_d)) = prow {
                     product_stub = Some(Box::new(gen::Product {
                         id: Some(ID(crate::common::gid("Product", pid))),
+                        available_for_purchase_at: None,
                         private_metadata: vec![],
                         metadata: vec![],
                         seo_title: pseo_t,

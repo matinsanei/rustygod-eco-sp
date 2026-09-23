@@ -127,6 +127,128 @@ fn resolve_where_ids<'a>(
 
 #[Object]
 impl CatalogQuery {
+    /// Saleor `attribute(id, slug, externalReference)` — details page.
+    async fn attribute(
+        &self,
+        ctx: &Context<'_>,
+        id: Option<ID>,
+        slug: Option<String>,
+        #[graphql(name = "externalReference")] external_reference: Option<String>,
+    ) -> Result<Option<gen::Attribute>> {
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QuerySelect};
+        type A = rustygod_db::entities::attribute_attribute::Entity;
+        use rustygod_db::entities::attribute_attribute::Column as ACol;
+        let aid: Option<i32> = if let Some(i) = id {
+            rustygod_db::catalog::parse_gid(&i.0)
+        } else if let Some(s) = slug {
+            A::find().select_only().column(ACol::Id).filter(ACol::Slug.eq(s))
+                .into_tuple::<i32>().one(db).await.map_err(|e| Error::new(e.to_string()))?
+        } else if let Some(x) = external_reference {
+            A::find().select_only().column(ACol::Id).filter(ACol::ExternalReference.eq(x))
+                .into_tuple::<i32>().one(db).await.map_err(|e| Error::new(e.to_string()))?
+        } else { None };
+        match aid {
+            Some(a) => assemble_attribute(db, a).await.map_err(Error::new).map(|o| o),
+            None => Ok(None),
+        }
+    }
+
+    /// Dashboard attributes list: type/search/sort server-side (the
+    /// `?s0.attributeType=PRODUCT_TYPE` tab filter maps enum→`product-type`).
+    async fn attributes(
+        &self,
+        ctx: &Context<'_>,
+        filter: Option<gen::AttributeFilterInput>,
+        before: Option<String>,
+        after: Option<String>,
+        first: Option<i32>,
+        last: Option<i32>,
+        #[graphql(name = "sortBy")] sort_by: Option<gen::AttributeSortingInput>,
+    ) -> Result<Option<gen::AttributeCountableConnection>> {
+        let _ = (before, last);
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        use sea_orm::{ConnectionTrait, Statement};
+        let mut conds: Vec<String> = vec![];
+        let mut params: Vec<sea_orm::Value> = vec![];
+        if let Some(f) = filter.as_ref() {
+            if let Some(s) = f.search.as_ref().filter(|s| !s.trim().is_empty()) {
+                params.push(format!("%{s}%").into());
+                let p = params.len();
+                conds.push(format!("(a.name ILIKE ${p} OR a.slug ILIKE ${p})"));
+            }
+            if let Some(t) = f.r#type.as_ref() {
+                // PRODUCT_TYPE -> product-type (DB stores lowercase-hyphen).
+                // Variants are ALLCAPS (PRODUCTTYPE); DB is lowercase-hyphen.
+                let v = match format!("{t:?}").as_str() {
+                    "PRODUCTTYPE" => "product-type".to_string(),
+                    "PAGETYPE" => "page-type".to_string(),
+                    "CUSTOMERTYPE" => "customer-type".to_string(),
+                    other => other.to_lowercase(),
+                };
+                params.push(v.into());
+                conds.push(format!("a.type = ${}", params.len()));
+            }
+            if let Some(v) = f.value_required { params.push(v.into()); conds.push(format!("a.value_required = ${}", params.len())); }
+            if let Some(v) = f.is_variant_only { params.push(v.into()); conds.push(format!("a.is_variant_only = ${}", params.len())); }
+            if let Some(v) = f.visible_in_storefront { params.push(v.into()); conds.push(format!("a.visible_in_storefront = ${}", params.len())); }
+            if let Some(v) = f.filterable_in_storefront { params.push(v.into()); conds.push(format!("a.filterable_in_storefront = ${}", params.len())); }
+            if let Some(v) = f.filterable_in_dashboard { params.push(v.into()); conds.push(format!("a.filterable_in_dashboard = ${}", params.len())); }
+            if let Some(v) = f.available_in_grid { params.push(v.into()); conds.push(format!("a.available_in_grid = ${}", params.len())); }
+            if let Some(ids) = f.ids.as_ref() {
+                let list: Vec<i32> = ids.iter().filter_map(|i| rustygod_db::catalog::parse_gid(&i.0)).collect();
+                if !list.is_empty() {
+                    let base = params.len();
+                    let ph = (1..=list.len()).map(|i| format!("${}", base + i)).collect::<Vec<_>>().join(", ");
+                    conds.push(format!("a.id IN ({ph})"));
+                    params.extend(list.into_iter().map(|i| i.into()));
+                }
+            }
+            if let Some(slugs) = f.slugs.as_ref().filter(|s| !s.is_empty()) {
+                let base = params.len();
+                let ph = (1..=slugs.len()).map(|i| format!("${}", base + i)).collect::<Vec<_>>().join(", ");
+                conds.push(format!("a.slug IN ({ph})"));
+                params.extend(slugs.iter().map(|s| s.clone().into()));
+            }
+        }
+        let desc = sort_by.as_ref().map(|s| s.direction == gen::OrderDirection::DESC).unwrap_or(false);
+        let col = match sort_by.as_ref().map(|s| &s.field) {
+            Some(gen::AttributeSortField::SLUG) => "a.slug",
+            _ => "a.name",
+        };
+        let order = if desc { format!("{col} DESC, a.id") } else { format!("{col} ASC, a.id") };
+        let where_sql = if conds.is_empty() { String::new() } else { format!("WHERE {}", conds.join(" AND ")) };
+        let rows = db.query_all(Statement::from_sql_and_values(
+            sea_orm::DatabaseBackend::Postgres,
+            format!("SELECT a.id, a.name, a.slug, a.type, a.visible_in_storefront, a.filterable_in_storefront, a.unit, a.input_type FROM attribute_attribute a {where_sql} ORDER BY {order}"),
+            params,
+        )).await.map_err(|e| Error::new(e.to_string()))?;
+        let total = rows.len() as i32;
+        let off = after.and_then(|c| crate::common::decode_cursor(&c)).unwrap_or(0);
+        let lim = first.unwrap_or(20).clamp(1, 100) as usize;
+        let edges = rows.into_iter().skip(off).take(lim).filter_map(|r| {
+            let id = r.try_get::<i32>("", "id").ok()?;
+            let mut a = metadata::lit_attribute(crate::common::gid("Attribute", id), vec![], vec![]);
+            a.name = r.try_get::<String>("", "name").ok();
+            a.slug = r.try_get::<String>("", "slug").ok();
+            // Saleor outputs enum NAMES (DROPDOWN, PRODUCT_TYPE); the DB
+            // stores lowercase values — the dashboard looks labels up by
+            // enum key and throws on anything else (error boundary).
+            let enum_name = |s: Option<String>| s.map(|v| v.to_uppercase().replace('-', "_"));
+            a.r#type = enum_name(r.try_get::<String>("", "type").ok());
+            a.visible_in_storefront = r.try_get::<bool>("", "visible_in_storefront").ok();
+            a.filterable_in_storefront = r.try_get::<bool>("", "filterable_in_storefront").ok();
+            a.unit = r.try_get::<Option<String>>("", "unit").ok().flatten();
+            a.input_type = enum_name(r.try_get::<String>("", "input_type").ok());
+            Some(gen::AttributeCountableEdge { node: Some(a) })
+        }).collect();
+        Ok(Some(gen::AttributeCountableConnection {
+            page_info: Some(crate::common::PageInfo { has_next_page: false, has_previous_page: off > 0, start_cursor: None, end_cursor: None }),
+            edges,
+            total_count: Some(total),
+        }))
+    }
+
     /// Dashboard category list (roots only, `level: 0`): name/sort/search
     /// server-side; children/products counts per row (subtree, Saleor parity).
     async fn categories(
@@ -863,9 +985,13 @@ async fn assemble_list_products(
                 }
             }).collect();
             let any_pub = plist.get(&pid).map(|ls| ls.iter().any(|l| l.2)).unwrap_or(false);
+            // Saleor resolves the request channel's listing; channel-agnostic
+            // assembly reports the earliest date (exact on single-channel setups).
+            let avail_at = plist.get(&pid).map(|ls| ls.iter().filter_map(|l| l.4).min()).unwrap_or(None);
             let (desc, seo_t, seo_d, rating, tax_id) = extras.get(&pid).cloned().unwrap_or((None, None, None, None, None));
             gen::Product {
             id: Some(ID(crate::common::gid("Product", &p.id))),
+            available_for_purchase_at: avail_at,
             name: Some(p.name),
             slug: Some(p.slug),
             default_variant,
@@ -1029,6 +1155,7 @@ impl CatalogMutation {
         Ok(GqlProductCreate {
             product: Some(gen::Product {
                 id: Some(ID(crate::common::gid("Product", id))),
+                available_for_purchase_at: None,
                 name: Some(name),
                 slug: Some(slug),
                 private_metadata: vec![],
@@ -1880,4 +2007,125 @@ async fn apply_variant_sub(
         }
     }
     errs
+}
+
+/// Full attribute assembly (details page): all scalars + reference types.
+/// Choices/assigned-types ride REAL_METHODS (paginated).
+async fn assemble_attribute(
+    db: &sea_orm::DatabaseConnection,
+    aid: i32,
+) -> Result<Option<gen::Attribute>, String> {
+    use sea_orm::{ConnectionTrait, Statement};
+    let rows = db.query_all(Statement::from_sql_and_values(
+        sea_orm::DatabaseBackend::Postgres,
+        "SELECT id, name, slug, type, visible_in_storefront, filterable_in_storefront, \
+                filterable_in_dashboard, available_in_grid, storefront_search_position, \
+                value_required, is_variant_only, unit, input_type, entity_type, external_reference \
+         FROM attribute_attribute WHERE id = $1",
+        [aid.into()],
+    )).await.map_err(|e| e.to_string())?;
+    let Some(r) = rows.into_iter().next() else { return Ok(None) };
+    let enum_name = |v: Option<String>| v.map(|s| s.to_uppercase().replace('-', "_"));
+    let mut a = metadata::lit_attribute(crate::common::gid("Attribute", aid), vec![], vec![]);
+    a.name = r.try_get::<String>("", "name").ok();
+    a.slug = r.try_get::<String>("", "slug").ok();
+    a.r#type = enum_name(r.try_get::<String>("", "type").ok());
+    a.visible_in_storefront = r.try_get::<bool>("", "visible_in_storefront").ok();
+    a.filterable_in_storefront = r.try_get::<bool>("", "filterable_in_storefront").ok();
+    a.unit = r.try_get::<Option<String>>("", "unit").ok().flatten();
+    a.input_type = enum_name(r.try_get::<String>("", "input_type").ok());
+    // reference types (union members, minimal id/name)
+    let mut refs = vec![];
+    for t in db.query_all(Statement::from_sql_and_values(
+        sea_orm::DatabaseBackend::Postgres,
+        "SELECT t.id, t.name FROM attribute_attribute_reference_product_types r JOIN product_producttype t ON t.id = r.producttype_id WHERE r.attribute_id = $1",
+        [aid.into()],
+    )).await.map_err(|e| e.to_string())? {
+        if let (Ok(tid), Ok(tname)) = (t.try_get::<i32>("", "id"), t.try_get::<String>("", "name")) {
+            let mut pt = metadata::lit_product_type(crate::common::gid("ProductType", tid), vec![], vec![]);
+            pt.name = Some(tname);
+            refs.push(gen::ReferenceType::ProductType(pt));
+        }
+    }
+    for t in db.query_all(Statement::from_sql_and_values(
+        sea_orm::DatabaseBackend::Postgres,
+        "SELECT t.id, t.name FROM attribute_attribute_reference_page_types r JOIN page_pagetype t ON t.id = r.pagetype_id WHERE r.attribute_id = $1",
+        [aid.into()],
+    )).await.map_err(|e| e.to_string())? {
+        if let (Ok(tid), Ok(tname)) = (t.try_get::<i32>("", "id"), t.try_get::<String>("", "name")) {
+            let mut pt = metadata::lit_page_type(crate::common::gid("PageType", tid), vec![], vec![]);
+            pt.name = Some(tname);
+            refs.push(gen::ReferenceType::PageType(pt));
+        }
+    }
+    a.value_required = r.try_get::<bool>("", "value_required").ok();
+    a.available_in_grid = r.try_get::<bool>("", "available_in_grid").ok();
+    a.storefront_search_position = r.try_get::<i32>("", "storefront_search_position").ok();
+    a.entity_type = r.try_get::<Option<String>>("", "entity_type").ok().flatten()
+        .map(|e| e.to_uppercase().replace('-', "_"));
+    a.reference_types = refs;
+    Ok(Some(a))
+}
+
+/// Attribute choices (details values tab): searchable, paginated.
+pub(crate) async fn attribute_choices(
+    db: &sea_orm::DatabaseConnection,
+    attr_gid: &str,
+    search: Option<String>,
+    first: Option<i32>,
+    after: Option<String>,
+) -> Option<gen::AttributeValueCountableConnection> {
+    use sea_orm::{ConnectionTrait, Statement};
+    let aid = rustygod_db::catalog::parse_gid(attr_gid)?;
+    let mut sql = "SELECT id, name, slug, value, input_type FROM attribute_attributevalue WHERE attribute_id = $1".to_string();
+    let mut params: Vec<sea_orm::Value> = vec![aid.into()];
+    if let Some(s) = search.as_ref().filter(|s| !s.trim().is_empty()) {
+        params.push(format!("%{s}%").into());
+        sql.push_str(" AND (name ILIKE $2 OR slug ILIKE $2)");
+    }
+    sql.push_str(" ORDER BY id");
+    let rows = db.query_all(Statement::from_sql_and_values(sea_orm::DatabaseBackend::Postgres, sql, params)).await.ok()?;
+    let off = after.and_then(|c| crate::common::decode_cursor(&c)).unwrap_or(0);
+    let lim = first.unwrap_or(20).clamp(1, 100) as usize;
+    let edges = rows.into_iter().skip(off).take(lim).filter_map(|r| {
+        let vid = r.try_get::<i32>("", "id").ok()?;
+        let mut v = metadata::lit_attribute_value(crate::common::gid("AttributeValue", vid), vec![], vec![]);
+        v.name = r.try_get::<String>("", "name").ok();
+        v.slug = r.try_get::<String>("", "slug").ok();
+        v.value = r.try_get::<String>("", "value").ok();
+        v.input_type = r.try_get::<String>("", "input_type").ok();
+        Some(gen::AttributeValueCountableEdge { node: Some(v), cursor: None })
+    }).collect();
+    Some(gen::AttributeValueCountableConnection {
+        page_info: Some(crate::common::PageInfo { has_next_page: false, has_previous_page: off > 0, start_cursor: None, end_cursor: None }),
+        edges,
+    })
+}
+
+/// Assigned types (details page): product vs variant type lists.
+pub(crate) async fn attribute_assigned_types(
+    db: &sea_orm::DatabaseConnection,
+    attr_gid: &str,
+    variant: bool,
+) -> Option<gen::ProductTypeCountableConnection> {
+    use sea_orm::{ConnectionTrait, Statement};
+    let aid = rustygod_db::catalog::parse_gid(attr_gid)?;
+    let table = if variant { "attribute_attributevariant" } else { "attribute_attributeproduct" };
+    let rows = db.query_all(Statement::from_sql_and_values(
+        sea_orm::DatabaseBackend::Postgres,
+        format!("SELECT t.id, t.name FROM {table} a JOIN product_producttype t ON t.id = a.product_type_id WHERE a.attribute_id = $1 ORDER BY t.name, t.id"),
+        [aid.into()],
+    )).await.ok()?;
+    let total = rows.len() as i32;
+    let edges = rows.into_iter().filter_map(|r| {
+        let (tid, tname) = (r.try_get::<i32>("", "id").ok()?, r.try_get::<String>("", "name").ok()?);
+        let mut t = metadata::lit_product_type(crate::common::gid("ProductType", tid), vec![], vec![]);
+        t.name = Some(tname);
+        Some(gen::ProductTypeCountableEdge { node: Some(Box::new(t)) })
+    }).collect();
+    let _ = total;
+    Some(gen::ProductTypeCountableConnection {
+        page_info: Some(crate::common::PageInfo { has_next_page: false, has_previous_page: false, start_cursor: None, end_cursor: None }),
+        edges,
+    })
 }

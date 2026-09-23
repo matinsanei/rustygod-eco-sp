@@ -136,6 +136,27 @@ export RUSTYGOD_DATABASE_URL="postgres://saleor:saleor@db:5432/saleor"
 Unset `RUSTYGOD_DATABASE_URL` and the server runs the offline in-memory demo instead.
 Django keeps working throughout — both read the same rows.
 
+## Docker / GHCR
+
+Every push to `master` builds and publishes a versioned image
+(`.github/workflows/build.yml` — release binary, cargo + layer caching):
+
+```bash
+# Run the published image against your Saleor PostgreSQL (same schema, zero migration):
+docker run --rm -p 50051:50051 -p 8000:8000 \
+  -e RUSTYGOD_DATABASE_URL="postgres://saleor:saleor@host.docker.internal:5432/saleor" \
+  -e RUSTYGOD_ADDR="0.0.0.0:50051" \
+  -e RUSTYGOD_GRAPHQL_ADDR="0.0.0.0:8000" \
+  ghcr.io/matinsanei/rustygod-eco-sp:latest
+# gRPC :50051 · GraphQL http://localhost:8000/graphql · metrics :9000
+# Modes: docker run ... ghcr.io/matinsanei/rustygod-eco-sp:latest worker|beat|check|migrate
+```
+
+Tags: `latest` (master HEAD) and `master-<sha>` per commit. Images carry the
+`org.opencontainers.image.*` labels (revision, source, created). No secrets
+are baked in — configuration is environment-only (`RUSTYGOD_*`,
+`STRIPE_SECRET_KEY`, `SALEOR_MEDIA_*`).
+
 ## Quickstart
 
 ```bash

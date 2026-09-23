@@ -217,6 +217,7 @@ impl MetadataMutation {
 pub(crate) fn lit_product(id: String, metadata: Vec<crate::common::MetadataItem>, private_metadata: Vec<crate::common::MetadataItem>) -> gen::Product {
     gen::Product {
         id: Some(ID(id)),
+        available_for_purchase_at: None,
         private_metadata,
         metadata,
         seo_title: None,

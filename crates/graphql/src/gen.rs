@@ -19455,9 +19455,17 @@ pub struct Attribute {
 impl Attribute {
 
     #[graphql(name = "choices")]
-    async fn choices(&self, #[graphql(name = "sortBy")] _arg_sort_by: Option<AttributeChoicesSortingInput>, #[graphql(name = "filter")] _arg_filter: Option<AttributeValueFilterInput>, #[graphql(name = "where")] _arg_where: Option<AttributeValueWhereInput>, #[graphql(name = "search")] _arg_search: Option<String>, #[graphql(name = "before")] _arg_before: Option<String>, #[graphql(name = "after")] _arg_after: Option<String>, #[graphql(name = "first")] _arg_first: Option<i32>, #[graphql(name = "last")] _arg_last: Option<i32>) -> Option<AttributeValueCountableConnection> {
+    async fn choices(&self, ctx: &Context<'_>, #[graphql(name = "sortBy")] _arg_sort_by: Option<AttributeChoicesSortingInput>, #[graphql(name = "filter")] _arg_filter: Option<AttributeValueFilterInput>, #[graphql(name = "where")] _arg_where: Option<AttributeValueWhereInput>, #[graphql(name = "search")] _arg_search: Option<String>, #[graphql(name = "before")] _arg_before: Option<String>, #[graphql(name = "after")] _arg_after: Option<String>, #[graphql(name = "first")] _arg_first: Option<i32>, #[graphql(name = "last")] _arg_last: Option<i32>) -> Option<AttributeValueCountableConnection> {
 
-        None
+        {
+        let db = match ctx.data_opt::<crate::context::GqlContext>().and_then(|g| g.db().ok()) {
+            Some(d) => d.clone(),
+            None => return None,
+        };
+        let gid = self.id.as_ref().map(|i| i.0.clone()).unwrap_or_default();
+        let search = _arg_search.clone();
+        crate::catalog::attribute_choices(&db, &gid, search, _arg_first.clone(), _arg_after.clone()).await
+    }
 
     }
 
@@ -19477,16 +19485,30 @@ impl Attribute {
     }
 
     #[graphql(name = "productTypes")]
-    async fn product_types(&self, #[graphql(name = "before")] _arg_before: Option<String>, #[graphql(name = "after")] _arg_after: Option<String>, #[graphql(name = "first")] _arg_first: Option<i32>, #[graphql(name = "last")] _arg_last: Option<i32>) -> Option<ProductTypeCountableConnection> {
+    async fn product_types(&self, ctx: &Context<'_>, #[graphql(name = "before")] _arg_before: Option<String>, #[graphql(name = "after")] _arg_after: Option<String>, #[graphql(name = "first")] _arg_first: Option<i32>, #[graphql(name = "last")] _arg_last: Option<i32>) -> Option<ProductTypeCountableConnection> {
 
-        None
+        {
+        let db = match ctx.data_opt::<crate::context::GqlContext>().and_then(|g| g.db().ok()) {
+            Some(d) => d.clone(),
+            None => return None,
+        };
+        let gid = self.id.as_ref().map(|i| i.0.clone()).unwrap_or_default();
+        crate::catalog::attribute_assigned_types(&db, &gid, false).await
+    }
 
     }
 
     #[graphql(name = "productVariantTypes")]
-    async fn product_variant_types(&self, #[graphql(name = "before")] _arg_before: Option<String>, #[graphql(name = "after")] _arg_after: Option<String>, #[graphql(name = "first")] _arg_first: Option<i32>, #[graphql(name = "last")] _arg_last: Option<i32>) -> Option<ProductTypeCountableConnection> {
+    async fn product_variant_types(&self, ctx: &Context<'_>, #[graphql(name = "before")] _arg_before: Option<String>, #[graphql(name = "after")] _arg_after: Option<String>, #[graphql(name = "first")] _arg_first: Option<i32>, #[graphql(name = "last")] _arg_last: Option<i32>) -> Option<ProductTypeCountableConnection> {
 
-        None
+        {
+        let db = match ctx.data_opt::<crate::context::GqlContext>().and_then(|g| g.db().ok()) {
+            Some(d) => d.clone(),
+            None => return None,
+        };
+        let gid = self.id.as_ref().map(|i| i.0.clone()).unwrap_or_default();
+        crate::catalog::attribute_assigned_types(&db, &gid, true).await
+    }
 
     }
 
@@ -24656,6 +24678,9 @@ pub struct Product {
     #[graphql(name = "collections")]
     pub collections: Vec<Collection>,
 
+    #[graphql(name = "availableForPurchaseAt")]
+    pub available_for_purchase_at: Option<DateTime<Utc>>,
+
     #[graphql(name = "isAvailableForPurchase")]
     pub is_available_for_purchase: Option<bool>,
 
@@ -29414,13 +29439,6 @@ impl GenQuery {
 
     }
 
-    #[graphql(name = "giftCard")]
-    async fn gift_card(&self, #[graphql(name = "id")] _arg_id: ID) -> Option<GiftCard> {
-
-        None
-
-    }
-
     #[graphql(name = "giftCardTags")]
     async fn gift_card_tags(&self, #[graphql(name = "filter")] _arg_filter: Option<GiftCardTagFilterInput>, #[graphql(name = "before")] _arg_before: Option<String>, #[graphql(name = "after")] _arg_after: Option<String>, #[graphql(name = "first")] _arg_first: Option<i32>, #[graphql(name = "last")] _arg_last: Option<i32>) -> Option<GiftCardTagCountableConnection> {
 
@@ -29481,20 +29499,6 @@ impl GenQuery {
     async fn checkouts(&self, #[graphql(name = "sortBy")] _arg_sort_by: Option<CheckoutSortingInput>, #[graphql(name = "filter")] _arg_filter: Option<CheckoutFilterInput>, #[graphql(name = "channel")] _arg_channel: Option<String>, #[graphql(name = "before")] _arg_before: Option<String>, #[graphql(name = "after")] _arg_after: Option<String>, #[graphql(name = "first")] _arg_first: Option<i32>, #[graphql(name = "last")] _arg_last: Option<i32>) -> Option<CheckoutCountableConnection> {
 
         Some(CheckoutCountableConnection { edges: vec![], page_info: Some(PageInfo { has_next_page: false, has_previous_page: false, start_cursor: None, end_cursor: None }) })
-
-    }
-
-    #[graphql(name = "attributes")]
-    async fn attributes(&self, #[graphql(name = "filter")] _arg_filter: Option<AttributeFilterInput>, #[graphql(name = "where")] _arg_where: Option<AttributeWhereInput>, #[graphql(name = "search")] _arg_search: Option<String>, #[graphql(name = "sortBy")] _arg_sort_by: Option<AttributeSortingInput>, #[graphql(name = "channel")] _arg_channel: Option<String>, #[graphql(name = "before")] _arg_before: Option<String>, #[graphql(name = "after")] _arg_after: Option<String>, #[graphql(name = "first")] _arg_first: Option<i32>, #[graphql(name = "last")] _arg_last: Option<i32>) -> Option<AttributeCountableConnection> {
-
-        Some(AttributeCountableConnection { total_count: None, edges: vec![], page_info: Some(PageInfo { has_next_page: false, has_previous_page: false, start_cursor: None, end_cursor: None }) })
-
-    }
-
-    #[graphql(name = "attribute")]
-    async fn attribute(&self, #[graphql(name = "id")] _arg_id: Option<ID>, #[graphql(name = "slug")] _arg_slug: Option<String>, #[graphql(name = "externalReference")] _arg_external_reference: Option<String>) -> Option<Attribute> {
-
-        None
 
     }
 
