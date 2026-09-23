@@ -245,6 +245,8 @@ pub struct OrderHeader {
     pub shipping_price_net_amount: Decimal,
     pub shipping_price_gross_amount: Decimal,
     pub shipping_method_name: Option<String>,
+    pub authorize_status: String,
+    pub charge_status: String,
 }
 
 pub async fn get_order_rows(
@@ -262,6 +264,8 @@ pub async fn get_order_rows(
         Decimal,
         Decimal,
         Option<String>,
+        String,
+        String,
     )> = order_order::Entity::find_by_id(id)
         .select_only()
         .column(order_order::Column::Id)
@@ -274,10 +278,12 @@ pub async fn get_order_rows(
         .column(order_order::Column::ShippingPriceNetAmount)
         .column(order_order::Column::ShippingPriceGrossAmount)
         .column(order_order::Column::ShippingMethodName)
+        .column(order_order::Column::AuthorizeStatus)
+        .column(order_order::Column::ChargeStatus)
         .into_tuple()
         .one(db)
         .await?;
-    let Some((oid, number, user_email, status, currency, total, created_at, ship_net, ship_gross, ship_name)) =
+    let Some((oid, number, user_email, status, currency, total, created_at, ship_net, ship_gross, ship_name, auth_status, charge_status)) =
         row
     else {
         return Ok(None);
@@ -299,6 +305,8 @@ pub async fn get_order_rows(
             shipping_price_net_amount: ship_net,
             shipping_price_gross_amount: ship_gross,
             shipping_method_name: ship_name,
+            authorize_status: auth_status,
+            charge_status,
         },
         lines,
     )))

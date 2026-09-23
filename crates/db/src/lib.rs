@@ -25,6 +25,7 @@ pub mod granted_refunds;
 pub mod groups;
 pub mod invoices;
 pub mod order_promotions;
+pub mod order_ops;
 pub mod order_store;
 pub mod payments;
 pub mod plugin_store;
@@ -67,6 +68,8 @@ pub enum DbError {
     Complete(String),
     #[error("cancel error: {0}")]
     Cancel(String),
+    #[error("order error: {0}")]
+    Order(String),
     #[error("catalog error: {0}")]
     Catalog(String),
     #[error("granted refund error: {0}")]

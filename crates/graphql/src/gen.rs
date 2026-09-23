@@ -29973,20 +29973,6 @@ impl GenMutation {
 
     }
 
-    #[graphql(name = "orderCapture")]
-    async fn order_capture(&self, #[graphql(name = "amount")] _arg_amount: GenPositiveDecimal, #[graphql(name = "id")] _arg_id: ID) -> Option<OrderCapture> {
-
-        Some(OrderCapture { order: None, errors: vec![] })
-
-    }
-
-    #[graphql(name = "orderConfirm")]
-    async fn order_confirm(&self, #[graphql(name = "id")] _arg_id: ID) -> Option<OrderConfirm> {
-
-        Some(OrderConfirm { order: None, errors: vec![] })
-
-    }
-
     #[graphql(name = "orderFulfillmentCancel")]
     async fn order_fulfillment_cancel(&self, #[graphql(name = "id")] _arg_id: ID, #[graphql(name = "input")] _arg_input: Option<FulfillmentCancelInput>) -> Option<FulfillmentCancel> {
 
@@ -30033,111 +30019,6 @@ impl GenMutation {
     async fn order_grant_refund_update(&self, #[graphql(name = "id")] _arg_id: ID, #[graphql(name = "input")] _arg_input: OrderGrantRefundUpdateInput) -> Option<OrderGrantRefundUpdate> {
 
         Some(OrderGrantRefundUpdate { order: None, errors: vec![] })
-
-    }
-
-    #[graphql(name = "orderLinesCreate")]
-    async fn order_lines_create(&self, #[graphql(name = "id")] _arg_id: ID, #[graphql(name = "input")] _arg_input: Vec<OrderLineCreateInput>) -> Option<OrderLinesCreate> {
-
-        Some(OrderLinesCreate { order: None, errors: vec![] })
-
-    }
-
-    #[graphql(name = "orderLineDelete")]
-    async fn order_line_delete(&self, #[graphql(name = "id")] _arg_id: ID) -> Option<OrderLineDelete> {
-
-        Some(OrderLineDelete { order: None, errors: vec![] })
-
-    }
-
-    #[graphql(name = "orderLineUpdate")]
-    async fn order_line_update(&self, #[graphql(name = "id")] _arg_id: ID, #[graphql(name = "input")] _arg_input: OrderLineInput) -> Option<OrderLineUpdate> {
-
-        Some(OrderLineUpdate { order: None, errors: vec![], order_line: None })
-
-    }
-
-    #[graphql(name = "orderDiscountAdd")]
-    async fn order_discount_add(&self, #[graphql(name = "input")] _arg_input: OrderDiscountCommonInput, #[graphql(name = "orderId")] _arg_order_id: ID) -> Option<OrderDiscountAdd> {
-
-        Some(OrderDiscountAdd { order: None, errors: vec![] })
-
-    }
-
-    #[graphql(name = "orderDiscountUpdate")]
-    async fn order_discount_update(&self, #[graphql(name = "discountId")] _arg_discount_id: ID, #[graphql(name = "input")] _arg_input: OrderDiscountCommonInput) -> Option<OrderDiscountUpdate> {
-
-        Some(OrderDiscountUpdate { order: None, errors: vec![] })
-
-    }
-
-    #[graphql(name = "orderDiscountDelete")]
-    async fn order_discount_delete(&self, #[graphql(name = "discountId")] _arg_discount_id: ID) -> Option<OrderDiscountDelete> {
-
-        Some(OrderDiscountDelete { order: None, errors: vec![] })
-
-    }
-
-    #[graphql(name = "orderLineDiscountUpdate")]
-    async fn order_line_discount_update(&self, #[graphql(name = "input")] _arg_input: OrderDiscountCommonInput, #[graphql(name = "orderLineId")] _arg_order_line_id: ID) -> Option<OrderLineDiscountUpdate> {
-
-        Some(OrderLineDiscountUpdate { order: None, errors: vec![] })
-
-    }
-
-    #[graphql(name = "orderLineDiscountRemove")]
-    async fn order_line_discount_remove(&self, #[graphql(name = "orderLineId")] _arg_order_line_id: ID) -> Option<OrderLineDiscountRemove> {
-
-        Some(OrderLineDiscountRemove { order: None, errors: vec![] })
-
-    }
-
-    #[graphql(name = "orderNoteAdd")]
-    async fn order_note_add(&self, #[graphql(name = "order")] _arg_order: ID, #[graphql(name = "input")] _arg_input: OrderNoteInput) -> Option<OrderNoteAdd> {
-
-        Some(OrderNoteAdd { order: None, errors: vec![] })
-
-    }
-
-    #[graphql(name = "orderNoteUpdate")]
-    async fn order_note_update(&self, #[graphql(name = "note")] _arg_note: ID, #[graphql(name = "input")] _arg_input: OrderNoteInput) -> Option<OrderNoteUpdate> {
-
-        Some(OrderNoteUpdate { order: None, errors: vec![] })
-
-    }
-
-    #[graphql(name = "orderMarkAsPaid")]
-    async fn order_mark_as_paid(&self, #[graphql(name = "id")] _arg_id: ID, #[graphql(name = "transactionReference")] _arg_transaction_reference: Option<String>) -> Option<OrderMarkAsPaid> {
-
-        Some(OrderMarkAsPaid { order: None, errors: vec![] })
-
-    }
-
-    #[graphql(name = "orderRefund")]
-    async fn order_refund(&self, #[graphql(name = "amount")] _arg_amount: GenPositiveDecimal, #[graphql(name = "id")] _arg_id: ID) -> Option<OrderRefund> {
-
-        Some(OrderRefund { order: None, errors: vec![] })
-
-    }
-
-    #[graphql(name = "orderUpdate")]
-    async fn order_update(&self, #[graphql(name = "externalReference")] _arg_external_reference: Option<String>, #[graphql(name = "id")] _arg_id: Option<ID>, #[graphql(name = "input")] _arg_input: OrderUpdateInput) -> Option<OrderUpdate> {
-
-        Some(OrderUpdate { errors: vec![], order: None })
-
-    }
-
-    #[graphql(name = "orderUpdateShipping")]
-    async fn order_update_shipping(&self, #[graphql(name = "order")] _arg_order: ID, #[graphql(name = "input")] _arg_input: OrderUpdateShippingInput) -> Option<OrderUpdateShipping> {
-
-        Some(OrderUpdateShipping { order: None, errors: vec![] })
-
-    }
-
-    #[graphql(name = "orderVoid")]
-    async fn order_void(&self, #[graphql(name = "id")] _arg_id: ID) -> Option<OrderVoid> {
-
-        Some(OrderVoid { order: None, errors: vec![] })
 
     }
 

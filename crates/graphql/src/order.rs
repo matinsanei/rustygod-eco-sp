@@ -258,8 +258,8 @@ pub(crate) async fn to_gen_order(
         number: Some(h.number.to_string()),
         is_paid: None,
         payment_status: Some("NOT_CHARGED".into()),
-        authorize_status: None,
-        charge_status: Some(h.status.clone()),
+        authorize_status: Some(h.authorize_status.to_uppercase()),
+        charge_status: Some(h.charge_status.to_uppercase()),
         transactions: vec![],
         payments: vec![],
         total: Some(to_taxed(h.total_gross_amount, h.currency.clone())),
@@ -564,13 +564,6 @@ pub struct GqlOrderCancel {
 }
 
 #[derive(SimpleObject, Clone)]
-pub struct GqlOrderAddNote {
-    pub order: Option<gen::Order>,
-    pub event: Option<gen::OrderEvent>,
-    pub errors: Vec<gen::OrderError>,
-}
-
-#[derive(SimpleObject, Clone)]
 pub struct GqlOrderBulkCancel {
     pub count: i32,
     pub errors: Vec<gen::OrderError>,
@@ -586,11 +579,6 @@ pub struct GqlDraftLinesBulkDelete {
 pub struct GqlOrderCreateFromCheckout {
     pub order: Option<gen::Order>,
     pub errors: Vec<gen::OrderError>,
-}
-
-#[derive(InputObject)]
-pub struct OrderAddNoteInput {
-    pub message: String,
 }
 
 fn oerr(message: String) -> gen::OrderError {
@@ -666,20 +654,23 @@ impl OrderMutation {
         Ok(format!("fulfillment:{} grant:{}", out.fulfillment_id, out.granted_refund_id))
     }
 
-    /// Staff order note (Django `orderAddNote` → `NOTE_ADDED` event row).
-    async fn order_add_note(&self, ctx: &Context<'_>, order: ID, input: OrderAddNoteInput) -> Result<GqlOrderAddNote> {
+    /// Staff order note (Django `orderNoteAdd` → `note_added` event row).
+    /// NOTE: schema name is `orderNoteAdd` (not `orderAddNote`); the explicit
+    /// rename keeps codegen from emitting a shadowing stub.
+    #[graphql(name = "orderNoteAdd")]
+    async fn order_note_add(&self, ctx: &Context<'_>, order: ID, input: gen::OrderNoteInput) -> Result<gen::OrderNoteAdd> {
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
         authorize(ctx, crate::context::MANAGE_ORDERS).await?;
         let (uid, _) = crate::account::requester(ctx, db).await?;
         let oid = parse_id(&order.0);
         if input.message.trim().is_empty() {
-            return Ok(GqlOrderAddNote { order: None, event: None, errors: vec![oerr("message is required".into())] });
+            return Ok(gen::OrderNoteAdd { order: None, errors: vec![gen::OrderNoteAddError { field: None, message: Some("message is required".into()), code: None }] });
         }
         if let Err(e) = saleor_rustify_db::order_store::add_order_note(db, oid, Some(uid), input.message.trim()).await {
-            return Ok(GqlOrderAddNote { order: None, event: None, errors: vec![oerr(e.to_string())] });
+            return Ok(gen::OrderNoteAdd { order: None, errors: vec![gen::OrderNoteAddError { field: None, message: Some(e.to_string()), code: None }] });
         }
         let (h, ls) = saleor_rustify_db::order_store::get_order_rows(db, oid).await.map_err(|e| Error::new(e.to_string()))?.ok_or_else(|| Error::new("order vanished"))?;
-        Ok(GqlOrderAddNote { order: Some(to_gen_order(db, &h, ls).await), event: None, errors: vec![] })
+        Ok(gen::OrderNoteAdd { order: Some(to_gen_order(db, &h, ls).await), errors: vec![] })
     }
 
     /// Bulk cancel (per-order guards; survivors always commit).
@@ -750,10 +741,261 @@ impl OrderMutation {
         let (h, ls) = saleor_rustify_db::order_store::get_order_rows(db, out.order_id).await.map_err(|e| Error::new(e.to_string()))?.ok_or_else(|| Error::new("order vanished"))?;
         Ok(GqlOrderCreateFromCheckout { order: Some(to_gen_order(db, &h, ls).await), errors: vec![] })
     }
+
+    async fn order_confirm(&self, ctx: &Context<'_>, id: ID) -> Result<gen::OrderConfirm> {
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        authorize(ctx, crate::context::MANAGE_ORDERS).await?;
+        let (uid, _) = crate::account::requester(ctx, db).await.unwrap_or((0, String::new()));
+        let oid = parse_id(&id.0);
+        if let Err(e) = saleor_rustify_db::order_ops::confirm_order(db, oid, Some(uid)).await {
+            return Ok(gen::OrderConfirm { order: None, errors: vec![oerr(e.to_string())] });
+        }
+        Ok(gen::OrderConfirm { order: order_view(db, oid).await?, errors: vec![] })
+    }
+
+    async fn order_capture(&self, ctx: &Context<'_>, id: ID, amount: gen::GenPositiveDecimal) -> Result<gen::OrderCapture> {
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        authorize(ctx, crate::context::MANAGE_ORDERS).await?;
+        let (uid, _) = crate::account::requester(ctx, db).await.unwrap_or((0, String::new()));
+        let oid = parse_id(&id.0);
+        let amt = amount.0.parse::<rust_decimal::Decimal>().unwrap_or(rust_decimal::Decimal::ZERO);
+        if let Err(e) = saleor_rustify_db::order_ops::capture_order(db, oid, amt, Some(uid)).await {
+            return Ok(gen::OrderCapture { order: None, errors: vec![oerr(e.to_string())] });
+        }
+        Ok(gen::OrderCapture { order: order_view(db, oid).await?, errors: vec![] })
+    }
+
+    async fn order_refund(&self, ctx: &Context<'_>, id: ID, amount: gen::GenPositiveDecimal) -> Result<gen::OrderRefund> {
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        authorize(ctx, crate::context::MANAGE_ORDERS).await?;
+        let (uid, _) = crate::account::requester(ctx, db).await.unwrap_or((0, String::new()));
+        let oid = parse_id(&id.0);
+        let amt = amount.0.parse::<rust_decimal::Decimal>().unwrap_or(rust_decimal::Decimal::ZERO);
+        if let Err(e) = saleor_rustify_db::order_ops::refund_order(db, oid, amt, Some(uid)).await {
+            return Ok(gen::OrderRefund { order: None, errors: vec![oerr(e.to_string())] });
+        }
+        Ok(gen::OrderRefund { order: order_view(db, oid).await?, errors: vec![] })
+    }
+
+    async fn order_void(&self, ctx: &Context<'_>, id: ID) -> Result<gen::OrderVoid> {
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        authorize(ctx, crate::context::MANAGE_ORDERS).await?;
+        let (uid, _) = crate::account::requester(ctx, db).await.unwrap_or((0, String::new()));
+        let oid = parse_id(&id.0);
+        if let Err(e) = saleor_rustify_db::order_ops::void_order(db, oid, Some(uid)).await {
+            return Ok(gen::OrderVoid { order: None, errors: vec![oerr(e.to_string())] });
+        }
+        Ok(gen::OrderVoid { order: order_view(db, oid).await?, errors: vec![] })
+    }
+
+    async fn order_mark_as_paid(&self, ctx: &Context<'_>, id: ID, #[graphql(name = "transactionReference")] transaction_reference: Option<String>) -> Result<gen::OrderMarkAsPaid> {
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        authorize(ctx, crate::context::MANAGE_ORDERS).await?;
+        let (uid, _) = crate::account::requester(ctx, db).await.unwrap_or((0, String::new()));
+        let oid = parse_id(&id.0);
+        if let Err(e) = saleor_rustify_db::order_ops::mark_order_as_paid(db, oid, transaction_reference, Some(uid)).await {
+            return Ok(gen::OrderMarkAsPaid { order: None, errors: vec![oerr(e.to_string())] });
+        }
+        Ok(gen::OrderMarkAsPaid { order: order_view(db, oid).await?, errors: vec![] })
+    }
+
+    async fn order_update(&self, ctx: &Context<'_>, #[graphql(name = "externalReference")] external_reference: Option<String>, id: ID, input: gen::OrderUpdateInput) -> Result<gen::OrderUpdate> {
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        authorize(ctx, crate::context::MANAGE_ORDERS).await?;
+        let (uid, _) = crate::account::requester(ctx, db).await.unwrap_or((0, String::new()));
+        let oid = parse_id(&id.0);
+        let out = saleor_rustify_db::order_ops::update_order(
+            db, oid,
+            input.user_email,
+            external_reference,
+            input.language_code.as_ref().map(|c| format!("{c:?}")),
+            input.billing_address.as_ref().map(addr_input),
+            input.shipping_address.as_ref().map(addr_input),
+            Some(uid),
+        )
+        .await;
+        // 3.23 OrderUpdateInput carries no customerNote (notes go through
+        // orderNoteAdd); metadata stays on the metadata mutations.
+        if let Err(e) = out {
+            return Ok(gen::OrderUpdate { errors: vec![oerr(e.to_string())], order: None });
+        }
+        Ok(gen::OrderUpdate { errors: vec![], order: order_view(db, oid).await? })
+    }
+
+    async fn order_update_shipping(&self, ctx: &Context<'_>, order: ID, input: gen::OrderUpdateShippingInput) -> Result<gen::OrderUpdateShipping> {
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        authorize(ctx, crate::context::MANAGE_ORDERS).await?;
+        let (uid, _) = crate::account::requester(ctx, db).await.unwrap_or((0, String::new()));
+        let oid = parse_id(&order.0);
+        let mid = input.shipping_method.as_ref().and_then(|m| saleor_rustify_db::catalog::parse_gid(&m.0));
+        if let Err(e) = saleor_rustify_db::order_ops::update_order_shipping(db, oid, mid, Some(uid)).await {
+            return Ok(gen::OrderUpdateShipping { order: None, errors: vec![oerr(e.to_string())] });
+        }
+        Ok(gen::OrderUpdateShipping { order: order_view(db, oid).await?, errors: vec![] })
+    }
+
+    async fn order_note_update(&self, ctx: &Context<'_>, note: ID, input: gen::OrderNoteInput) -> Result<gen::OrderNoteUpdate> {
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        authorize(ctx, crate::context::MANAGE_ORDERS).await?;
+        let eid = saleor_rustify_db::catalog::parse_gid(&note.0).unwrap_or(-1);
+        match saleor_rustify_db::order_ops::update_note(db, eid, &input.message).await {
+            Ok(oid) => Ok(gen::OrderNoteUpdate { order: order_view(db, oid).await?, errors: vec![] }),
+            Err(e) => Ok(gen::OrderNoteUpdate {
+                order: None,
+                errors: vec![gen::OrderNoteUpdateError { field: None, message: Some(e.to_string()), code: None }],
+            }),
+        }
+    }
+
+    async fn order_line_update(&self, ctx: &Context<'_>, id: ID, input: gen::OrderLineInput) -> Result<gen::OrderLineUpdate> {
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        authorize(ctx, crate::context::MANAGE_ORDERS).await?;
+        let (uid, _) = crate::account::requester(ctx, db).await.unwrap_or((0, String::new()));
+        let lid = parse_id(&id.0);
+        match line_order(db, lid).await {
+            Ok(oid) => {
+                if let Err(e) = saleor_rustify_db::order_ops::update_line_quantity(db, oid, lid, input.quantity, Some(uid)).await {
+                    return Ok(gen::OrderLineUpdate { order: None, errors: vec![oerr(e.to_string())], order_line: None });
+                }
+                Ok(gen::OrderLineUpdate { order: order_view(db, oid).await?, errors: vec![], order_line: None })
+            }
+            Err(e) => Ok(gen::OrderLineUpdate { order: None, errors: vec![oerr(e)], order_line: None }),
+        }
+    }
+
+    async fn order_lines_create(&self, ctx: &Context<'_>, id: ID, input: Vec<gen::OrderLineCreateInput>) -> Result<gen::OrderLinesCreate> {
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        authorize(ctx, crate::context::MANAGE_ORDERS).await?;
+        let (uid, _) = crate::account::requester(ctx, db).await.unwrap_or((0, String::new()));
+        let oid = parse_id(&id.0);
+        let mut lines = Vec::with_capacity(input.len());
+        for l in input {
+            let vid = saleor_rustify_db::catalog::parse_gid(&l.variant_id.0).unwrap_or(-1);
+            if vid < 0 {
+                return Ok(gen::OrderLinesCreate { order: None, errors: vec![oerr("bad variant id".into())] });
+            }
+            lines.push(saleor_rustify_db::order_ops::NewOrderLine { variant_id: vid, quantity: l.quantity });
+        }
+        if let Err(e) = saleor_rustify_db::order_ops::create_lines(db, oid, lines, Some(uid)).await {
+            return Ok(gen::OrderLinesCreate { order: None, errors: vec![oerr(e.to_string())] });
+        }
+        Ok(gen::OrderLinesCreate { order: order_view(db, oid).await?, errors: vec![] })
+    }
+
+    async fn order_line_delete(&self, ctx: &Context<'_>, id: ID) -> Result<gen::OrderLineDelete> {
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        authorize(ctx, crate::context::MANAGE_ORDERS).await?;
+        let (uid, _) = crate::account::requester(ctx, db).await.unwrap_or((0, String::new()));
+        let lid = parse_id(&id.0);
+        match line_order(db, lid).await {
+            Ok(oid) => {
+                if let Err(e) = saleor_rustify_db::order_ops::delete_line(db, oid, lid, Some(uid)).await {
+                    return Ok(gen::OrderLineDelete { order: None, errors: vec![oerr(e.to_string())] });
+                }
+                Ok(gen::OrderLineDelete { order: order_view(db, oid).await?, errors: vec![] })
+            }
+            Err(e) => Ok(gen::OrderLineDelete { order: None, errors: vec![oerr(e)] }),
+        }
+    }
+
+    async fn order_discount_add(&self, ctx: &Context<'_>, input: gen::OrderDiscountCommonInput, #[graphql(name = "orderId")] order_id: ID) -> Result<gen::OrderDiscountAdd> {
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        authorize(ctx, crate::context::MANAGE_ORDERS).await?;
+        let (uid, _) = crate::account::requester(ctx, db).await.unwrap_or((0, String::new()));
+        let oid = parse_id(&order_id.0);
+        let vt = if matches!(input.value_type, gen::DiscountValueTypeEnum::PERCENTAGE) { "percentage" } else { "fixed" };
+        let vv = input.value.0.parse::<rust_decimal::Decimal>().unwrap_or(rust_decimal::Decimal::ZERO);
+        if let Err(e) = saleor_rustify_db::order_ops::discount_add(db, oid, input.reason, vt, vv, Some(uid)).await {
+            return Ok(gen::OrderDiscountAdd { order: None, errors: vec![oerr(e.to_string())] });
+        }
+        Ok(gen::OrderDiscountAdd { order: order_view(db, oid).await?, errors: vec![] })
+    }
+
+    async fn order_discount_update(&self, ctx: &Context<'_>, #[graphql(name = "discountId")] discount_id: ID, input: gen::OrderDiscountCommonInput) -> Result<gen::OrderDiscountUpdate> {
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        authorize(ctx, crate::context::MANAGE_ORDERS).await?;
+        let (uid, _) = crate::account::requester(ctx, db).await.unwrap_or((0, String::new()));
+        let did = parse_id(&discount_id.0);
+        let vt = if matches!(input.value_type, gen::DiscountValueTypeEnum::PERCENTAGE) { "percentage" } else { "fixed" };
+        let vv = input.value.0.parse::<rust_decimal::Decimal>().unwrap_or(rust_decimal::Decimal::ZERO);
+        match saleor_rustify_db::order_ops::discount_update(db, did, input.reason, Some(vt.into()), Some(vv), Some(uid)).await {
+            Ok(oid) => Ok(gen::OrderDiscountUpdate { order: order_view(db, oid).await?, errors: vec![] }),
+            Err(e) => Ok(gen::OrderDiscountUpdate { order: None, errors: vec![oerr(e.to_string())] }),
+        }
+    }
+
+    async fn order_discount_delete(&self, ctx: &Context<'_>, #[graphql(name = "discountId")] discount_id: ID) -> Result<gen::OrderDiscountDelete> {
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        authorize(ctx, crate::context::MANAGE_ORDERS).await?;
+        let (uid, _) = crate::account::requester(ctx, db).await.unwrap_or((0, String::new()));
+        let did = parse_id(&discount_id.0);
+        match saleor_rustify_db::order_ops::discount_delete(db, did, Some(uid)).await {
+            Ok(oid) => Ok(gen::OrderDiscountDelete { order: order_view(db, oid).await?, errors: vec![] }),
+            Err(e) => Ok(gen::OrderDiscountDelete { order: None, errors: vec![oerr(e.to_string())] }),
+        }
+    }
+
+    async fn order_line_discount_update(&self, ctx: &Context<'_>, input: gen::OrderDiscountCommonInput, #[graphql(name = "orderLineId")] order_line_id: ID) -> Result<gen::OrderLineDiscountUpdate> {
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        authorize(ctx, crate::context::MANAGE_ORDERS).await?;
+        let (uid, _) = crate::account::requester(ctx, db).await.unwrap_or((0, String::new()));
+        let lid = parse_id(&order_line_id.0);
+        let vt = if matches!(input.value_type, gen::DiscountValueTypeEnum::PERCENTAGE) { "percentage" } else { "fixed" };
+        let vv = input.value.0.parse::<rust_decimal::Decimal>().unwrap_or(rust_decimal::Decimal::ZERO);
+        match saleor_rustify_db::order_ops::line_discount_update(db, lid, vt, vv, input.reason, Some(uid)).await {
+            Ok(oid) => Ok(gen::OrderLineDiscountUpdate { order: order_view(db, oid).await?, errors: vec![] }),
+            Err(e) => Ok(gen::OrderLineDiscountUpdate { order: None, errors: vec![oerr(e.to_string())] }),
+        }
+    }
+
+    async fn order_line_discount_remove(&self, ctx: &Context<'_>, #[graphql(name = "orderLineId")] order_line_id: ID) -> Result<gen::OrderLineDiscountRemove> {
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        authorize(ctx, crate::context::MANAGE_ORDERS).await?;
+        let (uid, _) = crate::account::requester(ctx, db).await.unwrap_or((0, String::new()));
+        let lid = parse_id(&order_line_id.0);
+        match saleor_rustify_db::order_ops::line_discount_remove(db, lid, Some(uid)).await {
+            Ok(oid) => Ok(gen::OrderLineDiscountRemove { order: order_view(db, oid).await?, errors: vec![] }),
+            Err(e) => Ok(gen::OrderLineDiscountRemove { order: None, errors: vec![oerr(e.to_string())] }),
+        }
+    }
 }
 
-async fn authorize(ctx: &Context<'_>, perm: &str) -> Result<()> {
-    // Was bearer-presence-only (perm ignored); now a real codename gate
+async fn order_view(db: &sea_orm::DatabaseConnection, oid: Uuid) -> Result<Option<gen::Order>> {
+    match saleor_rustify_db::order_store::get_order_rows(db, oid).await {
+        Ok(Some((h, ls))) => Ok(Some(to_gen_order(db, &h, ls).await)),
+        Ok(None) => Ok(None),
+        Err(e) => Err(Error::new(e.to_string())),
+    }
+}
+
+async fn line_order(db: &sea_orm::DatabaseConnection, lid: Uuid) -> std::result::Result<Uuid, String> {
+    use sea_orm::{EntityTrait, QuerySelect};
+    saleor_rustify_db::entities::order_orderline::Entity::find_by_id(lid)
+        .select_only()
+        .column(saleor_rustify_db::entities::order_orderline::Column::OrderId)
+        .into_tuple::<Uuid>()
+        .one(db)
+        .await
+        .map_err(|e| e.to_string())?
+        .ok_or_else(|| "order line not found".to_string())
+}
+
+fn addr_input(a: &gen::AddressInput) -> saleor_rustify_db::order_ops::OrderAddressInput {
+    saleor_rustify_db::order_ops::OrderAddressInput {
+        first_name: a.first_name.clone().unwrap_or_default(),
+        last_name: a.last_name.clone().unwrap_or_default(),
+        street1: a.street_address1.clone().unwrap_or_default(),
+        street2: a.street_address2.clone().unwrap_or_default(),
+        city: a.city.clone().unwrap_or_default(),
+        postal_code: a.postal_code.clone().unwrap_or_default(),
+        country: a.country.as_ref().map(|c| format!("{c:?}")).unwrap_or_default(),
+        country_area: a.country_area.clone().unwrap_or_default(),
+        phone: a.phone.clone().unwrap_or_default(),
+        company_name: a.company_name.clone().unwrap_or_default(),
+    }
+}
+
+async fn authorize(ctx: &Context<'_>, perm: &str) -> Result<()> {    // Was bearer-presence-only (perm ignored); now a real codename gate
     // (superusers bypass, so dashboard flows are unaffected).
     let _ = crate::account::require_perm(ctx, perm).await?;
     Ok(())
