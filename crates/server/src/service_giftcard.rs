@@ -100,6 +100,7 @@ impl GiftCardService for GiftCardServiceImpl {
                 created_by_email: (!r.created_by_email.is_empty()).then_some(r.created_by_email),
                 expiry_date: expiry,
                 is_active: true,
+                custom_code: None,
             },
             None,
         )

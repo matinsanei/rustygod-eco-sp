@@ -44,6 +44,9 @@ pub struct IssueInput {
     pub created_by_email: Option<String>,
     pub expiry_date: Option<NaiveDate>,
     pub is_active: bool,
+    /// Caller-supplied code (Django `code` on create; validated unique).
+    /// None mints via the generator loop.
+    pub custom_code: Option<String>,
 }
 
 fn today() -> NaiveDate {
@@ -93,6 +96,41 @@ pub async fn issue(
         return Err(DbError::GiftCardNotApplicable("balance cannot be negative".into()));
     }
     let txn = db.begin().await?;
+    if let Some(custom) = input.custom_code.map(|s| s.trim().to_string()).filter(|s| !s.is_empty()) {
+        if custom.len() > 16 {
+            return Err(DbError::GiftCardNotApplicable("code must be 16 characters or fewer".into()));
+        }
+        let exists = giftcard_giftcard::Entity::find()
+            .filter(giftcard_giftcard::Column::Code.eq(&custom))
+            .one(&txn)
+            .await?;
+        if exists.is_some() {
+            return Err(DbError::GiftCardConflict("promo code already exists".into()));
+        }
+        let card = giftcard_giftcard::ActiveModel {
+            code: Set(custom),
+            created_at: Set(Utc::now().into()),
+            last_used_on: Set(None),
+            is_active: Set(input.is_active),
+            initial_balance_amount: Set(input.initial_balance),
+            current_balance_amount: Set(input.initial_balance),
+            currency: Set(input.currency.clone()),
+            created_by_email: Set(input.created_by_email.clone()),
+            expiry_date: Set(input.expiry_date),
+            metadata: Set(json!({})),
+            private_metadata: Set(json!({})),
+            ..Default::default()
+        }
+        .insert(&txn)
+        .await?;
+        let mut params = balance_params(&card);
+        if let Some(exp) = input.expiry_date {
+            params["expiry_date"] = json!(exp.to_string());
+        }
+        write_event(&txn, card.id, events::ISSUED, params, user_id, None).await?;
+        txn.commit().await?;
+        return Ok(card);
+    }
     for _ in 0..10 {
         let code = domain::generate_code();
         let exists = giftcard_giftcard::Entity::find()
@@ -399,6 +437,296 @@ pub async fn assign(
     am.assigned_to_email = Set(Some(email.to_string()));
     let updated = am.update(&txn).await?;
     write_event(&txn, card.id, events::ASSIGNED_TO_USER, balance_params(&updated), actor_id, None).await?;
+    txn.commit().await?;
+    Ok(updated)
+}
+
+/// Tag helpers (Django `GiftCard.tags` m2m).
+pub async fn add_tags(db: &impl ConnectionTrait, card_id: i32, tags: &[String]) -> Result<()> {
+    use crate::entities::{giftcard_giftcard_tags, giftcard_giftcardtag};
+    for name in tags {
+        let name = name.trim();
+        if name.is_empty() {
+            continue;
+        }
+        let tag = match giftcard_giftcardtag::Entity::find()
+            .filter(giftcard_giftcardtag::Column::Name.eq(name))
+            .one(db)
+            .await?
+        {
+            Some(t) => t,
+            None => giftcard_giftcardtag::ActiveModel {
+                name: Set(name.to_string()),
+                ..Default::default()
+            }
+            .insert(db)
+            .await?,
+        };
+        let exists = giftcard_giftcard_tags::Entity::find()
+            .filter(giftcard_giftcard_tags::Column::GiftcardId.eq(card_id))
+            .filter(giftcard_giftcard_tags::Column::GiftcardtagId.eq(tag.id))
+            .one(db)
+            .await?
+            .is_some();
+        if !exists {
+            giftcard_giftcard_tags::ActiveModel {
+                giftcard_id: Set(card_id),
+                giftcardtag_id: Set(tag.id),
+                ..Default::default()
+            }
+            .insert(db)
+            .await?;
+        }
+    }
+    Ok(())
+}
+
+pub async fn remove_tags(db: &impl ConnectionTrait, card_id: i32, tags: &[String]) -> Result<()> {
+    use crate::entities::{giftcard_giftcard_tags, giftcard_giftcardtag};
+    for name in tags {
+        if let Some(tag) = giftcard_giftcardtag::Entity::find()
+            .filter(giftcard_giftcardtag::Column::Name.eq(name.trim()))
+            .one(db)
+            .await?
+        {
+            giftcard_giftcard_tags::Entity::delete_many()
+                .filter(giftcard_giftcard_tags::Column::GiftcardId.eq(card_id))
+                .filter(giftcard_giftcard_tags::Column::GiftcardtagId.eq(tag.id))
+                .exec(db)
+                .await?;
+        }
+    }
+    Ok(())
+}
+
+#[derive(Default)]
+pub struct UpdateCard {
+    pub add_tags: Vec<String>,
+    pub remove_tags: Vec<String>,
+    pub expiry_date: Option<Option<chrono::NaiveDate>>,
+    pub balance_amount: Option<Decimal>,
+    pub is_active: Option<bool>,
+}
+
+/// Staff gift-card update (Django `giftCardUpdate`): tags, expiry, balance
+/// (resets both initial and current, like Django), active flag.
+pub async fn update_card(
+    db: &DatabaseConnection,
+    card_id: i32,
+    upd: &UpdateCard,
+    actor_id: Option<i32>,
+) -> Result<giftcard_giftcard::Model> {
+    use sea_orm::TransactionTrait;
+    if let Some(b) = upd.balance_amount {
+        if b < Decimal::ZERO {
+            return Err(DbError::GiftCardNotApplicable("balance cannot be negative".into()));
+        }
+    }
+    let txn = db.begin().await?;
+    let card = giftcard_giftcard::Entity::find_by_id(card_id)
+        .one(&txn)
+        .await?
+        .ok_or_else(|| DbError::GiftCardNotFound(card_id.to_string()))?;
+    add_tags(&txn, card_id, &upd.add_tags).await?;
+    remove_tags(&txn, card_id, &upd.remove_tags).await?;
+    let mut am: giftcard_giftcard::ActiveModel = card.into();
+    if let Some(e) = upd.expiry_date {
+        am.expiry_date = Set(e);
+    }
+    if let Some(b) = upd.balance_amount {
+        am.initial_balance_amount = Set(b);
+        am.current_balance_amount = Set(b);
+    }
+    if let Some(a) = upd.is_active {
+        am.is_active = Set(a);
+    }
+    let updated = am.update(&txn).await?;
+    write_event(&txn, card_id, events::BALANCE_ADJUSTED, balance_params(&updated), actor_id, None).await?;
+    txn.commit().await?;
+    Ok(updated)
+}
+
+/// Delete a card (Django `giftCardDelete`): unused balances only — spent
+/// cards are history and refuse.
+pub async fn delete_card(db: &DatabaseConnection, card_id: i32) -> Result<()> {
+    use sea_orm::TransactionTrait;
+    let txn = db.begin().await?;
+    let card = giftcard_giftcard::Entity::find_by_id(card_id)
+        .one(&txn)
+        .await?
+        .ok_or_else(|| DbError::GiftCardNotFound(card_id.to_string()))?;
+    if card.last_used_on.is_some() || card.current_balance_amount < card.initial_balance_amount {
+        return Err(DbError::GiftCardNotApplicable(
+            "only unused gift cards can be deleted".into(),
+        ));
+    }
+    use crate::entities::{giftcard_giftcard_tags, giftcard_giftcardevent};
+    giftcard_giftcard_tags::Entity::delete_many()
+        .filter(giftcard_giftcard_tags::Column::GiftcardId.eq(card_id))
+        .exec(&txn)
+        .await?;
+    // Django cascades events at the ORM level (no DB cascade here).
+    giftcard_giftcardevent::Entity::delete_many()
+        .filter(giftcard_giftcardevent::Column::GiftCardId.eq(card_id))
+        .exec(&txn)
+        .await?;
+    let am: giftcard_giftcard::ActiveModel = card.into();
+    am.delete(&txn).await?;
+    txn.commit().await?;
+    Ok(())
+}
+
+/// Staff note on a card (Django `giftCardAddNote` → event row).
+/// Returns the card plus the new event id for the payload.
+pub async fn add_note(
+    db: &DatabaseConnection,
+    card_id: i32,
+    message: &str,
+    actor_id: Option<i32>,
+) -> Result<(giftcard_giftcard::Model, i32)> {
+    let message = message.trim();
+    if message.is_empty() {
+        return Err(DbError::GiftCardNotApplicable("message is required".into()));
+    }
+    use sea_orm::TransactionTrait;
+    let txn = db.begin().await?;
+    let card = giftcard_giftcard::Entity::find_by_id(card_id)
+        .one(&txn)
+        .await?
+        .ok_or_else(|| DbError::GiftCardNotFound(card_id.to_string()))?;
+    let ev = giftcard_giftcardevent::ActiveModel {
+        date: Set(Utc::now().into()),
+        r#type: Set("note_added".to_string()),
+        parameters: Set(json!({"message": message})),
+        app_id: Set(None),
+        gift_card_id: Set(card_id),
+        user_id: Set(actor_id),
+        order_id: Set(None),
+        ..Default::default()
+    }
+    .insert(&txn)
+    .await?;
+    txn.commit().await?;
+    Ok((card, ev.id))
+}
+
+/// Resend the card code email (Django `giftCardResend`): records the resend
+/// event + optional new delivery email. The actual send rides the SMTP
+/// milestone (same documented gap as all mails); the dashboard flow
+/// (event + no error) works today.
+pub async fn resend(
+    db: &DatabaseConnection,
+    card_id: i32,
+    email: Option<String>,
+    actor_id: Option<i32>,
+) -> Result<giftcard_giftcard::Model> {
+    use sea_orm::TransactionTrait;
+    let txn = db.begin().await?;
+    let card = giftcard_giftcard::Entity::find_by_id(card_id)
+        .one(&txn)
+        .await?
+        .ok_or_else(|| DbError::GiftCardNotFound(card_id.to_string()))?;
+    if !card.is_active {
+        return Err(DbError::GiftCardNotApplicable("inactive cards cannot be resent".into()));
+    }
+    if let Some(e) = email.map(|s| s.trim().to_string()).filter(|s| !s.is_empty()) {
+        let mut am: giftcard_giftcard::ActiveModel = card.clone().into();
+        am.assigned_to_email = Set(Some(e.clone()));
+        am.update(&txn).await?;
+        write_event(&txn, card_id, events::ASSIGNED_TO_USER, json!({"email": e}), actor_id, None).await?;
+    } else {
+        write_event(&txn, card_id, "resent", json!({}), actor_id, None).await?;
+    }
+    txn.commit().await?;
+    Ok(giftcard_giftcard::Entity::find_by_id(card_id)
+        .one(db)
+        .await?
+        .ok_or_else(|| DbError::GiftCardNotFound(card_id.to_string()))?)
+}
+
+/// Expiry settings on the site row (Django `giftCardSettingsUpdate`).
+pub async fn update_settings(
+    db: &DatabaseConnection,
+    expiry_type: Option<String>,
+    expiry_days: Option<i32>,
+) -> Result<()> {
+    use crate::entities::site_sitesettings;
+    let row = site_sitesettings::Entity::find_by_id(1)
+        .one(db)
+        .await?
+        .ok_or_else(|| DbError::GiftCardNotFound("site settings".into()))?;
+    let mut am: site_sitesettings::ActiveModel = row.into();
+    if let Some(t) = expiry_type {
+        if t != "never_expire" && t != "expiry_period" {
+            return Err(DbError::GiftCardNotApplicable("unknown expiry type".into()));
+        }
+        am.gift_card_expiry_type = Set(t);
+    }
+    if let Some(d) = expiry_days {
+        if d < 1 {
+            return Err(DbError::GiftCardNotApplicable("expiry period must be positive".into()));
+        }
+        am.gift_card_expiry_period = Set(Some(d));
+        am.gift_card_expiry_period_type = Set(Some("days".to_string()));
+    }
+    am.update(db).await?;
+    Ok(())
+}
+
+/// Bulk issue `count` cards with one balance (Django `giftCardBulkCreate`).
+pub async fn bulk_issue(
+    db: &DatabaseConnection,
+    count: i32,
+    balance: Decimal,
+    currency: &str,
+    tags: &[String],
+    expiry: Option<chrono::NaiveDate>,
+    is_active: bool,
+    actor_id: Option<i32>,
+) -> Result<Vec<giftcard_giftcard::Model>> {
+    if count < 1 || count > 100 {
+        return Err(DbError::GiftCardNotApplicable("count must be 1-100".into()));
+    }
+    let mut out = Vec::with_capacity(count as usize);
+    for _ in 0..count {
+        let card = issue(
+            db,
+            IssueInput {
+                initial_balance: balance,
+                currency: currency.to_string(),
+                created_by_email: None,
+                expiry_date: expiry,
+                is_active,
+                custom_code: None,
+            },
+            actor_id,
+        )
+        .await?;
+        if !tags.is_empty() {
+            add_tags(db, card.id, tags).await?;
+        }
+        out.push(card);
+    }
+    Ok(out)
+}
+
+/// Clear a card's assignment (Django `giftCardUnassignUser`).
+pub async fn unassign(
+    db: &DatabaseConnection,
+    code: &str,
+    actor_id: Option<i32>,
+) -> Result<giftcard_giftcard::Model> {
+    use sea_orm::TransactionTrait;
+    let txn = db.begin().await?;
+    let card = lock_card(&txn, code).await?;
+    if card.assigned_to_id.is_none() && card.assigned_to_email.is_none() {
+        return Err(DbError::GiftCardNotApplicable("gift card is not assigned".into()));
+    }
+    let mut am: giftcard_giftcard::ActiveModel = card.into();
+    am.assigned_to_id = Set(None);
+    am.assigned_to_email = Set(None);
+    let updated = am.update(&txn).await?;
+    write_event(&txn, updated.id, "unassigned", json!({}), actor_id, None).await?;
     txn.commit().await?;
     Ok(updated)
 }

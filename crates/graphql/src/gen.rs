@@ -29602,13 +29602,6 @@ impl GenMutation {
 
     }
 
-    #[graphql(name = "giftCardSettingsUpdate")]
-    async fn gift_card_settings_update(&self, #[graphql(name = "input")] _arg_input: GiftCardSettingsUpdateInput) -> Option<GiftCardSettingsUpdate> {
-
-        Some(GiftCardSettingsUpdate { gift_card_settings: None, errors: vec![] })
-
-    }
-
     #[graphql(name = "refundSettingsUpdate")]
     async fn refund_settings_update(&self, #[graphql(name = "input")] _arg_input: RefundSettingsUpdateInput) -> Option<RefundSettingsUpdate> {
 
@@ -29984,97 +29977,6 @@ impl GenMutation {
     async fn invoice_send_notification(&self, #[graphql(name = "id")] _arg_id: ID) -> Option<InvoiceSendNotification> {
 
         Some(InvoiceSendNotification { errors: vec![], invoice: None })
-
-    }
-
-    #[graphql(name = "giftCardActivate")]
-    async fn gift_card_activate(&self, #[graphql(name = "id")] _arg_id: ID) -> Option<GiftCardActivate> {
-
-        Some(GiftCardActivate { gift_card: None, errors: vec![] })
-
-    }
-
-    #[graphql(name = "giftCardAssignUser")]
-    async fn gift_card_assign_user(&self, #[graphql(name = "id")] _arg_id: ID, #[graphql(name = "userId")] _arg_user_id: ID) -> Option<GiftCardAssignUser> {
-
-        Some(GiftCardAssignUser { gift_card: None, errors: vec![] })
-
-    }
-
-    #[graphql(name = "giftCardUnassignUser")]
-    async fn gift_card_unassign_user(&self, #[graphql(name = "id")] _arg_id: ID) -> Option<GiftCardUnassignUser> {
-
-        Some(GiftCardUnassignUser { gift_card: None, errors: vec![] })
-
-    }
-
-    #[graphql(name = "giftCardCreate")]
-    async fn gift_card_create(&self, #[graphql(name = "input")] _arg_input: GiftCardCreateInput) -> Option<GiftCardCreate> {
-
-        Some(GiftCardCreate { errors: vec![], gift_card: None })
-
-    }
-
-    #[graphql(name = "giftCardDelete")]
-    async fn gift_card_delete(&self, #[graphql(name = "id")] _arg_id: ID) -> Option<GiftCardDelete> {
-
-        Some(GiftCardDelete { errors: vec![] })
-
-    }
-
-    #[graphql(name = "giftCardDeactivate")]
-    async fn gift_card_deactivate(&self, #[graphql(name = "id")] _arg_id: ID) -> Option<GiftCardDeactivate> {
-
-        Some(GiftCardDeactivate { gift_card: None, errors: vec![] })
-
-    }
-
-    #[graphql(name = "giftCardUpdate")]
-    async fn gift_card_update(&self, #[graphql(name = "id")] _arg_id: ID, #[graphql(name = "input")] _arg_input: GiftCardUpdateInput) -> Option<GiftCardUpdate> {
-
-        Some(GiftCardUpdate { errors: vec![], gift_card: None })
-
-    }
-
-    #[graphql(name = "giftCardResend")]
-    async fn gift_card_resend(&self, #[graphql(name = "input")] _arg_input: GiftCardResendInput) -> Option<GiftCardResend> {
-
-        Some(GiftCardResend { gift_card: None, errors: vec![] })
-
-    }
-
-    #[graphql(name = "giftCardAddNote")]
-    async fn gift_card_add_note(&self, #[graphql(name = "id")] _arg_id: ID, #[graphql(name = "input")] _arg_input: GiftCardAddNoteInput) -> Option<GiftCardAddNote> {
-
-        Some(GiftCardAddNote { gift_card: None, event: None, errors: vec![] })
-
-    }
-
-    #[graphql(name = "giftCardBulkCreate")]
-    async fn gift_card_bulk_create(&self, #[graphql(name = "input")] _arg_input: GiftCardBulkCreateInput) -> Option<GiftCardBulkCreate> {
-
-        Some(GiftCardBulkCreate { gift_cards: vec![], errors: vec![] })
-
-    }
-
-    #[graphql(name = "giftCardBulkDelete")]
-    async fn gift_card_bulk_delete(&self, #[graphql(name = "ids")] _arg_ids: Vec<ID>) -> Option<GiftCardBulkDelete> {
-
-        Some(GiftCardBulkDelete { errors: vec![] })
-
-    }
-
-    #[graphql(name = "giftCardBulkActivate")]
-    async fn gift_card_bulk_activate(&self, #[graphql(name = "ids")] _arg_ids: Vec<ID>) -> Option<GiftCardBulkActivate> {
-
-        Some(GiftCardBulkActivate { count: None, errors: vec![] })
-
-    }
-
-    #[graphql(name = "giftCardBulkDeactivate")]
-    async fn gift_card_bulk_deactivate(&self, #[graphql(name = "ids")] _arg_ids: Vec<ID>) -> Option<GiftCardBulkDeactivate> {
-
-        Some(GiftCardBulkDeactivate { count: None, errors: vec![] })
 
     }
 

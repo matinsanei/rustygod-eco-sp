@@ -231,6 +231,21 @@ fn gcerr(field: Option<String>, message: String) -> gen::GiftCardError {
     gen::GiftCardError { field, message: Some(message), code: None }
 }
 
+/// Gift-card id gid → code lookup (mutations address cards by id; the
+/// ledger addresses them by code).
+async fn gift_card_code(db: &sea_orm::DatabaseConnection, gid: &str) -> std::result::Result<String, String> {
+    let cid = saleor_rustify_db::catalog::parse_gid(gid).ok_or_else(|| "bad gift card id".to_string())?;
+    use sea_orm::{EntityTrait, QuerySelect};
+    saleor_rustify_db::entities::giftcard_giftcard::Entity::find_by_id(cid)
+        .select_only()
+        .column(saleor_rustify_db::entities::giftcard_giftcard::Column::Code)
+        .into_tuple::<String>()
+        .one(db)
+        .await
+        .map_err(|e| e.to_string())?
+        .ok_or_else(|| "gift card not found".to_string())
+}
+
 fn merr(field: Option<String>, message: String) -> gen::MenuError {
     gen::MenuError { field, message: Some(message), code: None }
 }
@@ -1526,6 +1541,395 @@ impl CommerceMutation {
                 errors: vec![],
             }),
             Err(e) => Ok(err(e.to_string())),
+        }
+    }
+
+    /// Full gift-card create (Django `giftCardCreate`): balance, custom
+    /// code (validated unique), tags, note, assignment, metadata.
+    async fn gift_card_create(&self, ctx: &Context<'_>, input: gen::GiftCardCreateInput) -> Result<gen::GiftCardCreate> {
+        let staff = crate::account::require_perm(ctx, "manage_gift_card").await?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let err = |m: String| gen::GiftCardCreate { errors: vec![gcerr(None, m)], gift_card: None };
+        let amount = input.balance.amount.0.parse::<rust_decimal::Decimal>().unwrap_or(rust_decimal::Decimal::ZERO);
+        if amount <= rust_decimal::Decimal::ZERO {
+            return Ok(err("balance must be positive".into()));
+        }
+        if let Some(em) = input.user_email.as_ref() {
+            if em.trim().is_empty() || !em.contains('@') {
+                return Ok(err("provided email is invalid".into()));
+            }
+            if input.channel.as_ref().map(|s| s.trim().is_empty()).unwrap_or(true) {
+                return Ok(err("channel slug must be specified when user_email is provided".into()));
+            }
+        }
+        let expiry = input.expiry_date.as_ref().map(|d| d.date_naive());
+        let card = match saleor_rustify_db::giftcards::issue(db, saleor_rustify_db::giftcards::IssueInput {
+            initial_balance: amount,
+            currency: input.balance.currency.clone(),
+            created_by_email: input.user_email.clone(),
+            expiry_date: expiry,
+            is_active: input.is_active,
+            custom_code: input.code.clone(),
+        }, Some(staff)).await {
+            Ok(c) => c,
+            Err(e) => return Ok(err(e.to_string())),
+        };
+        if !input.add_tags.clone().unwrap_or_default().is_empty() {
+            if let Err(e) = saleor_rustify_db::giftcards::add_tags(db, card.id, &input.add_tags.clone().unwrap_or_default()).await {
+                return Ok(err(e.to_string()));
+            }
+        }
+        if let Some(n) = input.note.as_ref().filter(|s| !s.trim().is_empty()) {
+            if let Err(e) = saleor_rustify_db::giftcards::add_note(db, card.id, n, Some(staff)).await {
+                return Ok(err(e.to_string()));
+            }
+        }
+        if let Some(a) = input.assigned_to.as_ref() {
+            let uid = saleor_rustify_db::catalog::parse_gid(&a.0).unwrap_or(-1);
+            let em: Option<String> = {
+                use sea_orm::{EntityTrait, QuerySelect};
+                saleor_rustify_db::entities::account_user::Entity::find_by_id(uid)
+                    .select_only()
+                    .column(saleor_rustify_db::entities::account_user::Column::Email)
+                    .into_tuple()
+                    .one(db).await.map_err(|e| Error::new(e.to_string()))?
+                    .unwrap_or(None)
+            };
+            if let Some(em) = em {
+                if let Err(e) = saleor_rustify_db::giftcards::assign(db, &card.code, uid, &em, Some(staff)).await {
+                    return Ok(err(e.to_string()));
+                }
+            }
+        } else if let Some(em) = input.user_email.as_ref() {
+            // Django links loose emails to a matching user when possible.
+            let uid: Option<i32> = {
+                use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QuerySelect};
+                saleor_rustify_db::entities::account_user::Entity::find()
+                    .select_only()
+                    .column(saleor_rustify_db::entities::account_user::Column::Id)
+                    .filter(saleor_rustify_db::entities::account_user::Column::Email.eq(em.trim()))
+                    .into_tuple()
+                    .one(db).await.map_err(|e| Error::new(e.to_string()))?
+                    .unwrap_or(None)
+            };
+            if let Some(uid) = uid {
+                let _ = saleor_rustify_db::giftcards::assign(db, &card.code, uid, em, Some(staff)).await;
+            }
+        }
+        // Metadata (dashboard sends it on create).
+        if input.metadata.is_some() || input.private_metadata.is_some() {
+            use sea_orm::{ActiveModelTrait, EntityTrait, Set};
+            if let Some(row) = saleor_rustify_db::entities::giftcard_giftcard::Entity::find_by_id(card.id).one(db).await.map_err(|e| Error::new(e.to_string()))? {
+                let mut am: saleor_rustify_db::entities::giftcard_giftcard::ActiveModel = row.into();
+                if let Some(m) = input.metadata.as_ref() {
+                    let cur = serde_json::to_value(&am.metadata.clone().unwrap()).unwrap_or(serde_json::Value::Null);
+                    am.metadata = Set(crate::common::merge_metadata(&cur, m));
+                }
+                if let Some(m) = input.private_metadata.as_ref() {
+                    let cur = serde_json::to_value(&am.private_metadata.clone().unwrap()).unwrap_or(serde_json::Value::Null);
+                    am.private_metadata = Set(crate::common::merge_metadata(&cur, m));
+                }
+                am.update(db).await.map_err(|e| Error::new(e.to_string()))?;
+            }
+        }
+        Ok(gen::GiftCardCreate {
+            errors: vec![],
+            gift_card: assemble_gift_card(db, card.id).await.map_err(Error::new)?,
+        })
+    }
+
+    /// Gift-card update (Django `giftCardUpdate`): tags, expiry, balance,
+    /// metadata. Activation rides activate/deactivate.
+    async fn gift_card_update(&self, ctx: &Context<'_>, id: ID, input: gen::GiftCardUpdateInput) -> Result<gen::GiftCardUpdate> {
+        let staff = crate::account::require_perm(ctx, "manage_gift_card").await?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let err = |m: String| gen::GiftCardUpdate { errors: vec![gcerr(None, m)], gift_card: None };
+        let Some(cid) = saleor_rustify_db::catalog::parse_gid(&id.0) else {
+            return Ok(err("bad gift card id".into()));
+        };
+        let balance = match input.balance_amount.as_ref() {
+            Some(b) => match b.0.parse::<rust_decimal::Decimal>() {
+                Ok(v) if v > rust_decimal::Decimal::ZERO => Some(v),
+                _ => return Ok(err("balance must be positive".into())),
+            },
+            None => None,
+        };
+        let expiry = input.expiry_date.as_ref().map(|d| Some(d.date_naive()));
+        match saleor_rustify_db::giftcards::update_card(db, cid, &saleor_rustify_db::giftcards::UpdateCard {
+            add_tags: input.add_tags.clone().unwrap_or_default(),
+            remove_tags: input.remove_tags.clone().unwrap_or_default(),
+            expiry_date: expiry,
+            balance_amount: balance,
+            is_active: None,
+        }, Some(staff)).await {
+            Ok(_) => {},
+            Err(e) => return Ok(err(e.to_string())),
+        }
+        if input.metadata.is_some() || input.private_metadata.is_some() {
+            use sea_orm::{ActiveModelTrait, EntityTrait, Set};
+            if let Some(row) = saleor_rustify_db::entities::giftcard_giftcard::Entity::find_by_id(cid).one(db).await.map_err(|e| Error::new(e.to_string()))? {
+                let mut am: saleor_rustify_db::entities::giftcard_giftcard::ActiveModel = row.into();
+                if let Some(m) = input.metadata.as_ref() {
+                    let cur = serde_json::to_value(&am.metadata.clone().unwrap()).unwrap_or(serde_json::Value::Null);
+                    am.metadata = Set(crate::common::merge_metadata(&cur, m));
+                }
+                if let Some(m) = input.private_metadata.as_ref() {
+                    let cur = serde_json::to_value(&am.private_metadata.clone().unwrap()).unwrap_or(serde_json::Value::Null);
+                    am.private_metadata = Set(crate::common::merge_metadata(&cur, m));
+                }
+                am.update(db).await.map_err(|e| Error::new(e.to_string()))?;
+            }
+        }
+        Ok(gen::GiftCardUpdate {
+            errors: vec![],
+            gift_card: assemble_gift_card(db, cid).await.map_err(Error::new)?,
+        })
+    }
+
+    /// Delete an unused card (spent cards are history and refuse).
+    async fn gift_card_delete(&self, ctx: &Context<'_>, id: ID) -> Result<gen::GiftCardDelete> {
+        let _ = crate::account::require_perm(ctx, "manage_gift_card").await?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let Some(cid) = saleor_rustify_db::catalog::parse_gid(&id.0) else {
+            return Ok(gen::GiftCardDelete { errors: vec![gcerr(Some("id".into()), "bad gift card id".into())] });
+        };
+        match saleor_rustify_db::giftcards::delete_card(db, cid).await {
+            Ok(()) => Ok(gen::GiftCardDelete { errors: vec![] }),
+            Err(e) => Ok(gen::GiftCardDelete { errors: vec![gcerr(None, e.to_string())] }),
+        }
+    }
+
+    /// Activate a card.
+    async fn gift_card_activate(&self, ctx: &Context<'_>, id: ID) -> Result<gen::GiftCardActivate> {
+        let staff = crate::account::require_perm(ctx, "manage_gift_card").await?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let err = |m: String| gen::GiftCardActivate { gift_card: None, errors: vec![gcerr(None, m)] };
+        match gift_card_code(db, &id.0).await {
+            Ok(code) => match saleor_rustify_db::giftcards::set_active(db, &code, true, Some(staff)).await {
+                Ok(c) => Ok(gen::GiftCardActivate { gift_card: assemble_gift_card(db, c.id).await.map_err(Error::new)?, errors: vec![] }),
+                Err(e) => Ok(err(e.to_string())),
+            },
+            Err(e) => Ok(err(e)),
+        }
+    }
+
+    /// Deactivate a card.
+    async fn gift_card_deactivate(&self, ctx: &Context<'_>, id: ID) -> Result<gen::GiftCardDeactivate> {
+        let staff = crate::account::require_perm(ctx, "manage_gift_card").await?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let err = |m: String| gen::GiftCardDeactivate { gift_card: None, errors: vec![gcerr(None, m)] };
+        match gift_card_code(db, &id.0).await {
+            Ok(code) => match saleor_rustify_db::giftcards::set_active(db, &code, false, Some(staff)).await {
+                Ok(c) => Ok(gen::GiftCardDeactivate { gift_card: assemble_gift_card(db, c.id).await.map_err(Error::new)?, errors: vec![] }),
+                Err(e) => Ok(err(e.to_string())),
+            },
+            Err(e) => Ok(err(e)),
+        }
+    }
+
+    /// Staff note on a card (returns the card + the note event).
+    async fn gift_card_add_note(&self, ctx: &Context<'_>, id: ID, input: gen::GiftCardAddNoteInput) -> Result<gen::GiftCardAddNote> {
+        let staff = crate::account::require_perm(ctx, "manage_gift_card").await?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let err = |m: String| gen::GiftCardAddNote { gift_card: None, event: None, errors: vec![gcerr(None, m)] };
+        let Some(cid) = saleor_rustify_db::catalog::parse_gid(&id.0) else {
+            return Ok(err("bad gift card id".into()));
+        };
+        match saleor_rustify_db::giftcards::add_note(db, cid, &input.message, Some(staff)).await {
+            Ok((_, eid)) => Ok(gen::GiftCardAddNote {
+                gift_card: assemble_gift_card(db, cid).await.map_err(Error::new)?,
+                event: Some(gen::GiftCardEvent {
+                    id: Some(ID(crate::common::gid("GiftCardEvent", eid))),
+                    date: Some(chrono::Utc::now()),
+                    r#type: Some("NOTE_ADDED".into()),
+                    user: None,
+                    app: None,
+                    message: Some(input.message.clone()),
+                    email: None,
+                    order_id: None,
+                    order_number: None,
+                    tags: vec![],
+                    old_tags: vec![],
+                    balance: None,
+                    assigned_to: None,
+                    expiry_date: None,
+                    old_expiry_date: None,
+                }),
+                errors: vec![],
+            }),
+            Err(e) => Ok(err(e.to_string())),
+        }
+    }
+
+    /// Resend the card code (event recorded; send rides the SMTP milestone).
+    async fn gift_card_resend(&self, ctx: &Context<'_>, input: gen::GiftCardResendInput) -> Result<gen::GiftCardResend> {
+        let staff = crate::account::require_perm(ctx, "manage_gift_card").await?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let err = |m: String| gen::GiftCardResend { gift_card: None, errors: vec![gcerr(None, m)] };
+        let Some(cid) = saleor_rustify_db::catalog::parse_gid(&input.id.0) else {
+            return Ok(err("bad gift card id".into()));
+        };
+        match saleor_rustify_db::giftcards::resend(db, cid, input.email.clone(), Some(staff)).await {
+            Ok(c) => Ok(gen::GiftCardResend { gift_card: assemble_gift_card(db, c.id).await.map_err(Error::new)?, errors: vec![] }),
+            Err(e) => Ok(err(e.to_string())),
+        }
+    }
+
+    /// Expiry settings on the site row.
+    async fn gift_card_settings_update(&self, ctx: &Context<'_>, input: gen::GiftCardSettingsUpdateInput) -> Result<gen::GiftCardSettingsUpdate> {
+        let _ = crate::account::require_perm(ctx, "manage_settings").await?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let err = |m: String| gen::GiftCardSettingsUpdate {
+            gift_card_settings: None,
+            errors: vec![gen::GiftCardSettingsError { field: None, message: Some(m), code: None }],
+        };
+        let et = match input.expiry_type.as_ref() {
+            Some(gen::GiftCardSettingsExpiryTypeEnum::NEVEREXPIRE) => Some("never_expire".to_string()),
+            Some(gen::GiftCardSettingsExpiryTypeEnum::EXPIRYPERIOD) => Some("expiry_period".to_string()),
+            None => None,
+        };
+        let days = match input.expiry_period.as_ref() {
+            Some(p) => {
+                let mult = match p.r#type {
+                    gen::TimePeriodTypeEnum::DAY => 1,
+                    gen::TimePeriodTypeEnum::WEEK => 7,
+                    gen::TimePeriodTypeEnum::MONTH => 30,
+                    gen::TimePeriodTypeEnum::YEAR => 365,
+                };
+                Some(p.amount * mult)
+            }
+            None => None,
+        };
+        if let Err(e) = saleor_rustify_db::giftcards::update_settings(db, et, days).await {
+            return Ok(err(e.to_string()));
+        }
+        Ok(gen::GiftCardSettingsUpdate {
+            gift_card_settings: Some(gen::GiftCardSettings {
+                expiry_type: Some("EXPIRY_PERIOD".into()),
+                expiry_period: None,
+            }),
+            errors: vec![],
+        })
+    }
+
+    /// Bulk issue cards (Django `giftCardBulkCreate`, max 100).
+    async fn gift_card_bulk_create(&self, ctx: &Context<'_>, input: gen::GiftCardBulkCreateInput) -> Result<gen::GiftCardBulkCreate> {
+        let staff = crate::account::require_perm(ctx, "manage_gift_card").await?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let amount = input.balance.amount.0.parse::<rust_decimal::Decimal>().unwrap_or(rust_decimal::Decimal::ZERO);
+        if amount <= rust_decimal::Decimal::ZERO {
+            return Ok(gen::GiftCardBulkCreate { gift_cards: vec![], errors: vec![gcerr(None, "balance must be positive".into())] });
+        }
+        let expiry = input.expiry_date.as_ref().map(|d| d.date_naive());
+        match saleor_rustify_db::giftcards::bulk_issue(
+            db, input.count, amount, &input.balance.currency,
+            &input.tags.clone().unwrap_or_default(), expiry, input.is_active, Some(staff),
+        ).await {
+            Ok(cards) => {
+                let mut out = Vec::with_capacity(cards.len());
+                for c in cards {
+                    match assemble_gift_card(db, c.id).await {
+                        Ok(Some(gc)) => out.push(gc),
+                        Ok(None) => {},
+                        Err(e) => return Ok(gen::GiftCardBulkCreate { gift_cards: vec![], errors: vec![gcerr(None, e)] }),
+                    }
+                }
+                Ok(gen::GiftCardBulkCreate { gift_cards: out, errors: vec![] })
+            }
+            Err(e) => Ok(gen::GiftCardBulkCreate { gift_cards: vec![], errors: vec![gcerr(None, e.to_string())] }),
+        }
+    }
+
+    /// Bulk delete (attempt all; failures collected as messages).
+    async fn gift_card_bulk_delete(&self, ctx: &Context<'_>, ids: Vec<ID>) -> Result<gen::GiftCardBulkDelete> {
+        let _ = crate::account::require_perm(ctx, "manage_gift_card").await?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let mut errors = vec![];
+        for i in &ids {
+            match saleor_rustify_db::catalog::parse_gid(&i.0) {
+                Some(cid) => {
+                    if let Err(e) = saleor_rustify_db::giftcards::delete_card(db, cid).await {
+                        errors.push(gcerr(Some(i.0.clone()), e.to_string()));
+                    }
+                }
+                None => errors.push(gcerr(Some(i.0.clone()), "bad gift card id".into())),
+            }
+        }
+        Ok(gen::GiftCardBulkDelete { errors })
+    }
+
+    /// Bulk activate.
+    async fn gift_card_bulk_activate(&self, ctx: &Context<'_>, ids: Vec<ID>) -> Result<gen::GiftCardBulkActivate> {
+        let staff = crate::account::require_perm(ctx, "manage_gift_card").await?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let mut n = 0;
+        let mut errors = vec![];
+        for i in &ids {
+            match gift_card_code(db, &i.0).await {
+                Ok(code) => match saleor_rustify_db::giftcards::set_active(db, &code, true, Some(staff)).await {
+                    Ok(_) => n += 1,
+                    Err(e) => errors.push(gcerr(Some(i.0.clone()), e.to_string())),
+                },
+                Err(e) => errors.push(gcerr(Some(i.0.clone()), e)),
+            }
+        }
+        Ok(gen::GiftCardBulkActivate { count: Some(n), errors })
+    }
+
+    /// Bulk deactivate.
+    async fn gift_card_bulk_deactivate(&self, ctx: &Context<'_>, ids: Vec<ID>) -> Result<gen::GiftCardBulkDeactivate> {
+        let staff = crate::account::require_perm(ctx, "manage_gift_card").await?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let mut n = 0;
+        let mut errors = vec![];
+        for i in &ids {
+            match gift_card_code(db, &i.0).await {
+                Ok(code) => match saleor_rustify_db::giftcards::set_active(db, &code, false, Some(staff)).await {
+                    Ok(_) => n += 1,
+                    Err(e) => errors.push(gcerr(Some(i.0.clone()), e.to_string())),
+                },
+                Err(e) => errors.push(gcerr(Some(i.0.clone()), e)),
+            }
+        }
+        Ok(gen::GiftCardBulkDeactivate { count: Some(n), errors })
+    }
+
+    /// Assign a card to a user.
+    async fn gift_card_assign_user(&self, ctx: &Context<'_>, id: ID, #[graphql(name = "userId")] user_id: ID) -> Result<gen::GiftCardAssignUser> {
+        let staff = crate::account::require_perm(ctx, "manage_gift_card").await?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let err = |m: String| gen::GiftCardAssignUser { gift_card: None, errors: vec![gcerr(None, m)] };
+        let uid = saleor_rustify_db::catalog::parse_gid(&user_id.0).unwrap_or(-1);
+        let em: Option<String> = {
+            use sea_orm::{EntityTrait, QuerySelect};
+            saleor_rustify_db::entities::account_user::Entity::find_by_id(uid)
+                .select_only()
+                .column(saleor_rustify_db::entities::account_user::Column::Email)
+                .into_tuple()
+                .one(db).await.map_err(|e| Error::new(e.to_string()))?
+                .unwrap_or(None)
+        };
+        let Some(em) = em else { return Ok(err("user not found".into())) };
+        match gift_card_code(db, &id.0).await {
+            Ok(code) => match saleor_rustify_db::giftcards::assign(db, &code, uid, &em, Some(staff)).await {
+                Ok(c) => Ok(gen::GiftCardAssignUser { gift_card: assemble_gift_card(db, c.id).await.map_err(Error::new)?, errors: vec![] }),
+                Err(e) => Ok(err(e.to_string())),
+            },
+            Err(e) => Ok(err(e)),
+        }
+    }
+
+    /// Unassign a card.
+    async fn gift_card_unassign_user(&self, ctx: &Context<'_>, id: ID) -> Result<gen::GiftCardUnassignUser> {
+        let staff = crate::account::require_perm(ctx, "manage_gift_card").await?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let err = |m: String| gen::GiftCardUnassignUser { gift_card: None, errors: vec![gcerr(None, m)] };
+        match gift_card_code(db, &id.0).await {
+            Ok(code) => match saleor_rustify_db::giftcards::unassign(db, &code, Some(staff)).await {
+                Ok(c) => Ok(gen::GiftCardUnassignUser { gift_card: assemble_gift_card(db, c.id).await.map_err(Error::new)?, errors: vec![] }),
+                Err(e) => Ok(err(e.to_string())),
+            },
+            Err(e) => Ok(err(e)),
         }
     }
 
