@@ -247,6 +247,10 @@ pub struct OrderHeader {
     pub shipping_method_name: Option<String>,
     pub authorize_status: String,
     pub charge_status: String,
+    pub billing_address_id: Option<i32>,
+    pub shipping_address_id: Option<i32>,
+    pub channel_id: i32,
+    pub customer_note: String,
 }
 
 pub async fn get_order_rows(
@@ -265,7 +269,6 @@ pub async fn get_order_rows(
         Decimal,
         Option<String>,
         String,
-        String,
     )> = order_order::Entity::find_by_id(id)
         .select_only()
         .column(order_order::Column::Id)
@@ -278,16 +281,29 @@ pub async fn get_order_rows(
         .column(order_order::Column::ShippingPriceNetAmount)
         .column(order_order::Column::ShippingPriceGrossAmount)
         .column(order_order::Column::ShippingMethodName)
-        .column(order_order::Column::AuthorizeStatus)
-        .column(order_order::Column::ChargeStatus)
+        .column(order_order::Column::CustomerNote)
         .into_tuple()
         .one(db)
         .await?;
-    let Some((oid, number, user_email, status, currency, total, created_at, ship_net, ship_gross, ship_name, auth_status, charge_status)) =
+    let Some((oid, number, user_email, status, currency, total, created_at, ship_net, ship_gross, ship_name, note)) =
         row
     else {
         return Ok(None);
     };
+    // Second slim select: SeaORM tuples cap at 12 columns.
+    let extra: Option<(String, String, Option<i32>, Option<i32>, i32)> =
+        order_order::Entity::find_by_id(id)
+            .select_only()
+            .column(order_order::Column::AuthorizeStatus)
+            .column(order_order::Column::ChargeStatus)
+            .column(order_order::Column::BillingAddressId)
+            .column(order_order::Column::ShippingAddressId)
+            .column(order_order::Column::ChannelId)
+            .into_tuple()
+            .one(db)
+            .await?;
+    let (auth_status, charge_status, bill_id, ship_id, ch_id) =
+        extra.unwrap_or(("none".to_string(), "none".to_string(), None, None, 0));
     let lines = order_orderline::Entity::find()
         .filter(order_orderline::Column::OrderId.eq(id))
         .order_by_asc(order_orderline::Column::CreatedAt)
@@ -307,6 +323,10 @@ pub async fn get_order_rows(
             shipping_method_name: ship_name,
             authorize_status: auth_status,
             charge_status,
+            billing_address_id: bill_id,
+            shipping_address_id: ship_id,
+            channel_id: ch_id,
+            customer_note: note,
         },
         lines,
     )))

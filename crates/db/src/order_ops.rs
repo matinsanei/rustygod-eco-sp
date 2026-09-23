@@ -403,11 +403,10 @@ pub struct OrderAddressInput {
     pub company_name: String,
 }
 
-async fn insert_address(
+pub async fn insert_address(
     txn: &impl ConnectionTrait,
     a: &OrderAddressInput,
-) -> Result<i32> {
-    let row = account_address::ActiveModel {
+) -> Result<i32> {    let row = account_address::ActiveModel {
         first_name: Set(a.first_name.clone()),
         last_name: Set(a.last_name.clone()),
         company_name: Set(a.company_name.clone()),

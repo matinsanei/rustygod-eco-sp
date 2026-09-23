@@ -306,6 +306,37 @@ pub(crate) async fn to_gen_order(
             }
         }
     }
+    // Addresses + channel (details + draft list read these; slim selects).
+    let (billing_address, shipping_address) = {
+        use sea_orm::EntityTrait;
+        let mut b = None;
+        let mut s = None;
+        if let Some(bid) = h.billing_address_id {
+            if let Ok(Some(row)) = saleor_rustify_db::entities::account_address::Entity::find_by_id(bid).one(db).await {
+                b = Some(crate::account::to_gql_address(&row));
+            }
+        }
+        if let Some(sid) = h.shipping_address_id {
+            if let Ok(Some(row)) = saleor_rustify_db::entities::account_address::Entity::find_by_id(sid).one(db).await {
+                s = Some(crate::account::to_gql_address(&row));
+            }
+        }
+        (b, s)
+    };
+    let channel_row: Option<(String, String, String, bool)> = {
+        use sea_orm::{EntityTrait, QuerySelect};
+        type CH = saleor_rustify_db::entities::channel_channel::Entity;
+        use saleor_rustify_db::entities::channel_channel::Column as CHC;
+        CH::find_by_id(h.channel_id)
+            .select_only()
+            .column(CHC::Slug).column(CHC::Name).column(CHC::CurrencyCode).column(CHC::IsActive)
+            .into_tuple()
+            .one(db)
+            .await
+            .unwrap_or(None)
+    };
+    let (channel_slug, channel_name, channel_currency, channel_active) = channel_row
+        .unwrap_or_else(|| ("default-channel".to_string(), "Default".to_string(), h.currency.clone(), true));
     gen::Order {
         id: Some(ID(crate::common::gid("Order", &h.id))),
         private_metadata: vec![],
@@ -314,18 +345,18 @@ pub(crate) async fn to_gen_order(
         updated_at: None,
         status: Some(h.status.clone()),
         user: None,
-        billing_address: None,
-        shipping_address: None,
+        billing_address,
+        shipping_address,
         shipping_method_name: h.shipping_method_name.clone(),
         collection_point_name: None,
         channel: Some(gen::Channel {
-            id: Some(ID("Q2hhbm5lbDox".into())),
+            id: Some(ID(crate::common::gid("Channel", h.channel_id))),
             private_metadata: vec![],
             metadata: vec![],
-            slug: Some("default-channel".into()),
-            name: Some("Default".into()),
-            is_active: Some(true),
-            currency_code: Some("USD".into()),
+            slug: Some(channel_slug),
+            name: Some(channel_name),
+            is_active: Some(channel_active),
+            currency_code: Some(channel_currency),
             has_orders: None,
             default_country: Some(crate::common::GqlCountryDisplay { code: "US".into(), country: "United States".into() }),
             warehouses: vec![],
@@ -363,7 +394,7 @@ pub(crate) async fn to_gen_order(
         voucher: None,
         voucher_code: None,
         gift_cards: vec![],
-        customer_note: None,
+        customer_note: Some(h.customer_note.clone()),
         subtotal: Some(to_taxed2(sub_net, sub_gross, h.currency.clone())),
         total_authorized: None,
         total_charged: None,
@@ -559,6 +590,38 @@ impl OrderQuery {
     /// Dashboard `OrderList`/`GlobalSearch` — filter/where/search/sortBy are
     /// applied server-side with Saleor semantics; payment-state-derived
     /// pseudo filters stay approximated (see `order_status_filter_db`).
+    /// Draft orders list (dashboard drafts page; status forced to draft).
+    async fn draft_orders(
+        &self, ctx: &Context<'_>,
+        first: Option<i32>, after: Option<String>, before: Option<String>, last: Option<i32>,
+        #[graphql(name = "sortBy")] sort_by: Option<gen::OrderSortingInput>, filter: Option<gen::OrderDraftFilterInput>, search: Option<String>,
+    ) -> Result<GqlOrderConnection> {
+        let _ = (before, last, filter);
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        authorize(ctx, crate::context::MANAGE_ORDERS).await?;
+        let off = after.and_then(|c| decode_cursor(&c)).unwrap_or(0);
+        let lim = first.unwrap_or(20).clamp(1, 100) as usize;
+        use saleor_rustify_db::entities::order_order::{Column as OCol, Entity as OEnt};
+        use sea_orm::{ColumnTrait, Condition, EntityTrait, QueryFilter, QueryOrder, QuerySelect};
+        let mut cond = Condition::all().add(OCol::Status.eq("draft"));
+        if let Some(s) = search.as_ref().filter(|s| !s.trim().is_empty()) {
+            cond = cond.add(search_condition(s));
+        }
+        let asc = sort_by.as_ref().map(|s| matches!(s.direction, gen::OrderDirection::ASC)).unwrap_or(false);
+        let mut q = OEnt::find().select_only().column(OCol::Id).filter(cond);
+        q = if asc { q.order_by_asc(OCol::CreatedAt) } else { q.order_by_desc(OCol::CreatedAt) };
+        let ids: Vec<Uuid> = q.into_tuple::<Uuid>().all(db).await.map_err(|e| Error::new(e.to_string()))?;
+        let total = ids.len() as i32;
+        let mut out = Vec::new();
+        for oid in ids.into_iter().skip(off).take(lim) {
+            if let Some((hh, ll)) = saleor_rustify_db::order_store::get_order_rows(db, oid).await.map_err(|e| Error::new(e.to_string()))? {
+                out.push(to_gen_order(db, &hh, ll).await);
+            }
+        }
+        let edges = out.into_iter().enumerate().map(|(i, node)| GqlOrderEdge { node, cursor: encode_cursor(off + i) }).collect();
+        Ok(GqlOrderConnection { total_count: Some(total), edges, page_info: crate::common::PageInfo { has_next_page: off + lim < total as usize, has_previous_page: off > 0, start_cursor: None, end_cursor: None } })
+    }
+
     async fn orders(
         &self, ctx: &Context<'_>,
         first: Option<i32>, after: Option<String>, before: Option<String>, last: Option<i32>,
@@ -1238,8 +1301,7 @@ impl OrderMutation {
         }
         let amount = input.amount.as_ref().and_then(|a| a.0.parse::<rust_decimal::Decimal>().ok());
         let tid_opt = input.transaction_id.as_ref().map(|t| saleor_rustify_db::catalog::parse_gid(&t.0));
-        match saleor_rustify_db::granted_refunds::update_granted_refund(db, gid, &saleor_rustify_db::granted_refunds::UpdateGrant {
-            amount,
+        match saleor_rustify_db::granted_refunds::update_granted_refund(db, gid, &saleor_rustify_db::granted_refunds::UpdateGrant {            amount,
             reason: input.reason.clone(),
             transaction_item_id: tid_opt,
             grant_refund_for_shipping: input.grant_refund_for_shipping.unwrap_or(false),
@@ -1250,6 +1312,231 @@ impl OrderMutation {
             Err(e) => Ok(gen::OrderGrantRefundUpdate { order: None, errors: vec![grant_upd_err(e.to_string())] }),
         }
     }
+
+    /// Draft order create (Django `draftOrderCreate`): full input surface —
+    /// customer, addresses, shipping method, voucher code, note, metadata.
+    async fn draft_order_create(&self, ctx: &Context<'_>, input: gen::DraftOrderCreateInput) -> Result<gen::DraftOrderCreate> {
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        authorize(ctx, crate::context::MANAGE_ORDERS).await?;
+        let (uid, _) = crate::account::requester(ctx, db).await.unwrap_or((0, String::new()));
+        match draft_create_from(db, &input, Some(uid)).await {
+            Ok(oid) => Ok(gen::DraftOrderCreate { errors: vec![], order: order_view(db, oid).await? }),
+            Err(e) => Ok(gen::DraftOrderCreate { errors: vec![oerr(e)], order: None }),
+        }
+    }
+
+    /// Draft order update (Django `draftOrderUpdate`): id xor externalReference.
+    async fn draft_order_update(
+        &self, ctx: &Context<'_>,
+        #[graphql(name = "externalReference")] external_reference: Option<String>,
+        id: Option<ID>, input: gen::DraftOrderInput,
+    ) -> Result<gen::DraftOrderUpdate> {
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        authorize(ctx, crate::context::MANAGE_ORDERS).await?;
+        let oid = match resolve_order_id(db, id.as_ref(), external_reference.as_deref()).await {
+            Ok(o) => o,
+            Err(e) => return Ok(gen::DraftOrderUpdate { errors: vec![oerr(e)], order: None }),
+        };
+        let user_id = match input.user.as_ref() {
+            Some(u) => Some(Some(user_id_of(&u.0)?)),
+            None => None,
+        };
+        let (staff_uid, _) = crate::account::requester(ctx, db).await.unwrap_or((0, String::new()));
+        // discount (deprecated, no-effect in Django) → ignored honestly.
+        let out = saleor_rustify_db::drafts::update_draft(
+            db, oid,
+            user_id,
+            input.user_email.clone(),
+            input.customer_note.clone(),
+            input.billing_address.as_ref().map(addr_input),
+            input.shipping_address.as_ref().map(addr_input),
+            input.shipping_method.as_ref().map(|m| saleor_rustify_db::catalog::parse_gid(&m.0)),
+            input.voucher_code.clone().map(Some),
+            input.redirect_url.clone(),
+            input.external_reference.clone(),
+            input.metadata.as_ref().map(meta_value),
+            input.private_metadata.as_ref().map(meta_value),
+            input.language_code.as_ref().map(|c| format!("{c:?}")),
+            Some(staff_uid),
+        )
+        .await;
+        match out {
+            Ok(_) => Ok(gen::DraftOrderUpdate { errors: vec![], order: order_view(db, oid).await? }),
+            Err(e) => Ok(gen::DraftOrderUpdate { errors: vec![oerr(e.to_string())], order: None }),
+        }
+    }
+
+    /// Draft order delete (Django `draftOrderDelete`): id xor externalReference.
+    async fn draft_order_delete(
+        &self, ctx: &Context<'_>,
+        #[graphql(name = "externalReference")] external_reference: Option<String>,
+        id: Option<ID>,
+    ) -> Result<gen::DraftOrderDelete> {
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        authorize(ctx, crate::context::MANAGE_ORDERS).await?;
+        let oid = match resolve_order_id(db, id.as_ref(), external_reference.as_deref()).await {
+            Ok(o) => o,
+            Err(e) => return Ok(gen::DraftOrderDelete { errors: vec![oerr(e)] }),
+        };
+        match saleor_rustify_db::drafts::delete_draft(db, oid).await {
+            Ok(()) => Ok(gen::DraftOrderDelete { errors: vec![] }),
+            Err(e) => Ok(gen::DraftOrderDelete { errors: vec![oerr(e.to_string())] }),
+        }
+    }
+
+    /// Draft order complete (Django `draftOrderComplete`): allocate stock,
+    /// flip to unfulfilled (or per channel), plume the placed event.
+    async fn draft_order_complete(&self, ctx: &Context<'_>, id: ID) -> Result<gen::DraftOrderComplete> {
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        authorize(ctx, crate::context::MANAGE_ORDERS).await?;
+        let (uid, _) = crate::account::requester(ctx, db).await.unwrap_or((0, String::new()));
+        let oid = parse_id(&id.0);
+        match saleor_rustify_db::drafts::complete_draft(db, oid, Some(uid)).await {
+            Ok(_) => Ok(gen::DraftOrderComplete { order: order_view(db, oid).await?, errors: vec![] }),
+            Err(e) => Ok(gen::DraftOrderComplete { order: None, errors: vec![oerr(e.to_string())] }),
+        }
+    }
+
+    /// Bulk draft delete (per-order guards; survivors always commit).
+    async fn draft_order_bulk_delete(&self, ctx: &Context<'_>, ids: Vec<ID>) -> Result<gen::DraftOrderBulkDelete> {
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        authorize(ctx, crate::context::MANAGE_ORDERS).await?;
+        // 3.23 payload carries errors only; per-row failures are skipped.
+        for i in &ids {
+            let _ = saleor_rustify_db::drafts::delete_draft(db, parse_id(&i.0)).await;
+        }
+        Ok(gen::DraftOrderBulkDelete { errors: vec![] })
+    }
+}
+
+/// Resolve an order by id xor externalReference (Django `by-id-or-ref`).
+async fn resolve_order_id(
+    db: &sea_orm::DatabaseConnection,
+    id: Option<&ID>,
+    external_reference: Option<&str>,
+) -> std::result::Result<Uuid, String> {
+    if let Some(i) = id {
+        let oid = parse_id(&i.0);
+        if oid.is_nil() {
+            return Err("bad order id".to_string());
+        }
+        return Ok(oid);
+    }
+    if let Some(r) = external_reference.filter(|s| !s.trim().is_empty()) {
+        use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QuerySelect};
+        return saleor_rustify_db::entities::order_order::Entity::find()
+            .select_only()
+            .column(saleor_rustify_db::entities::order_order::Column::Id)
+            .filter(saleor_rustify_db::entities::order_order::Column::ExternalReference.eq(r))
+            .into_tuple::<Uuid>()
+            .one(db)
+            .await
+            .map_err(|e| e.to_string())?
+            .ok_or_else(|| "order not found".to_string());
+    }
+    Err("provide id or externalReference".to_string())
+}
+
+fn user_id_of(gid: &str) -> std::result::Result<i32, Error> {
+    saleor_rustify_db::catalog::parse_gid(gid).ok_or_else(|| Error::new("bad user id"))
+}
+
+fn meta_value(items: &Vec<crate::common::MetadataInput>) -> serde_json::Value {
+    let mut m = serde_json::Map::new();
+    for i in items {
+        m.insert(i.key.clone(), serde_json::Value::String(i.value.clone()));
+    }
+    serde_json::Value::Object(m)
+}
+
+/// Shared draft-create assembly (create input; update has no lines/channel).
+async fn draft_create_from(
+    db: &sea_orm::DatabaseConnection,
+    input: &gen::DraftOrderCreateInput,
+    actor_id: Option<i32>,
+) -> std::result::Result<Uuid, String> {
+    use sea_orm::{EntityTrait, QuerySelect};
+    // Channel: explicit id wins, else default-channel.
+    let (ch_id, ch_slug) = match input.channel_id.as_ref().and_then(|c| saleor_rustify_db::catalog::parse_gid(&c.0)) {
+        Some(cid) => {
+            let slug: Option<String> = saleor_rustify_db::entities::channel_channel::Entity::find_by_id(cid)
+                .select_only()
+                .column(saleor_rustify_db::entities::channel_channel::Column::Slug)
+                .into_tuple()
+                .one(db)
+                .await
+                .map_err(|e| e.to_string())?
+                .unwrap_or(None);
+            match slug {
+                Some(s) => (cid, s),
+                None => return Err("channel not found".to_string()),
+            }
+        }
+        None => {
+            let (cid, _cur) = saleor_rustify_db::catalog::channel_info(db, "default-channel")
+                .await
+                .map_err(|e| e.to_string())?;
+            (cid, "default-channel".to_string())
+        }
+    };
+    // Customer: explicit user wins, else email (must resolve to someone).
+    let (uid, email) = match input.user.as_ref() {
+        Some(u) => {
+            let id = user_id_of(&u.0).map_err(|e| e.message.clone())?;
+            let em: Option<String> = saleor_rustify_db::entities::account_user::Entity::find_by_id(id)
+                .select_only()
+                .column(saleor_rustify_db::entities::account_user::Column::Email)
+                .into_tuple()
+                .one(db)
+                .await
+                .map_err(|e| e.to_string())?
+                .unwrap_or(None);
+            match em {
+                Some(e) => (Some(id), input.user_email.clone().unwrap_or(e)),
+                None => return Err("user not found".to_string()),
+            }
+        }
+        None => match input.user_email.clone().map(|s| s.trim().to_string()).filter(|s| !s.is_empty()) {
+            Some(e) => (None, e),
+            None => return Err("user or userEmail is required".to_string()),
+        },
+    };
+    let mut lines = vec![];
+    for l in input.lines.clone().unwrap_or_default() {
+        let vid = saleor_rustify_db::catalog::parse_gid(&l.variant_id.0).unwrap_or(-1);
+        if vid < 0 {
+            return Err("bad variant id".to_string());
+        }
+        let custom = l.price.as_ref().and_then(|p| p.0.parse::<rust_decimal::Decimal>().ok());
+        lines.push(saleor_rustify_db::drafts::DraftLineInput {
+            variant_id: vid,
+            quantity: l.quantity,
+            custom_price: custom,
+            force_new_line: l.force_new_line.unwrap_or(false),
+        });
+    }
+    if lines.is_empty() {
+        return Err("draft order needs at least one line".to_string());
+    }
+    let opts = saleor_rustify_db::drafts::DraftCreateOptions {
+        user_id: uid,
+        billing: input.billing_address.as_ref().map(addr_input),
+        shipping: input.shipping_address.as_ref().map(addr_input),
+        save_billing: input.save_billing_address.unwrap_or(false),
+        save_shipping: input.save_shipping_address.unwrap_or(false),
+        customer_note: input.customer_note.clone(),
+        shipping_method_id: input.shipping_method.as_ref().and_then(|m| saleor_rustify_db::catalog::parse_gid(&m.0)),
+        voucher_code: input.voucher_code.clone(),
+        redirect_url: input.redirect_url.clone(),
+        external_reference: input.external_reference.clone(),
+        metadata: input.metadata.as_ref().map(meta_value).unwrap_or(serde_json::Value::Object(Default::default())),
+        private_metadata: input.private_metadata.as_ref().map(meta_value).unwrap_or(serde_json::Value::Object(Default::default())),
+        language_code: input.language_code.as_ref().map(|c| format!("{c:?}")),
+    };
+    saleor_rustify_db::drafts::create_draft_full(db, ch_id, &ch_slug, &email, lines, opts, actor_id)
+        .await
+        .map(|v| v.id)
+        .map_err(|e| e.to_string())
 }
 
 /// Order lines + fulfillment lines → money/stock items for the

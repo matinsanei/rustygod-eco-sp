@@ -29418,13 +29418,6 @@ impl GenQuery {
 
     }
 
-    #[graphql(name = "draftOrders")]
-    async fn draft_orders(&self, #[graphql(name = "sortBy")] _arg_sort_by: Option<OrderSortingInput>, #[graphql(name = "filter")] _arg_filter: Option<OrderDraftFilterInput>, #[graphql(name = "where")] _arg_where: Option<DraftOrderWhereInput>, #[graphql(name = "search")] _arg_search: Option<String>, #[graphql(name = "before")] _arg_before: Option<String>, #[graphql(name = "after")] _arg_after: Option<String>, #[graphql(name = "first")] _arg_first: Option<i32>, #[graphql(name = "last")] _arg_last: Option<i32>) -> Option<crate::order::GqlOrderConnection> {
-
-        Some(crate::order::GqlOrderConnection { total_count: None, edges: vec![], page_info: PageInfo { has_next_page: false, has_previous_page: false, start_cursor: None, end_cursor: None } })
-
-    }
-
     #[graphql(name = "ordersTotal")]
     async fn orders_total(&self, #[graphql(name = "period")] _arg_period: Option<ReportingPeriod>, #[graphql(name = "channel")] _arg_channel: Option<String>) -> Option<crate::order::GqlTaxedMoney> {
 
@@ -29921,41 +29914,6 @@ impl GenMutation {
     async fn page_type_reorder_attributes(&self, #[graphql(name = "moves")] _arg_moves: Vec<ReorderInput>, #[graphql(name = "pageTypeId")] _arg_page_type_id: ID) -> Option<PageTypeReorderAttributes> {
 
         Some(PageTypeReorderAttributes { page_type: None, errors: vec![] })
-
-    }
-
-    #[graphql(name = "draftOrderComplete")]
-    async fn draft_order_complete(&self, #[graphql(name = "id")] _arg_id: ID) -> Option<DraftOrderComplete> {
-
-        Some(DraftOrderComplete { order: None, errors: vec![] })
-
-    }
-
-    #[graphql(name = "draftOrderCreate")]
-    async fn draft_order_create(&self, #[graphql(name = "input")] _arg_input: DraftOrderCreateInput) -> Option<DraftOrderCreate> {
-
-        Some(DraftOrderCreate { errors: vec![], order: None })
-
-    }
-
-    #[graphql(name = "draftOrderDelete")]
-    async fn draft_order_delete(&self, #[graphql(name = "externalReference")] _arg_external_reference: Option<String>, #[graphql(name = "id")] _arg_id: Option<ID>) -> Option<DraftOrderDelete> {
-
-        Some(DraftOrderDelete { errors: vec![] })
-
-    }
-
-    #[graphql(name = "draftOrderBulkDelete")]
-    async fn draft_order_bulk_delete(&self, #[graphql(name = "ids")] _arg_ids: Vec<ID>) -> Option<DraftOrderBulkDelete> {
-
-        Some(DraftOrderBulkDelete { errors: vec![] })
-
-    }
-
-    #[graphql(name = "draftOrderUpdate")]
-    async fn draft_order_update(&self, #[graphql(name = "externalReference")] _arg_external_reference: Option<String>, #[graphql(name = "id")] _arg_id: Option<ID>, #[graphql(name = "input")] _arg_input: DraftOrderInput) -> Option<DraftOrderUpdate> {
-
-        Some(DraftOrderUpdate { errors: vec![], order: None })
 
     }
 
