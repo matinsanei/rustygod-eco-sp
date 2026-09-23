@@ -1238,13 +1238,6 @@ fn serr(field: Option<String>, message: String) -> gen::BulkStockError {
     gen::BulkStockError { field, message: Some(message), code: None, index: None }
 }
 
-fn require_staff(ctx: &Context<'_>) -> Result<()> {
-    let bearer = ctx.data_opt::<crate::context::Bearer>().map(|b| b.0.as_str().to_string())
-        .or_else(|| ctx.data_opt::<GqlContext>().and_then(|g| g.bearer.clone()));
-    if bearer.is_none() { return Err(Error::new("authentication required")); }
-    Ok(())
-}
-
 async fn resolve_product(db: &sea_orm::DatabaseConnection, id: Option<ID>, ext: Option<String>) -> Result<Option<i32>> {
     use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QuerySelect};
     if let Some(i) = id {
@@ -1385,7 +1378,7 @@ impl CatalogWriteMutation {
     /// Dashboard `UpdateProduct`: identity fields + category + collections +
     /// SEO + metadata. Attributes accepted-ignored (own milestone).
     async fn product_update(&self, ctx: &Context<'_>, id: Option<ID>, #[graphql(name = "externalReference")] external_reference: Option<String>, input: gen::ProductInput) -> Result<gen::ProductUpdate> {
-        require_staff(ctx)?;
+        let _ = crate::account::require_perm(ctx, "manage_products").await?;
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
         let Some(pid) = resolve_product(db, id, external_reference).await? else {
             return Ok(gen::ProductUpdate { errors: vec![perr(Some("id".into()), "product not found".into())] });
@@ -1412,7 +1405,7 @@ impl CatalogWriteMutation {
     }
 
     async fn product_delete(&self, ctx: &Context<'_>, id: Option<ID>, #[graphql(name = "externalReference")] external_reference: Option<String>) -> Result<gen::ProductDelete> {
-        require_staff(ctx)?;
+        let _ = crate::account::require_perm(ctx, "manage_products").await?;
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
         let Some(pid) = resolve_product(db, id, external_reference).await? else {
             return Ok(gen::ProductDelete { errors: vec![perr(Some("id".into()), "product not found".into())] });
@@ -1424,7 +1417,7 @@ impl CatalogWriteMutation {
     }
 
     async fn product_variant_create(&self, ctx: &Context<'_>, input: gen::ProductVariantCreateInput) -> Result<gen::ProductVariantCreate> {
-        require_staff(ctx)?;
+        let _ = crate::account::require_perm(ctx, "manage_products").await?;
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
         let Some(pid) = rustygod_db::catalog::parse_gid(&input.product.0) else {
             return Ok(gen::ProductVariantCreate { product_variant: None, errors: vec![perr(Some("product".into()), "bad product id".into())] });
@@ -1455,7 +1448,7 @@ impl CatalogWriteMutation {
     }
 
     async fn product_variant_update(&self, ctx: &Context<'_>, id: Option<ID>, #[graphql(name = "externalReference")] external_reference: Option<String>, input: gen::ProductVariantInput, sku: Option<String>) -> Result<gen::ProductVariantUpdate> {
-        require_staff(ctx)?;
+        let _ = crate::account::require_perm(ctx, "manage_products").await?;
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
         let Some(vid) = resolve_variant(db, id, external_reference, sku).await? else {
             return Ok(gen::ProductVariantUpdate { product_variant: None, errors: vec![perr(Some("id".into()), "variant not found".into())] });
@@ -1480,7 +1473,7 @@ impl CatalogWriteMutation {
     }
 
     async fn product_variant_delete(&self, ctx: &Context<'_>, id: Option<ID>, #[graphql(name = "externalReference")] external_reference: Option<String>, sku: Option<String>) -> Result<gen::ProductVariantDelete> {
-        require_staff(ctx)?;
+        let _ = crate::account::require_perm(ctx, "manage_products").await?;
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
         let Some(vid) = resolve_variant(db, id, external_reference, sku).await? else {
             return Ok(gen::ProductVariantDelete { errors: vec![perr(Some("id".into()), "variant not found".into())] });
@@ -1494,7 +1487,7 @@ impl CatalogWriteMutation {
     /// Dashboard ` productVariantChannelListingUpdate`: per-channel price /
     /// cost / prior upserts (id or sku locates the variant).
     async fn product_variant_channel_listing_update(&self, ctx: &Context<'_>, id: Option<ID>, input: Vec<gen::ProductVariantChannelListingAddInput>, sku: Option<String>) -> Result<gen::ProductVariantChannelListingUpdate> {
-        require_staff(ctx)?;
+        let _ = crate::account::require_perm(ctx, "manage_products").await?;
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
         let Some(vid) = resolve_variant(db, id, None, sku).await? else {
             return Ok(gen::ProductVariantChannelListingUpdate { variant: None, errors: vec![lerr(Some("id".into()), "variant not found".into())] });
@@ -1517,7 +1510,7 @@ impl CatalogWriteMutation {
     }
 
     async fn product_variant_stocks_create(&self, ctx: &Context<'_>, stocks: Vec<gen::StockInput>, #[graphql(name = "variantId")] variant_id: ID) -> Result<gen::ProductVariantStocksCreate> {
-        require_staff(ctx)?;
+        let _ = crate::account::require_perm(ctx, "manage_products").await?;
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
         let Some(vid) = rustygod_db::catalog::parse_gid(&variant_id.0) else {
             return Ok(gen::ProductVariantStocksCreate { product_variant: None, errors: vec![serr(Some("variantId".into()), "bad variant id".into())] });
@@ -1534,7 +1527,7 @@ impl CatalogWriteMutation {
     }
 
     async fn product_variant_stocks_update(&self, ctx: &Context<'_>, sku: Option<String>, stocks: Vec<gen::StockInput>, #[graphql(name = "variantId")] variant_id: Option<ID>) -> Result<gen::ProductVariantStocksUpdate> {
-        require_staff(ctx)?;
+        let _ = crate::account::require_perm(ctx, "manage_products").await?;
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
         let vid = match resolve_variant(db, variant_id, None, sku).await? {
             Some(v) => v,
@@ -1552,7 +1545,7 @@ impl CatalogWriteMutation {
     }
 
     async fn category_create(&self, ctx: &Context<'_>, input: gen::CategoryInput, parent: Option<ID>) -> Result<gen::CategoryCreate> {
-        require_staff(ctx)?;
+        let _ = crate::account::require_perm(ctx, "manage_products").await?;
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
         let name = input.name.clone().unwrap_or_default();
         if name.trim().is_empty() {
@@ -1567,7 +1560,7 @@ impl CatalogWriteMutation {
     }
 
     async fn category_update(&self, ctx: &Context<'_>, id: ID, input: gen::CategoryInput) -> Result<gen::CategoryUpdate> {
-        require_staff(ctx)?;
+        let _ = crate::account::require_perm(ctx, "manage_products").await?;
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
         let Some(cid) = rustygod_db::catalog::parse_gid(&id.0) else {
             return Ok(gen::CategoryUpdate { errors: vec![perr(Some("id".into()), "bad category id".into())], category: None });
@@ -1586,7 +1579,7 @@ impl CatalogWriteMutation {
     }
 
     async fn category_delete(&self, ctx: &Context<'_>, id: ID) -> Result<gen::CategoryDelete> {
-        require_staff(ctx)?;
+        let _ = crate::account::require_perm(ctx, "manage_products").await?;
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
         let Some(cid) = rustygod_db::catalog::parse_gid(&id.0) else {
             return Ok(gen::CategoryDelete { errors: vec![perr(Some("id".into()), "bad category id".into())] });
@@ -1598,7 +1591,7 @@ impl CatalogWriteMutation {
     }
 
     async fn collection_create(&self, ctx: &Context<'_>, input: gen::CollectionCreateInput) -> Result<gen::CollectionCreate> {
-        require_staff(ctx)?;
+        let _ = crate::account::require_perm(ctx, "manage_products").await?;
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
         let name = input.name.clone().unwrap_or_default();
         if name.trim().is_empty() {
@@ -1613,7 +1606,7 @@ impl CatalogWriteMutation {
     }
 
     async fn collection_update(&self, ctx: &Context<'_>, id: ID, input: gen::CollectionInput) -> Result<gen::CollectionUpdate> {
-        require_staff(ctx)?;
+        let _ = crate::account::require_perm(ctx, "manage_products").await?;
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
         let Some(cid) = rustygod_db::catalog::parse_gid(&id.0) else {
             return Ok(gen::CollectionUpdate { errors: vec![cerr(Some("id".into()), "bad collection id".into())], collection: None });
@@ -1636,7 +1629,7 @@ impl CatalogWriteMutation {
     }
 
     async fn collection_delete(&self, ctx: &Context<'_>, id: ID) -> Result<gen::CollectionDelete> {
-        require_staff(ctx)?;
+        let _ = crate::account::require_perm(ctx, "manage_products").await?;
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
         let Some(cid) = rustygod_db::catalog::parse_gid(&id.0) else {
             return Ok(gen::CollectionDelete { errors: vec![cerr(Some("id".into()), "bad collection id".into())] });
@@ -1648,7 +1641,7 @@ impl CatalogWriteMutation {
     }
 
     async fn collection_add_products(&self, ctx: &Context<'_>, #[graphql(name = "collectionId")] collection_id: ID, products: Vec<ID>) -> Result<gen::CollectionAddProducts> {
-        require_staff(ctx)?;
+        let _ = crate::account::require_perm(ctx, "manage_products").await?;
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
         let (Some(cid), prods) = (rustygod_db::catalog::parse_gid(&collection_id.0), products.iter().filter_map(|i| rustygod_db::catalog::parse_gid(&i.0)).collect::<Vec<_>>()) else {
             return Ok(gen::CollectionAddProducts { errors: vec![cerr(Some("collectionId".into()), "bad collection id".into())] });
@@ -1660,7 +1653,7 @@ impl CatalogWriteMutation {
     }
 
     async fn collection_remove_products(&self, ctx: &Context<'_>, #[graphql(name = "collectionId")] collection_id: ID, products: Vec<ID>) -> Result<gen::CollectionRemoveProducts> {
-        require_staff(ctx)?;
+        let _ = crate::account::require_perm(ctx, "manage_products").await?;
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
         let (Some(cid), prods) = (rustygod_db::catalog::parse_gid(&collection_id.0), products.iter().filter_map(|i| rustygod_db::catalog::parse_gid(&i.0)).collect::<Vec<_>>()) else {
             return Ok(gen::CollectionRemoveProducts { collection: None, errors: vec![cerr(Some("collectionId".into()), "bad collection id".into())] });
@@ -1672,7 +1665,7 @@ impl CatalogWriteMutation {
     }
 
     async fn collection_reorder_products(&self, ctx: &Context<'_>, #[graphql(name = "collectionId")] collection_id: ID, moves: Vec<gen::MoveProductInput>) -> Result<gen::CollectionReorderProducts> {
-        require_staff(ctx)?;
+        let _ = crate::account::require_perm(ctx, "manage_products").await?;
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
         let Some(cid) = rustygod_db::catalog::parse_gid(&collection_id.0) else {
             return Ok(gen::CollectionReorderProducts { errors: vec![cerr(Some("collectionId".into()), "bad collection id".into())] });
@@ -1689,7 +1682,7 @@ impl CatalogWriteMutation {
     /// Dashboard product-type attributes tab: assign PRODUCT/VARIANT scoped
     /// attributes with Django's validations (type, variant-only, coherence).
     async fn product_attribute_assign(&self, ctx: &Context<'_>, operations: Vec<gen::ProductAttributeAssignInput>, #[graphql(name = "productTypeId")] product_type_id: ID) -> Result<gen::ProductAttributeAssign> {
-        require_staff(ctx)?;
+        let _ = crate::account::require_perm(ctx, "manage_product_types_and_attributes").await?;
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
         let err = |m: String| gen::ProductAttributeAssign { product_type: None, errors: vec![perr(Some("operations".into()), m)] };
         let Some(pt) = rustygod_db::catalog::parse_gid(&product_type_id.0) else {
@@ -1713,7 +1706,7 @@ impl CatalogWriteMutation {
     }
 
     async fn product_attribute_unassign(&self, ctx: &Context<'_>, #[graphql(name = "attributeIds")] attribute_ids: Vec<ID>, #[graphql(name = "productTypeId")] product_type_id: ID) -> Result<gen::ProductAttributeUnassign> {
-        require_staff(ctx)?;
+        let _ = crate::account::require_perm(ctx, "manage_product_types_and_attributes").await?;
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
         let err = |m: String| gen::ProductAttributeUnassign { product_type: None, errors: vec![perr(Some("attributeIds".into()), m)] };
         let Some(pt) = rustygod_db::catalog::parse_gid(&product_type_id.0) else {
@@ -1727,7 +1720,7 @@ impl CatalogWriteMutation {
     }
 
     async fn product_attribute_assignment_update(&self, ctx: &Context<'_>, operations: Vec<gen::ProductAttributeAssignmentUpdateInput>, #[graphql(name = "productTypeId")] product_type_id: ID) -> Result<gen::ProductAttributeAssignmentUpdate> {
-        require_staff(ctx)?;
+        let _ = crate::account::require_perm(ctx, "manage_product_types_and_attributes").await?;
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
         let err = |m: String| gen::ProductAttributeAssignmentUpdate { product_type: None, errors: vec![perr(Some("operations".into()), m)] };
         let Some(pt) = rustygod_db::catalog::parse_gid(&product_type_id.0) else {
@@ -1747,7 +1740,7 @@ impl CatalogWriteMutation {
     }
 
     async fn attribute_create(&self, ctx: &Context<'_>, input: gen::AttributeCreateInput) -> Result<gen::AttributeCreate> {
-        require_staff(ctx)?;
+        let _ = crate::account::require_perm(ctx, "manage_product_types_and_attributes").await?;
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
         let err = |m: String| gen::AttributeCreate { attribute: None, errors: vec![aerr(None, m)] };
         let create = rustygod_db::attribute_writes::AttributeCreate {
@@ -1774,7 +1767,7 @@ impl CatalogWriteMutation {
     }
 
     async fn attribute_update(&self, ctx: &Context<'_>, #[graphql(name = "externalReference")] external_reference: Option<String>, id: Option<ID>, input: gen::AttributeUpdateInput) -> Result<gen::AttributeUpdate> {
-        require_staff(ctx)?;
+        let _ = crate::account::require_perm(ctx, "manage_product_types_and_attributes").await?;
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
         let err = |m: String| gen::AttributeUpdate { attribute: None, errors: vec![aerr(None, m)] };
         let Some(aid) = resolve_attribute(db, id, external_reference).await? else {
@@ -1816,7 +1809,7 @@ impl CatalogWriteMutation {
     }
 
     async fn attribute_delete(&self, ctx: &Context<'_>, #[graphql(name = "externalReference")] external_reference: Option<String>, id: Option<ID>) -> Result<gen::AttributeDelete> {
-        require_staff(ctx)?;
+        let _ = crate::account::require_perm(ctx, "manage_product_types_and_attributes").await?;
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
         let Some(aid) = resolve_attribute(db, id, external_reference).await? else {
             return Ok(gen::AttributeDelete { errors: vec![aerr(Some("id".into()), "attribute not found".into())] });
@@ -1828,7 +1821,7 @@ impl CatalogWriteMutation {
     }
 
     async fn attribute_bulk_delete(&self, ctx: &Context<'_>, ids: Vec<ID>) -> Result<gen::AttributeBulkDelete> {
-        require_staff(ctx)?;
+        let _ = crate::account::require_perm(ctx, "manage_product_types_and_attributes").await?;
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
         let aids: Vec<i32> = ids.iter().filter_map(|i| rustygod_db::catalog::parse_gid(&i.0)).collect();
         match rustygod_db::attribute_writes::bulk_delete_attributes(db, &aids).await {
@@ -1838,7 +1831,7 @@ impl CatalogWriteMutation {
     }
 
     async fn attribute_value_create(&self, ctx: &Context<'_>, attribute: ID, input: gen::AttributeValueCreateInput) -> Result<gen::AttributeValueCreate> {
-        require_staff(ctx)?;
+        let _ = crate::account::require_perm(ctx, "manage_product_types_and_attributes").await?;
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
         let err = |m: String| gen::AttributeValueCreate { attribute: None, errors: vec![aerr(None, m)] };
         let Some(aid) = rustygod_db::catalog::parse_gid(&attribute.0) else {
@@ -1851,7 +1844,7 @@ impl CatalogWriteMutation {
     }
 
     async fn attribute_value_update(&self, ctx: &Context<'_>, #[graphql(name = "externalReference")] external_reference: Option<String>, id: Option<ID>, input: gen::AttributeValueUpdateInput) -> Result<gen::AttributeValueUpdate> {
-        require_staff(ctx)?;
+        let _ = crate::account::require_perm(ctx, "manage_product_types_and_attributes").await?;
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
         let err = |m: String| gen::AttributeValueUpdate { attribute: None, errors: vec![aerr(None, m)] };
         let Some(vid) = resolve_value(db, id, external_reference).await? else {
@@ -1878,7 +1871,7 @@ impl CatalogWriteMutation {
     }
 
     async fn attribute_value_delete(&self, ctx: &Context<'_>, #[graphql(name = "externalReference")] external_reference: Option<String>, id: Option<ID>) -> Result<gen::AttributeValueDelete> {
-        require_staff(ctx)?;
+        let _ = crate::account::require_perm(ctx, "manage_product_types_and_attributes").await?;
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
         let Some(vid) = resolve_value(db, id, external_reference).await? else {
             return Ok(gen::AttributeValueDelete { attribute: None, errors: vec![aerr(Some("id".into()), "attribute value not found".into())] });
@@ -1890,7 +1883,7 @@ impl CatalogWriteMutation {
     }
 
     async fn attribute_value_bulk_delete(&self, ctx: &Context<'_>, ids: Vec<ID>) -> Result<gen::AttributeValueBulkDelete> {
-        require_staff(ctx)?;
+        let _ = crate::account::require_perm(ctx, "manage_product_types_and_attributes").await?;
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
         let vids: Vec<i32> = ids.iter().filter_map(|i| rustygod_db::catalog::parse_gid(&i.0)).collect();
         match rustygod_db::attribute_writes::bulk_delete_attribute_values(db, &vids).await {
@@ -1900,7 +1893,7 @@ impl CatalogWriteMutation {
     }
 
     async fn attribute_reorder_values(&self, ctx: &Context<'_>, #[graphql(name = "attributeId")] attribute_id: ID, moves: Vec<gen::ReorderInput>) -> Result<gen::AttributeReorderValues> {
-        require_staff(ctx)?;
+        let _ = crate::account::require_perm(ctx, "manage_product_types_and_attributes").await?;
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
         let err = |m: String| gen::AttributeReorderValues { attribute: None, errors: vec![aerr(None, m)] };
         let Some(aid) = rustygod_db::catalog::parse_gid(&attribute_id.0) else {
@@ -1924,7 +1917,7 @@ impl CatalogWriteMutation {
         product: ID, variants: Vec<gen::ProductVariantBulkUpdateInput>,
     ) -> Result<gen::ProductVariantBulkUpdate> {
         let _ = (error_policy, product);
-        require_staff(ctx)?;
+        let _ = crate::account::require_perm(ctx, "manage_products").await?;
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
         let berr = |m: String| gen::ProductVariantBulkError { field: None, message: Some(m), code: None, attributes: vec![], values: vec![], warehouses: vec![], channels: vec![] };
         let mut results = vec![];
@@ -1969,7 +1962,7 @@ impl CatalogWriteMutation {
         product: ID, variants: Vec<gen::ProductVariantBulkCreateInput>,
     ) -> Result<gen::ProductVariantBulkCreate> {
         let _ = error_policy;
-        require_staff(ctx)?;
+        let _ = crate::account::require_perm(ctx, "manage_products").await?;
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
         let Some(pid) = rustygod_db::catalog::parse_gid(&product.0) else {
             return Ok(gen::ProductVariantBulkCreate { product_variants: vec![], results: vec![], errors: vec![gen::BulkProductError { field: Some("product".into()), message: Some("bad product id".into()), code: None, index: None, channels: vec![] }] });
@@ -2008,7 +2001,7 @@ impl CatalogWriteMutation {
         &self, ctx: &Context<'_>,
         ids: Option<Vec<ID>>, skus: Option<Vec<String>>,
     ) -> Result<gen::ProductVariantBulkDelete> {
-        require_staff(ctx)?;
+        let _ = crate::account::require_perm(ctx, "manage_products").await?;
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
         let mut errs = vec![];
         for i in ids.unwrap_or_default() {
@@ -2035,7 +2028,7 @@ impl CatalogWriteMutation {
     async fn product_channel_listing_update(
         &self, ctx: &Context<'_>, id: ID, input: gen::ProductChannelListingUpdateInput,
     ) -> Result<gen::ProductChannelListingUpdate> {
-        require_staff(ctx)?;
+        let _ = crate::account::require_perm(ctx, "manage_products").await?;
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
         let lerr = |m: String| gen::ProductChannelListingError { field: None, message: Some(m), code: None, channels: vec![] };
         let Some(pid) = rustygod_db::catalog::parse_gid(&id.0) else {

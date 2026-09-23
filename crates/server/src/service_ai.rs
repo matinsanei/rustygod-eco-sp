@@ -106,7 +106,7 @@ impl Recommender for RecommenderImpl {
         let channel = channel_of(&req.channel).to_string();
         let vid: i32 = req.variant_id.parse().unwrap_or(-1);
         let first = if req.first <= 0 { 10 } else { (req.first as u64).min(1000) };
-        let recos = recommend::recommend_v2(db, &HashingEmbedder::default(), vid, &channel, first)
+        let recos = recommend::recommend_v2(db, vid, &channel, first)
             .await
             .map_err(|e| Status::internal(e.to_string()))?;
         Ok(Response::new(RecommendProductsResponse {

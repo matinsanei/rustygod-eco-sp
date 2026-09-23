@@ -8,7 +8,7 @@
 //! Kinds without Django tables (PROMOTION/PROMOTION_RULE/SALE — Saleor
 //! 3.24 dropped `discount_sale`) return empty lists / errors honestly.
 
-use async_graphql::{Context, Error, ID, Object, Result};
+use async_graphql::{Context, ID, Object, Result};
 use sea_orm::{ConnectionTrait, Statement};
 
 use crate::{
@@ -26,17 +26,6 @@ pub struct TranslationMutation;
 
 fn terr(message: String) -> gen::TranslationError {
     gen::TranslationError { field: None, message: Some(message), code: None }
-}
-
-fn require_staff(ctx: &Context<'_>) -> Result<()> {
-    let bearer = ctx
-        .data_opt::<crate::context::Bearer>()
-        .map(|b| b.0.as_str().to_string())
-        .or_else(|| ctx.data_opt::<GqlContext>().and_then(|g| g.bearer.clone()));
-    if bearer.is_none() {
-        return Err(Error::new("authentication required"));
-    }
-    Ok(())
 }
 
 pub(crate) fn language_display(lang: &str) -> crate::commerce::GqlLanguageDisplay {
@@ -551,7 +540,7 @@ impl TranslationMutation {
     async fn product_translate(
         &self, ctx: &Context<'_>, id: ID, input: gen::TranslationInput, #[graphql(name = "languageCode")] language_code: gen::LanguageCodeEnum,
     ) -> Result<gen::ProductTranslate> {
-        require_staff(ctx)?;
+        let _ = crate::account::require_perm(ctx, "manage_translations").await?;
         let g = ctx.data::<GqlContext>()?;
         let db = g.db()?;
         let lang = gen::language_code_value(&language_code);
@@ -577,7 +566,7 @@ impl TranslationMutation {
     async fn product_variant_translate(
         &self, ctx: &Context<'_>, id: ID, input: gen::NameTranslationInput, #[graphql(name = "languageCode")] language_code: gen::LanguageCodeEnum,
     ) -> Result<gen::ProductVariantTranslate> {
-        require_staff(ctx)?;
+        let _ = crate::account::require_perm(ctx, "manage_translations").await?;
         let g = ctx.data::<GqlContext>()?;
         let db = g.db()?;
         let lang = gen::language_code_value(&language_code);
@@ -598,7 +587,7 @@ impl TranslationMutation {
     async fn category_translate(
         &self, ctx: &Context<'_>, id: ID, input: gen::TranslationInput, #[graphql(name = "languageCode")] language_code: gen::LanguageCodeEnum,
     ) -> Result<gen::CategoryTranslate> {
-        require_staff(ctx)?;
+        let _ = crate::account::require_perm(ctx, "manage_translations").await?;
         let g = ctx.data::<GqlContext>()?;
         let db = g.db()?;
         let lang = gen::language_code_value(&language_code);
@@ -624,7 +613,7 @@ impl TranslationMutation {
     async fn collection_translate(
         &self, ctx: &Context<'_>, id: ID, input: gen::TranslationInput, #[graphql(name = "languageCode")] language_code: gen::LanguageCodeEnum,
     ) -> Result<gen::CollectionTranslate> {
-        require_staff(ctx)?;
+        let _ = crate::account::require_perm(ctx, "manage_translations").await?;
         let g = ctx.data::<GqlContext>()?;
         let db = g.db()?;
         let lang = gen::language_code_value(&language_code);
@@ -650,7 +639,7 @@ impl TranslationMutation {
     async fn page_translate(
         &self, ctx: &Context<'_>, id: ID, input: gen::PageTranslationInput, #[graphql(name = "languageCode")] language_code: gen::LanguageCodeEnum,
     ) -> Result<gen::PageTranslate> {
-        require_staff(ctx)?;
+        let _ = crate::account::require_perm(ctx, "manage_translations").await?;
         let g = ctx.data::<GqlContext>()?;
         let db = g.db()?;
         let lang = gen::language_code_value(&language_code);
@@ -679,7 +668,7 @@ impl TranslationMutation {
     async fn voucher_translate(
         &self, ctx: &Context<'_>, id: ID, input: gen::NameTranslationInput, #[graphql(name = "languageCode")] language_code: gen::LanguageCodeEnum,
     ) -> Result<gen::VoucherTranslate> {
-        require_staff(ctx)?;
+        let _ = crate::account::require_perm(ctx, "manage_translations").await?;
         let g = ctx.data::<GqlContext>()?;
         let db = g.db()?;
         let lang = gen::language_code_value(&language_code);
@@ -700,7 +689,7 @@ impl TranslationMutation {
     async fn shipping_price_translate(
         &self, ctx: &Context<'_>, id: ID, input: gen::ShippingPriceTranslationInput, #[graphql(name = "languageCode")] language_code: gen::LanguageCodeEnum,
     ) -> Result<gen::ShippingPriceTranslate> {
-        require_staff(ctx)?;
+        let _ = crate::account::require_perm(ctx, "manage_translations").await?;
         let g = ctx.data::<GqlContext>()?;
         let db = g.db()?;
         let lang = gen::language_code_value(&language_code);
@@ -725,7 +714,7 @@ impl TranslationMutation {
     async fn menu_item_translate(
         &self, ctx: &Context<'_>, id: ID, input: gen::NameTranslationInput, #[graphql(name = "languageCode")] language_code: gen::LanguageCodeEnum,
     ) -> Result<gen::MenuItemTranslate> {
-        require_staff(ctx)?;
+        let _ = crate::account::require_perm(ctx, "manage_translations").await?;
         let g = ctx.data::<GqlContext>()?;
         let db = g.db()?;
         let lang = gen::language_code_value(&language_code);
@@ -746,7 +735,7 @@ impl TranslationMutation {
     async fn attribute_translate(
         &self, ctx: &Context<'_>, id: ID, input: gen::NameTranslationInput, #[graphql(name = "languageCode")] language_code: gen::LanguageCodeEnum,
     ) -> Result<gen::AttributeTranslate> {
-        require_staff(ctx)?;
+        let _ = crate::account::require_perm(ctx, "manage_translations").await?;
         let g = ctx.data::<GqlContext>()?;
         let db = g.db()?;
         let lang = gen::language_code_value(&language_code);
@@ -767,7 +756,7 @@ impl TranslationMutation {
     async fn attribute_value_translate(
         &self, ctx: &Context<'_>, id: ID, input: gen::AttributeValueTranslationInput, #[graphql(name = "languageCode")] language_code: gen::LanguageCodeEnum,
     ) -> Result<gen::AttributeValueTranslate> {
-        require_staff(ctx)?;
+        let _ = crate::account::require_perm(ctx, "manage_translations").await?;
         let g = ctx.data::<GqlContext>()?;
         let db = g.db()?;
         let lang = gen::language_code_value(&language_code);

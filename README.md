@@ -302,6 +302,7 @@ order #522 minted live during development). Known edge, documented in
 - [x] Payments (TransactionItem event-group recalc + PSP dedup/async/3DS per-checkout R3 guard, `adjust_authorization`)
 - [x] Webhooks (fan-out with channel filter, HMAC-SHA256, attempt log, success/failed, backoff + sweeper)
 - [x] Auth (Django PBKDF2/bcrypt, RS256 `RSA_PRIVATE_KEY`, `me { User }` via GraphQL, staff `manage_*` + app tokens)
+- [x] Account security (`docs/ACCOUNT_SECURITY_CHECKLIST.md`): staff/customer CRUD + bulk + addresses + permission groups with Django guards (self/superuser/scope/last-manageable), fine-grained `require_perm` on all writes, throttled login, single-use reset/confirm/email-change tokens, self-service delete
 - [x] Fulfillment (auto-increment, remainder guards, stock decrease/restore, cancel, refunds, `determine_order_status`) + `return_and_refund` + per-transaction `granted_refunds`
 - [x] GraphQL BFF (enterprise, thin): `crates/graphql` + `server` dual-stack `gRPC :50051` / `GraphQL :8000` / `metrics :9000`, same DB/logic (`me`, `products`, `checkout`, `order`, `channels`, `transaction`), Dashboard `API_URL=http://localhost:8000/graphql`
 - [x] Audit-hardened: zero `unwrap` in production, transactional checkout-complete (user/address + promotions + gift cards + stock), idempotent add-lines, `FOR UPDATE` lock ordering (R6), outbox + sweeper (R8/R9)

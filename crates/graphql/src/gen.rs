@@ -29537,27 +29537,6 @@ impl GenQuery {
 
     }
 
-    #[graphql(name = "permissionGroups")]
-    async fn permission_groups(&self, #[graphql(name = "filter")] _arg_filter: Option<PermissionGroupFilterInput>, #[graphql(name = "sortBy")] _arg_sort_by: Option<PermissionGroupSortingInput>, #[graphql(name = "before")] _arg_before: Option<String>, #[graphql(name = "after")] _arg_after: Option<String>, #[graphql(name = "first")] _arg_first: Option<i32>, #[graphql(name = "last")] _arg_last: Option<i32>) -> Option<GroupCountableConnection> {
-
-        Some(GroupCountableConnection { edges: vec![], page_info: Some(PageInfo { has_next_page: false, has_previous_page: false, start_cursor: None, end_cursor: None }) })
-
-    }
-
-    #[graphql(name = "permissionGroup")]
-    async fn permission_group(&self, #[graphql(name = "id")] _arg_id: ID) -> Option<Group> {
-
-        None
-
-    }
-
-    #[graphql(name = "staffUsers")]
-    async fn staff_users(&self, #[graphql(name = "filter")] _arg_filter: Option<StaffUserInput>, #[graphql(name = "sortBy")] _arg_sort_by: Option<UserSortingInput>, #[graphql(name = "before")] _arg_before: Option<String>, #[graphql(name = "after")] _arg_after: Option<String>, #[graphql(name = "first")] _arg_first: Option<i32>, #[graphql(name = "last")] _arg_last: Option<i32>) -> Option<UserCountableConnection> {
-
-        Some(UserCountableConnection { total_count: None, edges: vec![], page_info: Some(PageInfo { has_next_page: false, has_previous_page: false, start_cursor: None, end_cursor: None }) })
-
-    }
-
 }
 
 
@@ -30652,83 +30631,6 @@ impl GenMutation {
 
     }
 
-    #[graphql(name = "requestPasswordReset")]
-    async fn request_password_reset(&self, #[graphql(name = "channel")] _arg_channel: Option<String>, #[graphql(name = "email")] _arg_email: String, #[graphql(name = "redirectUrl")] _arg_redirect_url: String) -> Option<RequestPasswordReset> {
-
-        Some(RequestPasswordReset { errors: vec![] })
-
-    }
-
-    #[graphql(name = "setPassword")]
-    async fn set_password(&self, #[graphql(name = "email")] _arg_email: String, #[graphql(name = "password")] _arg_password: String, #[graphql(name = "token")] _arg_token: String) -> Option<SetPassword> {
-
-        Some(SetPassword { token: None, refresh_token: None, user: None, errors: vec![] })
-
-    }
-
-    #[graphql(name = "passwordChange")]
-    async fn password_change(&self, #[graphql(name = "newPassword")] _arg_new_password: String, #[graphql(name = "oldPassword")] _arg_old_password: Option<String>) -> Option<PasswordChange> {
-
-        Some(PasswordChange { errors: vec![] })
-
-    }
-
-    #[graphql(name = "addressCreate")]
-    async fn address_create(&self, #[graphql(name = "input")] _arg_input: AddressInput, #[graphql(name = "userId")] _arg_user_id: ID) -> Option<AddressCreate> {
-
-        Some(AddressCreate { user: None, errors: vec![], address: None })
-
-    }
-
-    #[graphql(name = "addressUpdate")]
-    async fn address_update(&self, #[graphql(name = "id")] _arg_id: ID, #[graphql(name = "input")] _arg_input: AddressInput) -> Option<AddressUpdate> {
-
-        Some(AddressUpdate { errors: vec![], address: None })
-
-    }
-
-    #[graphql(name = "addressDelete")]
-    async fn address_delete(&self, #[graphql(name = "id")] _arg_id: ID) -> Option<AddressDelete> {
-
-        Some(AddressDelete { user: None, errors: vec![] })
-
-    }
-
-    #[graphql(name = "addressSetDefault")]
-    async fn address_set_default(&self, #[graphql(name = "addressId")] _arg_address_id: ID, #[graphql(name = "type")] _arg_type: AddressTypeEnum, #[graphql(name = "userId")] _arg_user_id: ID) -> Option<AddressSetDefault> {
-
-        Some(AddressSetDefault { user: None, errors: vec![] })
-
-    }
-
-    #[graphql(name = "customerCreate")]
-    async fn customer_create(&self, #[graphql(name = "input")] _arg_input: UserCreateInput) -> Option<CustomerCreate> {
-
-        Some(CustomerCreate { errors: vec![], user: None })
-
-    }
-
-    #[graphql(name = "customerUpdate")]
-    async fn customer_update(&self, #[graphql(name = "externalReference")] _arg_external_reference: Option<String>, #[graphql(name = "id")] _arg_id: Option<ID>, #[graphql(name = "input")] _arg_input: CustomerInput) -> Option<CustomerUpdate> {
-
-        Some(CustomerUpdate { errors: vec![], user: None })
-
-    }
-
-    #[graphql(name = "customerDelete")]
-    async fn customer_delete(&self, #[graphql(name = "externalReference")] _arg_external_reference: Option<String>, #[graphql(name = "id")] _arg_id: Option<ID>) -> Option<CustomerDelete> {
-
-        Some(CustomerDelete { errors: vec![] })
-
-    }
-
-    #[graphql(name = "customerBulkDelete")]
-    async fn customer_bulk_delete(&self, #[graphql(name = "ids")] _arg_ids: Vec<ID>) -> Option<CustomerBulkDelete> {
-
-        Some(CustomerBulkDelete { errors: vec![] })
-
-    }
-
     #[graphql(name = "customerTypeCreate")]
     async fn customer_type_create(&self, #[graphql(name = "input")] _arg_input: CustomerTypeCreateInput) -> Option<CustomerTypeCreate> {
 
@@ -30771,27 +30673,6 @@ impl GenMutation {
 
     }
 
-    #[graphql(name = "staffCreate")]
-    async fn staff_create(&self, #[graphql(name = "input")] _arg_input: StaffCreateInput) -> Option<StaffCreate> {
-
-        Some(StaffCreate { errors: vec![], user: None })
-
-    }
-
-    #[graphql(name = "staffUpdate")]
-    async fn staff_update(&self, #[graphql(name = "id")] _arg_id: ID, #[graphql(name = "input")] _arg_input: StaffUpdateInput) -> Option<StaffUpdate> {
-
-        Some(StaffUpdate { errors: vec![], user: None })
-
-    }
-
-    #[graphql(name = "staffDelete")]
-    async fn staff_delete(&self, #[graphql(name = "id")] _arg_id: ID) -> Option<StaffDelete> {
-
-        Some(StaffDelete { errors: vec![] })
-
-    }
-
     #[graphql(name = "userAvatarUpdate")]
     async fn user_avatar_update(&self, #[graphql(name = "image")] _arg_image: GenUpload) -> Option<UserAvatarUpdate> {
 
@@ -30803,27 +30684,6 @@ impl GenMutation {
     async fn user_avatar_delete(&self) -> Option<UserAvatarDelete> {
 
         Some(UserAvatarDelete { user: None, errors: vec![] })
-
-    }
-
-    #[graphql(name = "permissionGroupCreate")]
-    async fn permission_group_create(&self, #[graphql(name = "input")] _arg_input: PermissionGroupCreateInput) -> Option<PermissionGroupCreate> {
-
-        Some(PermissionGroupCreate { errors: vec![], group: None })
-
-    }
-
-    #[graphql(name = "permissionGroupUpdate")]
-    async fn permission_group_update(&self, #[graphql(name = "id")] _arg_id: ID, #[graphql(name = "input")] _arg_input: PermissionGroupUpdateInput) -> Option<PermissionGroupUpdate> {
-
-        Some(PermissionGroupUpdate { errors: vec![], group: None })
-
-    }
-
-    #[graphql(name = "permissionGroupDelete")]
-    async fn permission_group_delete(&self, #[graphql(name = "id")] _arg_id: ID) -> Option<PermissionGroupDelete> {
-
-        Some(PermissionGroupDelete { errors: vec![] })
 
     }
 

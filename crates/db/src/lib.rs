@@ -4,6 +4,7 @@
 //! (`sea-orm-cli generate entity`), so Django and Rust can share one database
 //! under the Expand-Contract pattern: same tables, same constraints, zero data migration.
 
+pub mod account_writes;
 pub mod apps;
 pub mod attribute_writes;
 pub mod auth;

@@ -57,14 +57,13 @@ fn err(code: &str, message: String) -> gen::MetadataError {
     gen::MetadataError { field: None, message: Some(message), code: Some(code.into()) }
 }
 
-fn require_auth(ctx: &Context<'_>) -> Result<(), Error> {
-    let bearer = ctx
-        .data_opt::<crate::context::Bearer>()
-        .map(|b| b.0.as_str())
-        .or_else(|| ctx.data_opt::<GqlContext>().and_then(|g| g.bearer.as_deref()));
-    if bearer.is_none() {
-        return Err(Error::new("authentication required"));
-    }
+async fn require_auth(ctx: &Context<'_>) -> Result<(), Error> {
+    // Hardened: any bearer → must map to an ACTIVE user with a matching
+    // token key (rotated/revoked tokens die here). Object-level codenames
+    // ride on the parent mutations; metadata itself is staff-wide.
+    let g = ctx.data::<crate::context::GqlContext>().map_err(|_| Error::new("authentication required"))?;
+    let db = g.db().map_err(|_| Error::new("authentication required"))?;
+    crate::account::requester(ctx, db).await?;
     Ok(())
 }
 
@@ -77,7 +76,7 @@ async fn apply(
     drop_keys: &[String],
     private: bool,
 ) -> Result<(Vec<gen::MetadataError>, Option<gen::ObjectWithMetadata>), Error> {
-    require_auth(ctx)?;
+    require_auth(ctx).await?;
     let g = ctx.data::<GqlContext>()?;
     let db = g.db().map_err(Error::new)?;
     let (mut ty, mut raw) = common::split_gid_or_raw(&id.0).ok_or_else(|| {

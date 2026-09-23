@@ -145,7 +145,7 @@ async fn recommender_v2_backfills_beyond_copurchase() {
         .await
         .unwrap()
         .expect("populatedb must have order lines");
-    let v2 = recommend::recommend_v2(&db, &e, vid, "default-channel", 5).await.unwrap();
+    let v2 = recommend::recommend_v2(&db, vid, "default-channel", 5).await.unwrap();
     let v1 = recommend::recommend_for_variant(&db, vid, "default-channel", 5).await.unwrap();
     // v2 is a superset-blend: every v1 hit survives, all priced.
     assert!(v2.len() >= v1.len(), "v2 must keep all co-occurrence hits");
@@ -155,7 +155,7 @@ async fn recommender_v2_backfills_beyond_copurchase() {
         assert!(r.score.is_finite());
     }
     // Unknown variant: clean empty, no crash.
-    let none = recommend::recommend_v2(&db, &e, -7, "default-channel", 5).await.unwrap();
+    let none = recommend::recommend_v2(&db, -7, "default-channel", 5).await.unwrap();
     assert!(none.is_empty());
 }
 

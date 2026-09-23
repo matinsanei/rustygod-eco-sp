@@ -208,6 +208,17 @@ fn beat_entries() -> Vec<BeatEntry> {
             }
         })
     }
+    fn prune_security_tables(
+        db: &DatabaseConnection,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send + '_>> {
+        Box::pin(async move {
+            match rustygod_db::account_writes::prune_security_tables(db).await {
+                Ok(0) => {}
+                Ok(n) => tracing::info!("beat[prune-security-tables]: dropped {n}"),
+                Err(e) => tracing::warn!("beat[prune-security-tables] failed: {e}"),
+            }
+        })
+    }
     vec![
         BeatEntry { name: "delete-expired-reservations", saleor_task: "saleor.warehouse.tasks.delete_expired_reservations_task", interval_secs: 60, job: Real(sweep_expired_reservations) },
         // --- deferred: schedule present, logic lands with its domain port ---
@@ -238,6 +249,8 @@ fn beat_entries() -> Vec<BeatEntry> {
         BeatEntry { name: "checkout-automatic-completion", saleor_task: "saleor.checkout.tasks.trigger_automatic_checkout_completion_task", interval_secs: 60, job: Real(checkout_automatic_completion) },
         // Ours: vector-tier refresh (skip-unchanged, cheap on re-runs).
         BeatEntry { name: "refresh-product-embeddings", saleor_task: "rustygod.vectors.refresh_product_embeddings", interval_secs: 24 * 3600, job: Real(refresh_product_embeddings) },
+        // Ours: prune expired one-time account tokens + stale login-throttle rows.
+        BeatEntry { name: "prune-security-tables", saleor_task: "rustygod.account.prune_security_tables", interval_secs: 24 * 3600, job: Real(prune_security_tables) },
     ]
 }
 

@@ -6,7 +6,7 @@
 use sea_orm::{ConnectionTrait, DatabaseConnection, Statement};
 use std::collections::HashSet;
 
-use crate::{traits::Embedder, vectors, Result};
+use crate::{vectors, Result};
 
 pub struct RecoHitV2 {
     pub variant_id: i32,
@@ -19,10 +19,9 @@ pub struct RecoHitV2 {
 /// Recommender v2: co-occurrence first (proven purchase signal), embedding
 /// similarity as backfill (cold-start / thin-order coverage). Scores are
 /// f64 throughout; the gRPC contract already carries `score` as double.
-#[tracing::instrument(skip(db, embedder))]
+#[tracing::instrument(skip(db))]
 pub async fn recommend_v2(
     db: &DatabaseConnection,
-    embedder: &impl Embedder,
     variant_id: i32,
     channel_slug: &str,
     limit: u64,
