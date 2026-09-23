@@ -29,7 +29,7 @@ use serde_json::json;
 use uuid::Uuid;
 
 use crate::{
-    entities::{order_order, payment_transactionevent, payment_transactionitem},
+    entities::{order_order, payment_payment, payment_transactionevent, payment_transactionitem},
     DbError, Result,
 };
 
@@ -836,4 +836,401 @@ pub async fn cancel(
 ) -> Result<TxnView> {
     use saleor_rustify_core::psp::ManualPsp;
     Ok(execute_via(db, transaction_id, PspAction::Cancel, amount, idempotency_key, &ManualPsp, None, None).await?.txn)
+}
+
+/// Django `transactionUpdate` money path (`create_manual_adjustment_events`
+/// parity): increases land as SUCCESS delta events, authorization moves
+/// absolutely via AUTHORIZATION_ADJUSTMENT (cutoff semantics in recalc).
+/// Decreases are rejected — money moves down only through the refund/void
+/// flows, exactly like Django's validation.
+/// All amounts must match the item currency (INCORRECT_CURRENCY otherwise).
+#[derive(Debug, Default)]
+pub struct AmountTargets {
+    pub authorized: Option<Decimal>,
+    pub charged: Option<Decimal>,
+    pub refunded: Option<Decimal>,
+    pub canceled: Option<Decimal>,
+}
+
+pub async fn apply_amount_targets(
+    db: &DatabaseConnection,
+    transaction_id: i32,
+    targets: &AmountTargets,
+    currency: &str,
+    idempotency_key: &str,
+) -> Result<TxnView> {
+    let cur = view(db, transaction_id).await?;
+    if cur.currency != currency {
+        return Err(gateway_err("incorrect currency"));
+    }
+    let tag = |s: &str| format!("{idempotency_key}-{s}");
+    if let Some(t) = targets.authorized {
+        if t != cur.authorized {
+            if t < Decimal::ZERO {
+                return Err(gateway_err("authorized amount must be >= 0"));
+            }
+            // First authorization is a SUCCESS; later moves are absolute
+            // ADJUSTMENTs (Django switches on prior SUCCESS existence).
+            let has_success: bool = payment_transactionevent::Entity::find()
+                .filter(payment_transactionevent::Column::TransactionId.eq(transaction_id))
+                .filter(payment_transactionevent::Column::Type.eq("authorization_success".to_string()))
+                .one(db)
+                .await?
+                .is_some();
+            let (ty, amt) = if has_success {
+                ("authorization_adjustment", t)
+            } else {
+                ("authorization_success", t)
+            };
+            report_event(
+                db,
+                transaction_id,
+                &NewEvent {
+                    event_type: ty.into(),
+                    amount: amt,
+                    currency: cur.currency.clone(),
+                    psp_reference: None,
+                    message: "manual adjustment".into(),
+                    idempotency_key: Some(tag("auth")),
+                    include_in_calculations: true,
+                    related_granted_refund_id: None,
+                    external_url: None,
+                },
+            )
+            .await?;
+        }
+    }
+    // Additive families: deltas as SUCCESS events; shrinkage rejected.
+    for (family, target, current) in [
+        ("charge", targets.charged, view(db, transaction_id).await?.charged),
+        ("refund", targets.refunded, view(db, transaction_id).await?.refunded),
+        ("cancel", targets.canceled, view(db, transaction_id).await?.canceled),
+    ] {
+        let Some(t) = target else { continue };
+        if t < Decimal::ZERO {
+            return Err(gateway_err(format!("{family} amount must be >= 0")));
+        }
+        if t < current {
+            return Err(gateway_err(format!(
+                "{family} cannot be reduced via update; use the refund/void flows"
+            )));
+        }
+        if t > current {
+            report_event(
+                db,
+                transaction_id,
+                &NewEvent {
+                    event_type: format!("{family}_success"),
+                    amount: t - current,
+                    currency: cur.currency.clone(),
+                    psp_reference: None,
+                    message: "manual adjustment".into(),
+                    idempotency_key: Some(tag(family)),
+                    include_in_calculations: true,
+                    related_granted_refund_id: None,
+                    external_url: None,
+                },
+            )
+            .await?;
+        }
+    }
+    view(db, transaction_id).await
+}
+
+/// Scalar patch for `transactionUpdate` (Django `construct_instance` subset
+/// that is safe without app context): name/message/pspReference (globally
+/// unique, like Django's UNIQUE check), available actions (deduped),
+/// metadata merge.
+#[derive(Debug, Default)]
+pub struct ItemPatch {
+    pub name: Option<String>,
+    pub message: Option<String>,
+    pub psp_reference: Option<String>,
+    pub available_actions: Option<Vec<String>>,
+    pub metadata: Option<serde_json::Value>,
+    pub private_metadata: Option<serde_json::Value>,
+}
+
+pub async fn update_transaction_scalars(
+    db: &impl sea_orm::ConnectionTrait,
+    transaction_id: i32,
+    patch: &ItemPatch,
+) -> Result<()> {
+    use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter};
+    if let Some(r) = patch.psp_reference.as_ref() {
+        let clash = payment_transactionitem::Entity::find()
+            .filter(payment_transactionitem::Column::PspReference.eq(r.clone()))
+            .filter(payment_transactionitem::Column::Id.ne(transaction_id))
+            .one(db)
+            .await?
+            .is_some();
+        if clash {
+            return Err(gateway_err("transaction with provided pspReference already exists"));
+        }
+    }
+    let Some(m) = payment_transactionitem::Entity::find_by_id(transaction_id).one(db).await?
+    else {
+        return Err(DbError::SeaOrm(sea_orm::DbErr::RecordNotFound(transaction_id.to_string())));
+    };
+    let cur_md = serde_json::to_value(&m.metadata).unwrap_or(serde_json::Value::Null);
+    let cur_pmd = serde_json::to_value(&m.private_metadata).unwrap_or(serde_json::Value::Null);
+    let mut am: payment_transactionitem::ActiveModel = m.into();
+    if let Some(v) = patch.name.as_ref() {
+        am.name = Set(Some(v.clone()));
+    }
+    if let Some(v) = patch.message.as_ref() {
+        am.message = Set(Some(v.clone()));
+    }
+    if patch.psp_reference.is_some() {
+        am.psp_reference = Set(patch.psp_reference.clone());
+    }
+    if let Some(v) = patch.available_actions.as_ref() {
+        let mut ded: Vec<String> = v.clone();
+        ded.sort();
+        ded.dedup();
+        am.available_actions = Set(ded);
+    }
+    if let Some(u) = patch.metadata.as_ref() {
+        am.metadata = Set(merge_json(&cur_md, u));
+    }
+    if let Some(u) = patch.private_metadata.as_ref() {
+        am.private_metadata = Set(merge_json(&cur_pmd, u));
+    }
+    am.update(db).await?;
+    Ok(())
+}
+
+fn merge_json(cur: &serde_json::Value, upd: &serde_json::Value) -> serde_json::Value {
+    let mut base = cur.as_object().cloned().unwrap_or_default();
+    if let Some(u) = upd.as_object() {
+        for (k, v) in u {
+            base.insert(k.clone(), v.clone());
+        }
+    }
+    serde_json::Value::Object(base)
+}
+
+/// Staff/app requested action on a transaction (Django
+/// `transactionRequestAction`): CHARGE/REFUND/CANCEL through the given PSP.
+/// Cancel ignores the amount; charge/refund move real money via execute_via
+/// guards (never above remainder).
+pub async fn request_action(
+    db: &DatabaseConnection,
+    transaction_id: i32,
+    action: PspAction,
+    amount: Decimal,
+    idempotency_key: &str,
+    psp: &dyn Psp,
+    message: Option<String>,
+) -> Result<TxnView> {
+    // Cancel voids the whole authorization: a zero amount means "all of it".
+    let amount = if matches!(action, PspAction::Cancel) && amount <= Decimal::ZERO {
+        view(db, transaction_id).await?.authorized
+    } else {
+        amount
+    };
+    execute_via(db, transaction_id, action, amount, idempotency_key, psp, None, None).await?;
+    if let Some(msg) = message.filter(|m| !m.trim().is_empty()) {
+        // Annotate the request event (Django surfaces refundReason this way).
+        use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QueryOrder};
+        if let Some(ev) = payment_transactionevent::Entity::find()
+            .filter(payment_transactionevent::Column::TransactionId.eq(transaction_id))
+            .filter(payment_transactionevent::Column::IdempotencyKey.eq(idempotency_key.to_string()))
+            .order_by_desc(payment_transactionevent::Column::Id)
+            .one(db)
+            .await?
+        {
+            let mut am: payment_transactionevent::ActiveModel = ev.into();
+            am.message = Set(Some(msg));
+            use sea_orm::ActiveModelTrait;
+            am.update(db).await?;
+        }
+    }
+    Ok(view(db, transaction_id).await?)
+}
+
+// ---------------------------------------------------------------------------
+// Legacy Payment model actions (paymentCapture/Refund/Void parity)
+// ---------------------------------------------------------------------------
+
+/// Slim legacy-payment view for mutation payloads.
+pub struct LegacyView {
+    pub id: i32,
+    pub gateway: String,
+    pub is_active: bool,
+    pub currency: String,
+    pub total: Decimal,
+    pub captured: Decimal,
+    pub refunded: Decimal,
+    pub charge_status: String,
+}
+
+fn legacy_view(m: &payment_payment::Model, refunded: Decimal) -> LegacyView {
+    LegacyView {
+        id: m.id,
+        gateway: m.gateway.clone(),
+        is_active: m.is_active,
+        currency: m.currency.clone(),
+        total: m.total,
+        captured: m.captured_amount,
+        refunded,
+        charge_status: m.charge_status.clone(),
+    }
+}
+
+/// Cumulative refunds live in `extra_data` (Django keeps them gateway-side;
+/// we keep an honest local counter so repeated partial refunds can't exceed
+/// what was captured).
+fn refunded_so_far(m: &payment_payment::Model) -> Decimal {
+    serde_json::from_str::<serde_json::Value>(&m.extra_data)
+        .ok()
+        .and_then(|v| v.get("refunded").cloned())
+        .and_then(|v| v.as_str().unwrap_or("0").parse::<Decimal>().ok())
+        .unwrap_or(Decimal::ZERO)
+}
+
+fn legacy_status(total: Decimal, captured: Decimal, refunded: Decimal, active: bool) -> String {
+    if !active && captured == Decimal::ZERO {
+        return "cancelled".to_string();
+    }
+    if refunded >= captured && captured > Decimal::ZERO {
+        return "fully-refunded".to_string();
+    }
+    if refunded > Decimal::ZERO {
+        return "partially-refunded".to_string();
+    }
+    if captured >= total && total > Decimal::ZERO {
+        return "fully-charged".to_string();
+    }
+    if captured > Decimal::ZERO {
+        return "partially-charged".to_string();
+    }
+    "not-charged".to_string()
+}
+
+/// Capture up to the uncaptured remainder (Django `paymentCapture`).
+pub async fn capture_legacy_payment(
+    db: &DatabaseConnection,
+    payment_id: i32,
+    amount: Decimal,
+) -> Result<LegacyView> {
+    use sea_orm::{ActiveModelTrait, EntityTrait, TransactionTrait};
+    if amount <= Decimal::ZERO {
+        return Err(gateway_err("capture amount must be > 0"));
+    }
+    let txn = db.begin().await?;
+    let Some(m) = payment_payment::Entity::find_by_id(payment_id)
+        .lock(sea_orm::sea_query::LockType::Update)
+        .one(&txn)
+        .await?
+    else {
+        txn.rollback().await?;
+        return Err(gateway_err("payment not found"));
+    };
+    if !m.is_active {
+        txn.rollback().await?;
+        return Err(gateway_err("payment is not active"));
+    }
+    if m.captured_amount + amount > m.total {
+        txn.rollback().await?;
+        return Err(gateway_err("cannot capture more than the uncaptured remainder"));
+    }
+    let refunded = refunded_so_far(&m);
+    let mut am: payment_payment::ActiveModel = m.into();
+    am.captured_amount = Set(am.captured_amount.clone().unwrap() + amount);
+    let captured = am.captured_amount.clone().unwrap();
+    let total = am.total.clone().unwrap();
+    am.charge_status = Set(legacy_status(total, captured, refunded, true));
+    am.modified_at = Set(chrono::Utc::now().into());
+    let m2 = am.update(&txn).await?;
+    txn.commit().await?;
+    Ok(legacy_view(&m2, refunded))
+}
+
+/// Refund up to captured-minus-refunded (Django `paymentRefund`).
+pub async fn refund_legacy_payment(
+    db: &DatabaseConnection,
+    payment_id: i32,
+    amount: Decimal,
+) -> Result<LegacyView> {
+    use sea_orm::{ActiveModelTrait, EntityTrait, TransactionTrait};
+    if amount <= Decimal::ZERO {
+        return Err(gateway_err("refund amount must be > 0"));
+    }
+    let txn = db.begin().await?;
+    let Some(m) = payment_payment::Entity::find_by_id(payment_id)
+        .lock(sea_orm::sea_query::LockType::Update)
+        .one(&txn)
+        .await?
+    else {
+        txn.rollback().await?;
+        return Err(gateway_err("payment not found"));
+    };
+    let refunded = refunded_so_far(&m);
+    if refunded + amount > m.captured_amount {
+        txn.rollback().await?;
+        return Err(gateway_err("cannot refund more than captured-minus-refunded"));
+    }
+    let refunded = refunded + amount;
+    let mut extra: serde_json::Value =
+        serde_json::from_str(&m.extra_data).unwrap_or(serde_json::Value::Null);
+    if !extra.is_object() {
+        extra = serde_json::json!({});
+    }
+    extra["refunded"] = serde_json::Value::String(refunded.to_string());
+    let mut am: payment_payment::ActiveModel = m.into();
+    am.extra_data = Set(extra.to_string());
+    am.charge_status = Set(legacy_status(am.total.clone().unwrap(), am.captured_amount.clone().unwrap(), refunded, am.is_active.clone().unwrap()));
+    am.modified_at = Set(chrono::Utc::now().into());
+    let m2 = am.update(&txn).await?;
+    txn.commit().await?;
+    Ok(legacy_view(&m2, refunded))
+}
+
+/// Void a pre-auth (Django `paymentVoid`: only before anything captured).
+pub async fn void_legacy_payment(db: &DatabaseConnection, payment_id: i32) -> Result<LegacyView> {
+    use sea_orm::{ActiveModelTrait, EntityTrait, TransactionTrait};
+    let txn = db.begin().await?;
+    let Some(m) = payment_payment::Entity::find_by_id(payment_id)
+        .lock(sea_orm::sea_query::LockType::Update)
+        .one(&txn)
+        .await?
+    else {
+        txn.rollback().await?;
+        return Err(gateway_err("payment not found"));
+    };
+    if m.captured_amount > Decimal::ZERO {
+        txn.rollback().await?;
+        return Err(gateway_err("cannot void a captured payment; refund instead"));
+    }
+    if !m.is_active {
+        txn.rollback().await?;
+        return Err(gateway_err("payment is not active"));
+    }
+    let refunded = refunded_so_far(&m);
+    let mut am: payment_payment::ActiveModel = m.into();
+    am.is_active = Set(false);
+    am.charge_status = Set("cancelled".to_string());
+    am.modified_at = Set(chrono::Utc::now().into());
+    let m2 = am.update(&txn).await?;
+    txn.commit().await?;
+    Ok(legacy_view(&m2, refunded))
+}
+
+/// PSP-level idempotency probe: has this (transaction, psp_reference, type)
+/// event been recorded? Backs `transactionEventReport.alreadyProcessed`.
+pub async fn has_event(
+    db: &impl sea_orm::ConnectionTrait,
+    transaction_id: i32,
+    psp_reference: &str,
+    event_type: &str,
+) -> Result<bool> {
+    use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
+    Ok(payment_transactionevent::Entity::find()
+        .filter(payment_transactionevent::Column::TransactionId.eq(transaction_id))
+        .filter(payment_transactionevent::Column::PspReference.eq(psp_reference.to_string()))
+        .filter(payment_transactionevent::Column::Type.eq(event_type.to_string()))
+        .one(db)
+        .await?
+        .is_some())
 }

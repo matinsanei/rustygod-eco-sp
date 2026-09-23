@@ -29847,13 +29847,6 @@ impl GenMutation {
 
     }
 
-    #[graphql(name = "transactionRequestAction")]
-    async fn transaction_request_action(&self, #[graphql(name = "actionType")] _arg_action_type: TransactionActionEnum, #[graphql(name = "amount")] _arg_amount: Option<GenPositiveDecimal>, #[graphql(name = "id")] _arg_id: Option<ID>, #[graphql(name = "refundReason")] _arg_refund_reason: Option<String>, #[graphql(name = "refundReasonReference")] _arg_refund_reason_reference: Option<ID>, #[graphql(name = "token")] _arg_token: Option<String>) -> Option<TransactionRequestAction> {
-
-        Some(TransactionRequestAction { transaction: None, errors: vec![] })
-
-    }
-
     #[graphql(name = "transactionRequestRefundForGrantedRefund")]
     async fn transaction_request_refund_for_granted_refund(&self, #[graphql(name = "grantedRefundId")] _arg_granted_refund_id: ID, #[graphql(name = "id")] _arg_id: Option<ID>, #[graphql(name = "token")] _arg_token: Option<String>) -> Option<TransactionRequestRefundForGrantedRefund> {
 

@@ -19,11 +19,12 @@ Legend: `[x]` real + tested · `[~]` exists but thin/stub · `[ ]` missing.
 - [x] Custom old-style equivalents (`createCheckout`, `checkoutAddLines`, `checkoutComplete`…)
 
 ## 2. Transactions / payments (real money movement)
-- [ ] `transactionInitialize/Process/Update/EventReport`, `transactionRequestAction`
-- [ ] `paymentInitialize/Capture/Refund/Void/CheckBalance`, gateway init + tokenization
-- [ ] `payment(s)`, `transactions` queries
-- [~] `transactionAuthorize/Charge` (manual ledger only, `handle_payments`-gated, no PSP call)
-- [~] Stripe skeleton (mock tests only); Adyen missing
+- [x] `transactionUpdate` (Django delta/adjustment semantics incl. psp-less cutoff fix), `transactionEventReport` (idempotent, alreadyProcessed), `transactionRequestAction` (CHARGE/REFUND/CANCEL via manual or Stripe PSP)
+- [x] `paymentCapture/Refund/Void` (legacy ledger with guards + cumulative refund counter), `paymentCheckBalance` (honest unsupported-gateway error, like Django without plugin)
+- [x] `payment(s)`, `transactions` queries
+- [x] `transactionAuthorize/Charge` (manual ledger, `handle_payments`-gated)
+- [ ] `transactionInitialize/Process`, `paymentInitialize`, gateway init + tokenization (PSP frontend flows)
+- [~] Stripe skeleton (mock tests only) + live routing in requestAction when app names stripe; Adyen missing
 
 ## 3. Legacy sales (`sale*`)
 - [ ] `saleCreate/Update/Delete/BulkDelete`, `saleCataloguesAdd/Remove`, `saleChannelListingUpdate`

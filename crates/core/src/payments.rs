@@ -119,13 +119,13 @@ pub fn recalculate(events: &[CalcEvent]) -> Buckets {
     ordered.sort_by(|a, b| (a.created_at, a.id).cmp(&(b.created_at, b.id)));
 
     // Newest-adjustment cutoff over the whole authorize family
-    // (`_get_authorize_events`): authorize events older than the newest
-    // adjustment are skipped; the adjustment itself always survives.
-    // PSP-less events never enter the authorize list in Django (they go
-    // straight to without_psp_reference), so the cutoff skips them too.
+    // (Django `_get_authorize_events`): authorize events older than the
+    // newest adjustment are skipped; the adjustment itself always survives.
+    // Django does NOT require a psp reference on the adjustment — manual
+    // adjustments from transactionUpdate cut too.
     let newest_adj = ordered
         .iter()
-        .filter(|e| e.event_type == "authorization_adjustment" && e.psp_reference.is_some())
+        .filter(|e| e.event_type == "authorization_adjustment")
         .map(|e| (e.created_at, e.id))
         .max();
     let live = |e: &CalcEvent| -> bool {

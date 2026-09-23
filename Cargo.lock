@@ -3697,6 +3697,7 @@ dependencies = [
  "saleor-rustify-ai",
  "saleor-rustify-core",
  "saleor-rustify-db",
+ "saleor-rustify-psp",
  "sea-orm",
  "serde",
  "serde_json",

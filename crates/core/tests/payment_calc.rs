@@ -109,14 +109,14 @@ fn pspless_success_adds_without_previous_move() {
 
 #[test]
 fn pspless_adjustment_assigns_first_groups_add_after() {
-    // Order matters (Django's too): without_psp handling runs BEFORE the
-    // grouped recalcs, so a psp-less adjustment assigns 25 and the grouped
-    // success still adds 100 on top. PSP-less adjustments never cut.
+    // Django `_get_authorize_events`: the newest AUTHORIZATION_ADJUSTMENT
+    // cuts older authorize events whether or not it carries a psp
+    // reference — the old success dies, the adjustment assigns 25.
     let b = recalculate(&[
         ev_at("authorization_success", "100.00", Some("psp1"), 1000, 1),
         ev_at("authorization_adjustment", "25.00", None, 1001, 2),
     ]);
-    assert_eq!(b.authorized, dec("125.00"));
+    assert_eq!(b.authorized, dec("25.00"));
 }
 
 #[test]
