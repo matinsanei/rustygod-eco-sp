@@ -536,6 +536,162 @@ fn merr(field: Option<String>, message: String) -> gen::MenuError {
     gen::MenuError { field, message: Some(message), code: None }
 }
 
+fn perr(field: Option<String>, message: String) -> gen::PageError {
+    gen::PageError { field, message: Some(message), code: None, attributes: vec![] }
+}
+
+#[derive(SimpleObject, Clone)]
+#[graphql(name = "PageReorderAttributeValues")]
+pub struct GqlPageReorderAttributeValues {
+    pub page: Option<gen::Page>,
+    pub errors: Vec<gen::PageError>,
+}
+
+/// One-of url/category/collection/page → db target.
+fn menu_target(
+    url: &Option<String>,
+    category: Option<&ID>,
+    collection: Option<&ID>,
+    page: Option<&ID>,
+) -> saleor_rustify_db::content_writes::MenuItemTarget {
+    saleor_rustify_db::content_writes::MenuItemTarget {
+        url: url.clone().filter(|s| !s.trim().is_empty()),
+        category_id: category.and_then(|c| saleor_rustify_db::catalog::parse_gid(&c.0)),
+        collection_id: collection.and_then(|c| saleor_rustify_db::catalog::parse_gid(&c.0)),
+        page_id: page.and_then(|p| saleor_rustify_db::catalog::parse_gid(&p.0)),
+    }
+}
+
+/// AttributeValueInput list → db page-attribute inputs (plain values only;
+/// file/reference/numeric variants are a documented gap).
+fn page_attrs(
+    attrs: &Option<Vec<gen::AttributeValueInput>>,
+) -> std::result::Result<Vec<saleor_rustify_db::content_writes::PageAttrInput>, String> {
+    let mut out = vec![];
+    for a in attrs.clone().unwrap_or_default() {
+        let aid = a.id.as_ref().and_then(|i| saleor_rustify_db::catalog::parse_gid(&i.0)).unwrap_or(-1);
+        if aid < 0 {
+            if let Some(ext) = a.external_reference.as_ref() {
+                let _ = ext;
+                return Err("attribute externalReference lookup is not supported".to_string());
+            }
+            return Err("bad attribute id".to_string());
+        }
+        out.push(saleor_rustify_db::content_writes::PageAttrInput {
+            attribute_id: aid,
+            values: a.values.clone().unwrap_or_default(),
+        });
+    }
+    Ok(out)
+}
+
+/// Menu assembly (root items with their subtrees).
+async fn assemble_menu(db: &sea_orm::DatabaseConnection, mid: i32) -> Result<Option<gen::Menu>, Error> {
+    use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QuerySelect};
+    let name: Option<String> = saleor_rustify_db::entities::menu_menu::Entity::find_by_id(mid)
+        .select_only()
+        .column(saleor_rustify_db::entities::menu_menu::Column::Name)
+        .into_tuple()
+        .one(db)
+        .await
+        .map_err(|e| Error::new(e.to_string()))?
+        .unwrap_or(None);
+    let Some(name) = name else { return Ok(None) };
+    let roots: Vec<i32> = saleor_rustify_db::entities::menu_menuitem::Entity::find()
+        .select_only()
+        .column(saleor_rustify_db::entities::menu_menuitem::Column::Id)
+        .filter(saleor_rustify_db::entities::menu_menuitem::Column::MenuId.eq(mid))
+        .filter(saleor_rustify_db::entities::menu_menuitem::Column::ParentId.is_null())
+        .into_tuple()
+        .all(db)
+        .await
+        .map_err(|e| Error::new(e.to_string()))?;
+    let mut items = vec![];
+    for rid in roots {
+        if let Some(n) = menu_item_node(db, rid).await.map_err(Error::new)? {
+            items.push(n);
+        }
+    }
+    Ok(Some(gen::Menu {
+        id: Some(ID(crate::common::gid("Menu", mid))),
+        private_metadata: vec![],
+        metadata: vec![],
+        name: Some(name),
+        items,
+    }))
+}
+
+/// Page assembly (scalars + content + page type ref).
+async fn assemble_page(db: &sea_orm::DatabaseConnection, pid: i32) -> Result<gen::Page, Error> {
+    use sea_orm::EntityTrait;
+    let p = saleor_rustify_db::entities::page_page::Entity::find_by_id(pid)
+        .one(db)
+        .await
+        .map_err(|e| Error::new(e.to_string()))?
+        .ok_or_else(|| Error::new("page not found"))?;
+    Ok(gen::Page {
+        id: Some(ID(crate::common::gid("Page", pid))),
+        private_metadata: vec![],
+        metadata: vec![],
+        seo_title: p.seo_title.clone(),
+        seo_description: p.seo_description.clone(),
+        title: Some(p.title.clone()),
+        content: p.content.clone().and_then(|v| v.as_str().map(|s| gen::GenJSONString(s.to_string()))),
+        published_at: p.published_at.map(|d| d.into()),
+        is_published: Some(p.is_published),
+        slug: Some(p.slug.clone()),
+        page_type: assemble_page_type(db, p.page_type_id).await?,
+        attributes: vec![],
+    })
+}
+
+/// Page-type assembly (attributes embedded via the catalog assembler).
+async fn assemble_page_type(db: &sea_orm::DatabaseConnection, ptid: i32) -> Result<Option<gen::PageType>, Error> {
+    use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QueryOrder, QuerySelect};
+    let row: Option<(String, String)> = saleor_rustify_db::entities::page_pagetype::Entity::find_by_id(ptid)
+        .select_only()
+        .column(saleor_rustify_db::entities::page_pagetype::Column::Name)
+        .column(saleor_rustify_db::entities::page_pagetype::Column::Slug)
+        .into_tuple()
+        .one(db)
+        .await
+        .map_err(|e| Error::new(e.to_string()))?;
+    let Some((name, slug)) = row else { return Ok(None) };
+    let aids: Vec<i32> = saleor_rustify_db::entities::attribute_attributepage::Entity::find()
+        .select_only()
+        .column(saleor_rustify_db::entities::attribute_attributepage::Column::AttributeId)
+        .filter(saleor_rustify_db::entities::attribute_attributepage::Column::PageTypeId.eq(ptid))
+        .order_by_asc(saleor_rustify_db::entities::attribute_attributepage::Column::SortOrder)
+        .into_tuple()
+        .all(db)
+        .await
+        .map_err(|e| Error::new(e.to_string()))?;
+    let mut attributes = vec![];
+    for aid in aids {
+        if let Some(a) = crate::catalog::assemble_attribute(db, aid).await.map_err(Error::new)? {
+            attributes.push(Box::new(a));
+        }
+    }
+    let has_pages: bool = saleor_rustify_db::entities::page_page::Entity::find()
+        .select_only()
+        .column(saleor_rustify_db::entities::page_page::Column::Id)
+        .filter(saleor_rustify_db::entities::page_page::Column::PageTypeId.eq(ptid))
+        .into_tuple::<i32>()
+        .one(db)
+        .await
+        .map_err(|e| Error::new(e.to_string()))?
+        .is_some();
+    Ok(Some(gen::PageType {
+        id: Some(ID(crate::common::gid("PageType", ptid))),
+        private_metadata: vec![],
+        metadata: vec![],
+        name: Some(name),
+        slug: Some(slug),
+        attributes,
+        has_pages: Some(has_pages),
+    }))
+}
+
 #[derive(SimpleObject, Clone)]
 pub struct GqlTaxExemptionManageError {
     pub field: Option<String>,
@@ -1421,20 +1577,10 @@ impl CommerceQuery {
         let lim = first.unwrap_or(100).clamp(1, 100) as usize;
         let rows = saleor_rustify_db::commerce::list_pages(db).await.map_err(|e| Error::new(e.to_string()))?;
         let total = rows.len() as i32;
-        let edges = rows.into_iter().skip(off).take(lim).map(|p| gen::PageCountableEdge { node: Some(gen::Page {
-            id: Some(ID(crate::common::gid("Page", p.id))),
-            private_metadata: vec![],
-            metadata: vec![],
-            seo_title: None,
-            seo_description: None,
-            title: Some(p.title),
-            content: None,
-            published_at: None,
-            is_published: Some(p.is_published),
-            slug: Some(p.slug),
-            page_type: None,
-            attributes: vec![],
-        })}).collect();
+        let mut edges = vec![];
+        for p in rows.into_iter().skip(off).take(lim) {
+            edges.push(gen::PageCountableEdge { node: Some(assemble_page(db, p.id).await?) });
+        }
         Ok(gen::PageCountableConnection { total_count: Some(total), edges, page_info: Some(crate::common::PageInfo { has_next_page: false, has_previous_page: false, start_cursor: None, end_cursor: None }) })
     }
 
@@ -2373,7 +2519,6 @@ impl CommerceMutation {
         let _ = crate::account::require_perm(ctx, "manage_discounts").await?;
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
         let rid = crate::common::parse_uuid_gid(&id.0).ok_or_else(|| Error::new("bad rule id"))?;
-        let pid = rule_promotion(db, rid).await.unwrap_or(rid);
         match saleor_rustify_db::promo_writes::delete_rule(db, rid).await {
             Ok(()) => Ok(gen::PromotionRuleDelete {
                 errors: vec![],
@@ -2543,6 +2688,307 @@ impl CommerceMutation {
                 count: Some(0),
                 errors: vec![gen::VoucherCodeBulkDeleteError { path: None, message: Some(e.to_string()), code: None }],
             }),
+        }
+    }
+
+    /// Create a menu (Django `menuCreate`).
+    async fn menu_create(&self, ctx: &Context<'_>, input: gen::MenuCreateInput) -> Result<gen::MenuCreate> {
+        let _ = crate::account::require_perm(ctx, "manage_menus").await?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let err = |m: String| gen::MenuCreate { errors: vec![merr(None, m)], menu: None };
+        let slug = input.slug.clone().filter(|s| !s.trim().is_empty());
+        match saleor_rustify_db::content_writes::create_menu(db, &input.name, slug).await {
+            Ok(mid) => Ok(gen::MenuCreate { errors: vec![], menu: assemble_menu(db, mid).await? }),
+            Err(e) => Ok(err(e.to_string())),
+        }
+    }
+
+    /// Update a menu (Django `menuUpdate`).
+    async fn menu_update(&self, ctx: &Context<'_>, id: ID, input: gen::MenuInput) -> Result<gen::MenuUpdate> {
+        let _ = crate::account::require_perm(ctx, "manage_menus").await?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let mid = saleor_rustify_db::catalog::parse_gid(&id.0).unwrap_or(-1);
+        match saleor_rustify_db::content_writes::update_menu(db, mid, input.name.clone(), input.slug.clone()).await {
+            Ok(()) => Ok(gen::MenuUpdate { errors: vec![] }),
+            Err(e) => Ok(gen::MenuUpdate { errors: vec![merr(None, e.to_string())] }),
+        }
+    }
+
+    /// Delete a menu with its tree (Django `menuDelete`).
+    async fn menu_delete(&self, ctx: &Context<'_>, id: ID) -> Result<gen::MenuDelete> {
+        let _ = crate::account::require_perm(ctx, "manage_menus").await?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let mid = saleor_rustify_db::catalog::parse_gid(&id.0).unwrap_or(-1);
+        match saleor_rustify_db::content_writes::delete_menu(db, mid).await {
+            Ok(()) => Ok(gen::MenuDelete { errors: vec![] }),
+            Err(e) => Ok(gen::MenuDelete { errors: vec![merr(None, e.to_string())] }),
+        }
+    }
+
+    /// Bulk menu delete (survivors commit).
+    async fn menu_bulk_delete(&self, ctx: &Context<'_>, ids: Vec<ID>) -> Result<gen::MenuBulkDelete> {
+        let _ = crate::account::require_perm(ctx, "manage_menus").await?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let mut errors = vec![];
+        for i in &ids {
+            let mid = saleor_rustify_db::catalog::parse_gid(&i.0).unwrap_or(-1);
+            if let Err(e) = saleor_rustify_db::content_writes::delete_menu(db, mid).await {
+                errors.push(merr(Some(i.0.clone()), e.to_string()));
+            }
+        }
+        Ok(gen::MenuBulkDelete { errors })
+    }
+
+    /// Create a menu item (Django `menuItemCreate` — one target max).
+    async fn menu_item_create(&self, ctx: &Context<'_>, input: gen::MenuItemCreateInput) -> Result<gen::MenuItemCreate> {
+        let _ = crate::account::require_perm(ctx, "manage_menus").await?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let err = |m: String| gen::MenuItemCreate { errors: vec![merr(None, m)], menu_item: None };
+        let mid = saleor_rustify_db::catalog::parse_gid(&input.menu.0).unwrap_or(-1);
+        let target = menu_target(&input.url, input.category.as_ref(), input.collection.as_ref(), input.page.as_ref());
+        let parent = input.parent.as_ref().and_then(|p| saleor_rustify_db::catalog::parse_gid(&p.0));
+        match saleor_rustify_db::content_writes::create_menu_item(db, mid, &input.name, &target, parent).await {
+            Ok(iid) => Ok(gen::MenuItemCreate {
+                errors: vec![],
+                menu_item: menu_item_node(db, iid).await.map_err(Error::new)?,
+            }),
+            Err(e) => Ok(err(e.to_string())),
+        }
+    }
+
+    /// Update a menu item (Django `menuItemUpdate`).
+    async fn menu_item_update(&self, ctx: &Context<'_>, id: ID, input: gen::MenuItemInput) -> Result<gen::MenuItemUpdate> {
+        let _ = crate::account::require_perm(ctx, "manage_menus").await?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let err = |m: String| gen::MenuItemUpdate { errors: vec![merr(None, m)], menu_item: None };
+        let iid = saleor_rustify_db::catalog::parse_gid(&id.0).unwrap_or(-1);
+        let target = menu_target(&input.url, input.category.as_ref(), input.collection.as_ref(), input.page.as_ref());
+        let touched = input.name.is_some() || input.url.is_some() || input.category.is_some() || input.collection.is_some() || input.page.is_some();
+        if !touched {
+            return Ok(err("nothing to update".into()));
+        }
+        match saleor_rustify_db::content_writes::update_menu_item(db, iid, input.name.clone(), &target, input.url.is_some()).await {
+            Ok(_) => Ok(gen::MenuItemUpdate {
+                errors: vec![],
+                menu_item: menu_item_node(db, iid).await.map_err(Error::new)?,
+            }),
+            Err(e) => Ok(err(e.to_string())),
+        }
+    }
+
+    /// Move items (Django `menuItemMove`): reparent + resort + rebalance.
+    async fn menu_item_move(&self, ctx: &Context<'_>, menu: ID, moves: Vec<gen::MenuItemMoveInput>) -> Result<gen::MenuItemMove> {
+        let _ = crate::account::require_perm(ctx, "manage_menus").await?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let mid = saleor_rustify_db::catalog::parse_gid(&menu.0).unwrap_or(-1);
+        let mut mv = vec![];
+        for m in moves {
+            let iid = saleor_rustify_db::catalog::parse_gid(&m.item_id.0).unwrap_or(-1);
+            if iid < 0 {
+                return Ok(gen::MenuItemMove { errors: vec![merr(None, "bad item id".into())] });
+            }
+            mv.push(saleor_rustify_db::content_writes::MenuMove {
+                item_id: iid,
+                parent_id: m.parent_id.as_ref().and_then(|p| saleor_rustify_db::catalog::parse_gid(&p.0)),
+                sort_order: m.sort_order,
+            });
+        }
+        match saleor_rustify_db::content_writes::move_menu_items(db, mid, mv).await {
+            Ok(()) => Ok(gen::MenuItemMove { errors: vec![] }),
+            Err(e) => Ok(gen::MenuItemMove { errors: vec![merr(None, e.to_string())] }),
+        }
+    }
+
+    /// Create a page (Django `pageCreate`).
+    async fn page_create(&self, ctx: &Context<'_>, input: gen::PageCreateInput) -> Result<gen::PageCreate> {
+        let _ = crate::account::require_perm(ctx, "manage_pages").await?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let err = |m: String| gen::PageCreate { errors: vec![perr(None, m)], page: None };
+        let ptid = saleor_rustify_db::catalog::parse_gid(&input.page_type.0).unwrap_or(-1);
+        let attrs = match page_attrs(&input.attributes) {
+            Ok(a) => a,
+            Err(e) => return Ok(err(e)),
+        };
+        let content = input.content.as_ref().map(|c| serde_json::Value::String(c.0.clone()));
+        match saleor_rustify_db::content_writes::create_page(
+            db, ptid, input.slug.clone(), input.title.clone(), content,
+            input.is_published.unwrap_or(false),
+            input.published_at.map(|d| d.with_timezone(&chrono::Utc)),
+            input.seo.as_ref().and_then(|s| s.title.clone()),
+            input.seo.as_ref().and_then(|s| s.description.clone()),
+            attrs,
+        ).await {
+            Ok(pid) => Ok(gen::PageCreate { errors: vec![], page: Some(assemble_page(db, pid).await?) }),
+            Err(e) => Ok(err(e.to_string())),
+        }
+    }
+
+    /// Update a page (Django `pageUpdate`).
+    async fn page_update(&self, ctx: &Context<'_>, id: ID, input: gen::PageInput) -> Result<gen::PageUpdate> {
+        let _ = crate::account::require_perm(ctx, "manage_pages").await?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let err = |m: String| gen::PageUpdate { errors: vec![perr(None, m)], page: None };
+        let pid = saleor_rustify_db::catalog::parse_gid(&id.0).unwrap_or(-1);
+        let attrs = match page_attrs(&input.attributes) {
+            Ok(a) => Some(a),
+            Err(e) => return Ok(err(e)),
+        };
+        let content = input.content.as_ref().map(|c| serde_json::Value::String(c.0.clone()));
+        match saleor_rustify_db::content_writes::update_page(
+            db, pid, input.slug.clone(), input.title.clone(), content,
+            input.is_published,
+            input.published_at.map(|d| d.with_timezone(&chrono::Utc)),
+            input.seo.as_ref().and_then(|s| s.title.clone()),
+            input.seo.as_ref().and_then(|s| s.description.clone()),
+            attrs,
+        ).await {
+            Ok(()) => Ok(gen::PageUpdate { errors: vec![], page: Some(assemble_page(db, pid).await?) }),
+            Err(e) => Ok(err(e.to_string())),
+        }
+    }
+
+    /// Delete a page (Django `pageDelete`).
+    async fn page_delete(&self, ctx: &Context<'_>, id: ID) -> Result<gen::PageDelete> {
+        let _ = crate::account::require_perm(ctx, "manage_pages").await?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let pid = saleor_rustify_db::catalog::parse_gid(&id.0).unwrap_or(-1);
+        match saleor_rustify_db::content_writes::delete_page(db, pid).await {
+            Ok(()) => Ok(gen::PageDelete { errors: vec![] }),
+            Err(e) => Ok(gen::PageDelete { errors: vec![perr(None, e.to_string())] }),
+        }
+    }
+
+    /// Bulk page delete (survivors commit).
+    async fn page_bulk_delete(&self, ctx: &Context<'_>, ids: Vec<ID>) -> Result<gen::PageBulkDelete> {
+        let _ = crate::account::require_perm(ctx, "manage_pages").await?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let mut errors = vec![];
+        for i in &ids {
+            let pid = saleor_rustify_db::catalog::parse_gid(&i.0).unwrap_or(-1);
+            if let Err(e) = saleor_rustify_db::content_writes::delete_page(db, pid).await {
+                errors.push(perr(Some(i.0.clone()), e.to_string()));
+            }
+        }
+        Ok(gen::PageBulkDelete { errors })
+    }
+
+    /// Bulk publish toggle (Django `pageBulkPublish`).
+    async fn page_bulk_publish(&self, ctx: &Context<'_>, ids: Vec<ID>, #[graphql(name = "isPublished")] is_published: bool) -> Result<gen::PageBulkPublish> {
+        let _ = crate::account::require_perm(ctx, "manage_pages").await?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let pids: Vec<i32> = ids.iter().filter_map(|i| saleor_rustify_db::catalog::parse_gid(&i.0)).collect();
+        match saleor_rustify_db::content_writes::bulk_publish_pages(db, &pids, is_published).await {
+            Ok(_) => Ok(gen::PageBulkPublish { errors: vec![] }),
+            Err(e) => Ok(gen::PageBulkPublish { errors: vec![perr(None, e.to_string())] }),
+        }
+    }
+
+    /// Assign attributes to a page type (Django `pageAttributeAssign`).
+    async fn page_attribute_assign(&self, ctx: &Context<'_>, #[graphql(name = "attributeIds")] attribute_ids: Vec<ID>, #[graphql(name = "pageTypeId")] page_type_id: ID) -> Result<gen::PageAttributeAssign> {
+        let _ = crate::account::require_perm(ctx, "manage_page_types_and_attributes").await?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let ptid = saleor_rustify_db::catalog::parse_gid(&page_type_id.0).unwrap_or(-1);
+        let aids: Vec<i32> = attribute_ids.iter().filter_map(|a| saleor_rustify_db::catalog::parse_gid(&a.0)).collect();
+        match saleor_rustify_db::content_writes::update_page_type(db, ptid, None, None, aids, vec![]).await {
+            Ok(()) => Ok(gen::PageAttributeAssign { page_type: assemble_page_type(db, ptid).await?, errors: vec![] }),
+            Err(e) => Ok(gen::PageAttributeAssign { page_type: None, errors: vec![perr(None, e.to_string())] }),
+        }
+    }
+
+    /// Unassign attributes from a page type (Django `pageAttributeUnassign`).
+    async fn page_attribute_unassign(&self, ctx: &Context<'_>, #[graphql(name = "attributeIds")] attribute_ids: Vec<ID>, #[graphql(name = "pageTypeId")] page_type_id: ID) -> Result<gen::PageAttributeUnassign> {
+        let _ = crate::account::require_perm(ctx, "manage_page_types_and_attributes").await?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let ptid = saleor_rustify_db::catalog::parse_gid(&page_type_id.0).unwrap_or(-1);
+        let aids: Vec<i32> = attribute_ids.iter().filter_map(|a| saleor_rustify_db::catalog::parse_gid(&a.0)).collect();
+        match saleor_rustify_db::content_writes::update_page_type(db, ptid, None, None, vec![], aids).await {
+            Ok(()) => Ok(gen::PageAttributeUnassign { page_type: assemble_page_type(db, ptid).await?, errors: vec![] }),
+            Err(e) => Ok(gen::PageAttributeUnassign { page_type: None, errors: vec![perr(None, e.to_string())] }),
+        }
+    }
+
+    /// Create a page type (Django `pageTypeCreate`).
+    async fn page_type_create(&self, ctx: &Context<'_>, input: gen::PageTypeCreateInput) -> Result<gen::PageTypeCreate> {
+        let _ = crate::account::require_perm(ctx, "manage_page_types_and_attributes").await?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let err = |m: String| gen::PageTypeCreate { errors: vec![perr(None, m)], page_type: None };
+        let aids: Vec<i32> = input.add_attributes.clone().unwrap_or_default().iter().filter_map(|a| saleor_rustify_db::catalog::parse_gid(&a.0)).collect();
+        match saleor_rustify_db::content_writes::create_page_type(db, input.name.clone(), input.slug.clone(), aids).await {
+            Ok(ptid) => Ok(gen::PageTypeCreate { errors: vec![], page_type: assemble_page_type(db, ptid).await? }),
+            Err(e) => Ok(err(e.to_string())),
+        }
+    }
+
+    /// Update a page type (Django `pageTypeUpdate`).
+    async fn page_type_update(&self, ctx: &Context<'_>, id: Option<ID>, input: gen::PageTypeUpdateInput) -> Result<gen::PageTypeUpdate> {
+        let _ = crate::account::require_perm(ctx, "manage_page_types_and_attributes").await?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let err = |m: String| gen::PageTypeUpdate { errors: vec![perr(None, m)], page_type: None };
+        let ptid = id.as_ref().and_then(|i| saleor_rustify_db::catalog::parse_gid(&i.0)).unwrap_or(-1);
+        let add: Vec<i32> = input.add_attributes.clone().unwrap_or_default().iter().filter_map(|a| saleor_rustify_db::catalog::parse_gid(&a.0)).collect();
+        let remove: Vec<i32> = input.remove_attributes.clone().unwrap_or_default().iter().filter_map(|a| saleor_rustify_db::catalog::parse_gid(&a.0)).collect();
+        match saleor_rustify_db::content_writes::update_page_type(db, ptid, input.name.clone(), input.slug.clone(), add, remove).await {
+            Ok(()) => Ok(gen::PageTypeUpdate { errors: vec![], page_type: assemble_page_type(db, ptid).await? }),
+            Err(e) => Ok(err(e.to_string())),
+        }
+    }
+
+    /// Delete a page type (Django `pageTypeDelete`; pages block).
+    async fn page_type_delete(&self, ctx: &Context<'_>, id: ID) -> Result<gen::PageTypeDelete> {
+        let _ = crate::account::require_perm(ctx, "manage_page_types_and_attributes").await?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let ptid = saleor_rustify_db::catalog::parse_gid(&id.0).unwrap_or(-1);
+        match saleor_rustify_db::content_writes::delete_page_type(db, ptid).await {
+            Ok(()) => Ok(gen::PageTypeDelete { errors: vec![], page_type: None }),
+            Err(e) => Ok(gen::PageTypeDelete { errors: vec![perr(None, e.to_string())], page_type: None }),
+        }
+    }
+
+    /// Bulk page-type delete (survivors commit).
+    async fn page_type_bulk_delete(&self, ctx: &Context<'_>, ids: Vec<ID>) -> Result<gen::PageTypeBulkDelete> {
+        let _ = crate::account::require_perm(ctx, "manage_page_types_and_attributes").await?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let mut errors = vec![];
+        for i in &ids {
+            let ptid = saleor_rustify_db::catalog::parse_gid(&i.0).unwrap_or(-1);
+            if let Err(e) = saleor_rustify_db::content_writes::delete_page_type(db, ptid).await {
+                errors.push(perr(Some(i.0.clone()), e.to_string()));
+            }
+        }
+        Ok(gen::PageTypeBulkDelete { errors })
+    }
+
+    /// Reorder a page type's attributes (Django `pageTypeReorderAttributes`).
+    async fn page_type_reorder_attributes(&self, ctx: &Context<'_>, moves: Vec<gen::ReorderInput>, #[graphql(name = "pageTypeId")] page_type_id: ID) -> Result<gen::PageTypeReorderAttributes> {
+        let _ = crate::account::require_perm(ctx, "manage_page_types_and_attributes").await?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let ptid = saleor_rustify_db::catalog::parse_gid(&page_type_id.0).unwrap_or(-1);
+        let mv: Vec<(i32, i32)> = moves.iter().filter_map(|m| {
+            saleor_rustify_db::catalog::parse_gid(&m.id.0).map(|aid| (aid, m.sort_order.unwrap_or(0)))
+        }).collect();
+        match saleor_rustify_db::content_writes::reorder_page_type_attributes(db, ptid, mv).await {
+            Ok(()) => Ok(gen::PageTypeReorderAttributes { page_type: assemble_page_type(db, ptid).await?, errors: vec![] }),
+            Err(e) => Ok(gen::PageTypeReorderAttributes { page_type: None, errors: vec![perr(None, e.to_string())] }),
+        }
+    }
+
+    /// Reorder one page's attribute values (Django `pageReorderAttributeValues`).
+    async fn page_reorder_attribute_values(
+        &self, ctx: &Context<'_>,
+        #[graphql(name = "attributeId")] attribute_id: ID, moves: Vec<gen::ReorderInput>, #[graphql(name = "pageId")] page_id: ID,
+    ) -> Result<GqlPageReorderAttributeValues> {
+        let _ = crate::account::require_perm(ctx, "manage_pages").await?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let aid = saleor_rustify_db::catalog::parse_gid(&attribute_id.0).unwrap_or(-1);
+        let pid = saleor_rustify_db::catalog::parse_gid(&page_id.0).unwrap_or(-1);
+        // Moves address attribute VALUES (Django's ReorderInput.id on this
+        // mutation is the value id, not the attribute id).
+        let mv: Vec<(i32, i32)> = moves.iter().filter_map(|m| {
+            saleor_rustify_db::catalog::parse_gid(&m.id.0).map(|vid| (vid, m.sort_order.unwrap_or(0)))
+        }).collect();
+        match saleor_rustify_db::content_writes::reorder_page_attribute_values(db, pid, aid, mv).await {
+            Ok(()) => Ok(GqlPageReorderAttributeValues { page: Some(assemble_page(db, pid).await?), errors: vec![] }),
+            Err(e) => Ok(GqlPageReorderAttributeValues { page: None, errors: vec![perr(None, e.to_string())] }),
         }
     }
 
