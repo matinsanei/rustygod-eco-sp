@@ -365,6 +365,103 @@ impl OrderQuery {
         Ok(Some(to_gen_order(db, &h, ls).await))
     }
 
+    /// Storefront order lookup by token (Django `orderByToken`: the token is
+    /// the secret, so this stays permission-free).
+    async fn order_by_token(&self, ctx: &Context<'_>, token: Uuid) -> Result<Option<gen::Order>> {
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let oid: Uuid = token;
+        let Some((h, ls)) = rustygod_db::order_store::get_order_rows(db, oid).await.map_err(|e| Error::new(e.to_string()))? else { return Ok(None) };
+        Ok(Some(to_gen_order(db, &h, ls).await))
+    }
+
+    /// Global order settings (Django resolves these from the channel +
+    /// site rows; we read the default channel, same values Django serves).
+    async fn order_settings(&self, ctx: &Context<'_>) -> Result<Option<gen::OrderSettings>> {
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QuerySelect};
+        use rustygod_db::entities::channel_channel::{Column as CCol, Entity as CEnt};
+        // Slim select: the row carries an INTERVAL column SeaORM cannot decode.
+        let row: Option<(Option<bool>, Option<bool>, Option<i32>, String, bool, Option<i32>)> = CEnt::find()
+            .select_only()
+            .column(CCol::AutomaticallyConfirmAllNewOrders)
+            .column(CCol::AutomaticallyFulfillNonShippableGiftCard)
+            .column(CCol::ExpireOrdersAfter)
+            .column(CCol::OrderMarkAsPaidStrategy)
+            .column(CCol::AllowUnpaidOrders)
+            .column(CCol::DraftOrderLinePriceFreezePeriod)
+            .filter(CCol::Slug.eq("default-channel"))
+            .into_tuple()
+            .one(db).await.map_err(|e| Error::new(e.to_string()))?;
+        let Some((confirm, fulfill, expire, strategy, unpaid, freeze)) = row else {
+            return Err(Error::new("default channel missing"));
+        };
+        // INTERVAL → days via EXTRACT (never decode it into Rust).
+        use sea_orm::{ConnectionTrait, Statement};
+        let days: i32 = db.query_one(Statement::from_string(
+            sea_orm::DatabaseBackend::Postgres,
+            "SELECT EXTRACT(DAY FROM delete_expired_orders_after)::int AS d FROM channel_channel WHERE slug = 'default-channel'".to_string(),
+        )).await.map_err(|e| Error::new(e.to_string()))?
+        .and_then(|r| r.try_get::<i32>("", "d").ok()).unwrap_or(30);
+        let strat = match strategy.as_str() {
+            "payment_flow" => "PAYMENT_FLOW".to_string(),
+            _ => "TRANSACTION_FLOW".to_string(),
+        };
+        Ok(Some(gen::OrderSettings {
+            automatically_confirm_all_new_orders: confirm,
+            automatically_fulfill_non_shippable_gift_card: fulfill,
+            expire_orders_after: expire,
+            mark_as_paid_strategy: Some(strat),
+            delete_expired_orders_after: Some(days),
+            allow_unpaid_orders: Some(unpaid),
+        }))
+    }
+
+    /// Top-selling variants in a period (Django `reportProductSales`):
+    /// order lines summed per variant, most units first. Saleor additionally
+    /// stamps `quantityOrdered` on each node; our ProductVariant has no such
+    /// field, so the ranking itself is the payload (documented).
+    async fn report_product_sales(
+        &self, ctx: &Context<'_>,
+        period: gen::ReportingPeriod, channel: String,
+        first: Option<i32>, after: Option<String>, before: Option<String>, last: Option<i32>,
+    ) -> Result<gen::ProductVariantCountableConnection> {
+        let _ = (before, last);
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let off = after.and_then(|c| crate::common::decode_cursor(&c)).unwrap_or(0);
+        let lim = first.unwrap_or(20).clamp(1, 100) as usize;
+        let (ch_id, _) = rustygod_db::catalog::channel_info(db, &channel).await.map_err(|e| Error::new(e.to_string()))?;
+        let days: i64 = match format!("{period:?}").as_str() {
+            "TODAY" => 1,
+            _ => 30,
+        };
+        use sea_orm::{ConnectionTrait, Statement};
+        let rows = db.query_all(Statement::from_sql_and_values(
+            sea_orm::DatabaseBackend::Postgres,
+            "SELECT l.variant_id AS vid, SUM(l.quantity)::bigint AS sold \
+             FROM order_orderline l JOIN order_order o ON o.id = l.order_id \
+             WHERE o.channel_id = $1 AND l.variant_id IS NOT NULL AND o.created_at > now() - make_interval(days => $2) \
+             GROUP BY l.variant_id ORDER BY sold DESC LIMIT 200",
+            [ch_id.into(), (days as i32).into()],
+        )).await.map_err(|e| Error::new(e.to_string()))?;
+        let vids: Vec<i32> = rows.into_iter().filter_map(|r| r.try_get::<i32>("", "vid").ok()).collect();
+        let total = vids.len();
+        let page: Vec<i32> = vids.into_iter().skip(off).take(lim).collect();
+        let b = crate::catalog::load_variant_batches(db, &page).await.map_err(|e| Error::new(format!("{e:?}")))?;
+        let mut edges = vec![];
+        for (i, vid) in page.iter().enumerate() {
+            let (sku, name, _, _) = b.vbase.get(vid).cloned().unwrap_or((None, String::new(), true, None));
+            let _ = off + i;
+            edges.push(gen::ProductVariantCountableEdge {
+                node: Some(crate::catalog::build_variant(&b, *vid, name, sku.unwrap_or_default(), 0)),
+            });
+        }
+        Ok(gen::ProductVariantCountableConnection {
+            page_info: Some(crate::common::PageInfo { has_next_page: off + lim < total, has_previous_page: off > 0, start_cursor: None, end_cursor: None }),
+            edges,
+            total_count: Some(total as i32),
+        })
+    }
+
     /// Dashboard `OrderList`/`GlobalSearch` — filter/where/search/sortBy are
     /// applied server-side with Saleor semantics; payment-state-derived
     /// pseudo filters stay approximated (see `order_status_filter_db`).

@@ -605,8 +605,8 @@ impl CatalogQuery {
 /// Full product-page assembly (dashboard details parity). Populatedb rows
 /// carry media, channel listings, stocks, collections and attributes — all
 /// of it is exposed here in batched queries, never N+1.
-struct VariantBatches {
-    vbase: std::collections::HashMap<i32, (Option<String>, String, bool, Option<i32>)>,
+pub(crate) struct VariantBatches {
+    pub(crate) vbase: std::collections::HashMap<i32, (Option<String>, String, bool, Option<i32>)>,
     vlist: std::collections::HashMap<i32, Vec<(i32, i32, Option<rust_decimal::Decimal>, Option<rust_decimal::Decimal>, String)>>,
     channels: std::collections::HashMap<i32, gen::Channel>,
     stocks: std::collections::HashMap<i32, Vec<gen::Stock>>,
@@ -618,7 +618,7 @@ fn money(amount: rust_decimal::Decimal, currency: String) -> crate::common::Mone
     crate::common::Money { amount: amount.to_string(), currency, fraction_digits: None }
 }
 
-async fn load_variant_batches(
+pub(crate) async fn load_variant_batches(
     db: &sea_orm::DatabaseConnection,
     vids: &[i32],
 ) -> Result<VariantBatches> {
@@ -750,7 +750,7 @@ async fn load_variant_batches(
     Ok(b)
 }
 
-fn build_variant(m: &VariantBatches, vid: i32, fb_name: String, fb_sku: String, fb_qty: i32) -> gen::ProductVariant {
+pub(crate) fn build_variant(m: &VariantBatches, vid: i32, fb_name: String, fb_sku: String, fb_qty: i32) -> gen::ProductVariant {
     let (sku, name, track, limit) = m.vbase.get(&vid).cloned().unwrap_or((Some(fb_sku), fb_name, true, None));
     let listings: Vec<gen::ProductVariantChannelListing> = m.vlist.get(&vid).cloned().unwrap_or_default().into_iter().map(|(lid, ch, price, cost, cur)| {
         gen::ProductVariantChannelListing {

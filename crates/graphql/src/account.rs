@@ -184,7 +184,7 @@ pub async fn require_perm(ctx: &Context<'_>, codename: &str) -> Result<i32> {
 }
 
 /// Any-of gate for queries readable by several roles (Django OR-perms).
-async fn require_any_perm(ctx: &Context<'_>, codenames: &[&str]) -> Result<i32> {
+pub(crate) async fn require_any_perm(ctx: &Context<'_>, codenames: &[&str]) -> Result<i32> {
     let g = ctx.data::<GqlContext>()?;
     let db = g.db()?;
     let (uid, _) = requester(ctx, db).await?;
@@ -622,6 +622,24 @@ impl AccountQuery {
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
         let Some(gid) = rustygod_db::catalog::parse_gid(&id.0) else { return Ok(None) };
         assemble_group(db, gid, true).await.map_err(Error::new)
+    }
+
+    /// Single address (Django: MANAGE_USERS sees any, otherwise only owned).
+    async fn address(&self, ctx: &Context<'_>, id: ID) -> Result<Option<crate::order::GqlAddress>> {
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let Some(aid) = rustygod_db::catalog::parse_gid(&id.0) else { return Ok(None) };
+        let addr = rustygod_db::entities::account_address::Entity::find_by_id(aid)
+            .one(db).await.map_err(|e| Error::new(e.to_string()))?;
+        let Some(a) = addr else { return Ok(None) };
+        if crate::account::require_any_perm(ctx, &["manage_users", "manage_staff", "manage_orders"]).await.is_ok() {
+            return Ok(Some(to_gql_address(&a)));
+        }
+        // Owner path: bearer must own the address.
+        let (uid, _) = requester(ctx, db).await?;
+        if address_owner(db, aid).await?.is_some_and(|o| o == uid) {
+            return Ok(Some(to_gql_address(&a)));
+        }
+        Err(Error::new("permission denied"))
     }
 
     // ------------------------------------------------------------------

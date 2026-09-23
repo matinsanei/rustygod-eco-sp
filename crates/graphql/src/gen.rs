@@ -29348,13 +29348,6 @@ impl GenQuery {
 
     }
 
-    #[graphql(name = "giftCardSettings")]
-    async fn gift_card_settings(&self) -> Option<GiftCardSettings> {
-
-        None
-
-    }
-
     #[graphql(name = "refundSettings")]
     async fn refund_settings(&self) -> Option<RefundSettings> {
 
@@ -29436,13 +29429,6 @@ impl GenQuery {
     async fn orders_total(&self, #[graphql(name = "period")] _arg_period: Option<ReportingPeriod>, #[graphql(name = "channel")] _arg_channel: Option<String>) -> Option<crate::order::GqlTaxedMoney> {
 
         None
-
-    }
-
-    #[graphql(name = "giftCardTags")]
-    async fn gift_card_tags(&self, #[graphql(name = "filter")] _arg_filter: Option<GiftCardTagFilterInput>, #[graphql(name = "before")] _arg_before: Option<String>, #[graphql(name = "after")] _arg_after: Option<String>, #[graphql(name = "first")] _arg_first: Option<i32>, #[graphql(name = "last")] _arg_last: Option<i32>) -> Option<GiftCardTagCountableConnection> {
-
-        Some(GiftCardTagCountableConnection { total_count: None, edges: vec![], page_info: Some(PageInfo { has_next_page: false, has_previous_page: false, start_cursor: None, end_cursor: None }) })
 
     }
 

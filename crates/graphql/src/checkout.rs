@@ -60,6 +60,18 @@ pub struct AddLineInput {
 }
 
 #[derive(SimpleObject, Clone)]
+pub struct GqlCheckoutLineEdge { pub node: Option<GqlCheckoutLine> }
+
+#[derive(SimpleObject, Clone)]
+pub struct GqlCheckoutLineConnection {
+    #[graphql(name = "totalCount")]
+    pub total_count: Option<i32>,
+    pub edges: Vec<GqlCheckoutLineEdge>,
+    #[graphql(name = "pageInfo")]
+    pub page_info: crate::common::PageInfo,
+}
+
+#[derive(SimpleObject, Clone)]
 pub struct AgentCheckoutResult {
     pub checkout: GqlCheckout,
     pub notes: Vec<String>,
@@ -198,14 +210,51 @@ pub struct CheckoutQuery;
 
 #[Object]
 impl CheckoutQuery {
-    async fn checkout(&self, ctx: &Context<'_>, id: ID) -> Result<Option<GqlCheckout>> {
-        let g = ctx.data::<GqlContext>()?;
+    async fn checkout(&self, ctx: &Context<'_>, id: ID) -> Result<Option<GqlCheckout>> {        let g = ctx.data::<GqlContext>()?;
         let db = g.db()?;
         let token: Uuid = crate::common::parse_uuid_gid(&id.0).ok_or_else(|| Error::new("id must be UUID"))?;
         let Some((co, lines)) = rustygod_db::checkout_store::load_checkout(db, token).await.map_err(|e| Error::new(e.to_string()))? else { return Ok(None) };
         // Channel slug round-trip via channel_id (v1 ids 1/2 as in server).
         let ch = match co.channel_id { 2 => "channel-pln", _ => "default-channel" };
         Ok(Some(to_gql_checkout(&co, &lines, ch)))
+    }
+
+    /// Admin checkout-lines view (paginated across checkouts).
+    async fn checkout_lines(
+        &self, ctx: &Context<'_>,
+        first: Option<i32>, after: Option<String>, before: Option<String>, last: Option<i32>,
+    ) -> Result<GqlCheckoutLineConnection> {
+        crate::account::require_perm(ctx, "manage_orders").await?;
+        let _ = (before, last);
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let off = after.and_then(|c| crate::common::decode_cursor(&c)).unwrap_or(0);
+        let lim = first.unwrap_or(20).clamp(1, 100) as usize;
+        use sea_orm::{ConnectionTrait, Statement};
+        let rows = db.query_all(Statement::from_string(
+            sea_orm::DatabaseBackend::Postgres,
+            "SELECT checkout_id, variant_id, quantity, currency, total_price_gross_amount, is_gift, undiscounted_unit_price_amount FROM checkout_checkoutline ORDER BY created_at DESC, id LIMIT 500".to_string(),
+        )).await.map_err(|e| Error::new(e.to_string()))?;
+        let total = rows.len();
+        let edges = rows.into_iter().skip(off).take(lim).map(|r| {
+            let vid: i32 = r.try_get("", "variant_id").unwrap_or(0);
+            let qty: i32 = r.try_get("", "quantity").unwrap_or(0);
+            let cur: String = r.try_get("", "currency").unwrap_or_else(|_| "USD".into());
+            let unit: rust_decimal::Decimal = r.try_get("", "undiscounted_unit_price_amount").unwrap_or(rust_decimal::Decimal::ZERO);
+            let tot: rust_decimal::Decimal = r.try_get("", "total_price_gross_amount").unwrap_or(unit * rust_decimal::Decimal::from(qty));
+            let gift: bool = r.try_get("", "is_gift").unwrap_or(false);
+            GqlCheckoutLineEdge { node: Some(GqlCheckoutLine {
+                variant_id: ID(crate::common::gid("ProductVariant", vid)),
+                quantity: qty,
+                unit_price: crate::common::Money { amount: unit.to_string(), currency: cur.clone(), fraction_digits: None },
+                total_price: crate::common::Money { amount: tot.to_string(), currency: cur, fraction_digits: None },
+                is_gift: gift,
+            }) }
+        }).collect();
+        Ok(GqlCheckoutLineConnection {
+            total_count: Some(total as i32),
+            edges,
+            page_info: crate::common::PageInfo { has_next_page: off + lim < total, has_previous_page: off > 0, start_cursor: None, end_cursor: None },
+        })
     }
 }
 

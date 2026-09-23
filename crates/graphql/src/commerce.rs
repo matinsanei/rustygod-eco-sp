@@ -14,6 +14,158 @@ pub struct GqlWarehouse { pub id: ID, pub name: String, pub slug: String }
 pub struct GqlWarehouseEdge { pub node: GqlWarehouse, pub cursor: String }
 
 #[derive(SimpleObject, Clone)]
+pub struct GqlTaxType { pub description: Option<String>, #[graphql(name = "taxCode")] pub tax_code: Option<String> }
+
+#[derive(SimpleObject, Clone)]
+pub struct GqlStockEdge { pub node: Option<gen::Stock> }
+
+#[derive(SimpleObject, Clone)]
+pub struct GqlStockConnection {
+    #[graphql(name = "totalCount")]
+    pub total_count: Option<i32>,
+    pub edges: Vec<GqlStockEdge>,
+    #[graphql(name = "pageInfo")]
+    pub page_info: crate::common::PageInfo,
+}
+
+async fn warehouse_gen(db: &sea_orm::DatabaseConnection, wid: uuid::Uuid) -> Result<Option<gen::Warehouse>, String> {
+    use sea_orm::EntityTrait;
+    let row = rustygod_db::entities::warehouse_warehouse::Entity::find_by_id(wid)
+        .one(db).await.map_err(|e| e.to_string())?;
+    Ok(row.map(|w| {
+        let mut g = crate::metadata::lit_warehouse(crate::common::gid("Warehouse", wid), vec![], vec![]);
+        g.name = Some(w.name);
+        g.slug = Some(w.slug);
+        g.email = Some(w.email);
+        g.is_private = Some(w.is_private);
+        g.click_and_collect_option = Some(w.click_and_collect_option);
+        g
+    }))
+}
+
+async fn stock_node(db: &sea_orm::DatabaseConnection, sid: i32) -> Result<Option<gen::Stock>, String> {
+    use sea_orm::EntityTrait;
+    let row = rustygod_db::entities::warehouse_stock::Entity::find_by_id(sid)
+        .one(db).await.map_err(|e| e.to_string())?;
+    let Some(s) = row else { return Ok(None) };
+    Ok(Some(gen::Stock {
+        id: Some(ID(crate::common::gid("Stock", sid))),
+        warehouse: warehouse_gen(db, s.warehouse_id).await?,
+        quantity: Some(s.quantity),
+        quantity_allocated: Some(s.quantity_allocated),
+    }))
+}
+
+async fn tax_config_node(db: &sea_orm::DatabaseConnection, tid: i32) -> Result<Option<gen::TaxConfiguration>, String> {
+    use sea_orm::{ConnectionTrait, Statement};
+    let row = db.query_one(Statement::from_sql_and_values(
+        sea_orm::DatabaseBackend::Postgres,
+        "SELECT t.id, t.channel_id, c.name AS channel_name, t.charge_taxes, t.tax_calculation_strategy, t.display_gross_prices, t.prices_entered_with_tax, t.tax_app_id, t.metadata, t.private_metadata FROM tax_taxconfiguration t JOIN channel_channel c ON c.id = t.channel_id WHERE t.id = $1",
+        [tid.into()],
+    )).await.map_err(|e| e.to_string())?;
+    let Some(r) = row else { return Ok(None) };
+    let countries = db.query_all(Statement::from_sql_and_values(
+        sea_orm::DatabaseBackend::Postgres,
+        "SELECT country, charge_taxes, tax_calculation_strategy, display_gross_prices, tax_app_id FROM tax_taxconfigurationpercountry WHERE tax_configuration_id = $1 ORDER BY country",
+        [tid.into()],
+    )).await.map_err(|e| e.to_string())?
+    .into_iter().filter_map(|c| {
+        let code = c.try_get::<String>("", "country").ok()?;
+        Some(gen::TaxConfigurationPerCountry {
+            country: Some(crate::common::GqlCountryDisplay { code: code.clone(), country: code }),
+            charge_taxes: c.try_get::<bool>("", "charge_taxes").ok(),
+            tax_calculation_strategy: c.try_get::<Option<String>>("", "tax_calculation_strategy").ok().flatten(),
+            display_gross_prices: c.try_get::<bool>("", "display_gross_prices").ok(),
+            tax_app_id: c.try_get::<Option<String>>("", "tax_app_id").ok().flatten(),
+        })
+    }).collect();
+    let meta = |c: &str| {
+        r.try_get::<serde_json::Value>("", c).ok()
+            .map(|v| crate::common::json_to_metadata_items(&v)).unwrap_or_default()
+    };
+    let ch: i32 = r.try_get::<i32>("", "channel_id").map_err(|e| e.to_string())?;
+    let mut channel = crate::metadata::lit_channel(crate::common::gid("Channel", ch), vec![], vec![]);
+    channel.name = r.try_get::<String>("", "channel_name").ok();
+    Ok(Some(gen::TaxConfiguration {
+        id: Some(ID(crate::common::gid("TaxConfiguration", tid))),
+        private_metadata: meta("private_metadata"),
+        metadata: meta("metadata"),
+        channel: Some(Box::new(channel)),
+        charge_taxes: r.try_get::<bool>("", "charge_taxes").ok(),
+        tax_calculation_strategy: r.try_get::<Option<String>>("", "tax_calculation_strategy").ok().flatten(),
+        display_gross_prices: r.try_get::<bool>("", "display_gross_prices").ok(),
+        prices_entered_with_tax: r.try_get::<bool>("", "prices_entered_with_tax").ok(),
+        tax_app_id: r.try_get::<Option<String>>("", "tax_app_id").ok().flatten(),
+        countries,
+    }))
+}
+
+async fn menu_item_node(db: &sea_orm::DatabaseConnection, mid: i32) -> Result<Option<gen::MenuItem>, String> {
+    use rustygod_db::entities::{menu_menu, menu_menuitem};
+    use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QueryOrder, QuerySelect};
+    let Some(m) = menu_menuitem::Entity::find_by_id(mid).one(db).await.map_err(|e| e.to_string())? else {
+        return Ok(None);
+    };
+    // Whole-menu fetch, tree built in memory (sync recursion — menus are tiny).
+    let rows: Vec<(i32, Option<i32>, String, Option<String>, i32)> = menu_menuitem::Entity::find()
+        .select_only()
+        .column(menu_menuitem::Column::Id)
+        .column(menu_menuitem::Column::ParentId)
+        .column(menu_menuitem::Column::Name)
+        .column(menu_menuitem::Column::Url)
+        .column(menu_menuitem::Column::Level)
+        .filter(menu_menuitem::Column::MenuId.eq(m.menu_id))
+        .order_by_asc(menu_menuitem::Column::SortOrder)
+        .into_tuple()
+        .all(db)
+        .await
+        .map_err(|e| e.to_string())?;
+    let menu_name: Option<String> = menu_menu::Entity::find_by_id(m.menu_id)
+        .one(db).await.map_err(|e| e.to_string())?.map(|x| x.name);
+    let mut lit = crate::metadata::lit_menu(crate::common::gid("Menu", m.menu_id), vec![], vec![]);
+    lit.name = menu_name;
+    let menu = Some(Box::new(lit));
+    fn build(
+        id: i32,
+        rows: &[(i32, Option<i32>, String, Option<String>, i32)],
+        menu: &Option<Box<gen::Menu>>,
+        depth: u8,
+    ) -> Option<gen::MenuItem> {
+        let (_, _, name, url, level) = rows.iter().find(|(i, _, _, _, _)| *i == id)?.clone();
+        let mut children = vec![];
+        if depth < 4 {
+            for (kid, parent, _, _, _) in rows.iter() {
+                if parent == &Some(id) {
+                    if let Some(n) = build(*kid, rows, &None, depth + 1) {
+                        children.push(Box::new(n));
+                    }
+                }
+            }
+        }
+        let mut item = crate::metadata::lit_menu_item(crate::common::gid("MenuItem", id), vec![], vec![]);
+        item.name = Some(name);
+        item.url = url;
+        item.level = Some(level);
+        item.menu = menu.clone();
+        item.children = children;
+        Some(item)
+    }
+    Ok(build(mid, &rows, &menu, 0))
+}
+
+#[derive(SimpleObject, Clone)]
+pub struct GqlMenuItemEdge { pub node: Option<gen::MenuItem> }
+
+#[derive(SimpleObject, Clone)]
+pub struct GqlMenuItemConnection {
+    #[graphql(name = "totalCount")]
+    pub total_count: Option<i32>,
+    pub edges: Vec<GqlMenuItemEdge>,
+    #[graphql(name = "pageInfo")]
+    pub page_info: crate::common::PageInfo,
+}
+
+#[derive(SimpleObject, Clone)]
 pub struct GqlWarehouseConnection {
     #[graphql(name = "totalCount")]
     pub total_count: Option<i32>,
@@ -601,6 +753,208 @@ impl CommerceQuery {
             countries: vec![],
         })}).collect();
         Ok(gen::TaxClassCountableConnection { edges, page_info: Some(crate::common::PageInfo { has_next_page: false, has_previous_page: false, start_cursor: None, end_cursor: None }) })
+    }
+
+    /// Saleor `stock(id)` / `stocks` — warehouse stock rows with channel
+    /// visibility inherited from the variant (dashboard inventory views).
+    async fn stock(&self, ctx: &Context<'_>, id: ID) -> Result<Option<gen::Stock>> {
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let Some(sid) = rustygod_db::catalog::parse_gid(&id.0) else { return Ok(None) };
+        stock_node(db, sid).await.map_err(Error::new)
+    }
+
+    async fn stocks(
+        &self, ctx: &Context<'_>,
+        first: Option<i32>, after: Option<String>, before: Option<String>, last: Option<i32>,
+        filter: Option<gen::StockFilterInput>,
+    ) -> Result<Option<GqlStockConnection>> {
+        let _ = (before, last);
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let off = after.and_then(|c| crate::common::decode_cursor(&c)).unwrap_or(0);
+        let lim = first.unwrap_or(20).clamp(1, 100) as usize;
+        use sea_orm::{ConnectionTrait, Statement};
+        let mut conds: Vec<String> = vec![];
+        let mut params: Vec<sea_orm::Value> = vec![];
+        if let Some(f) = filter.as_ref() {
+            if let Some(q) = f.quantity {
+                params.push((q as i64).into());
+                conds.push(format!("s.quantity = ${}", params.len()));
+            }
+            if let Some(s) = f.search.as_ref().filter(|s| !s.trim().is_empty()) {
+                params.push(format!("%{s}%").into());
+                let p = params.len();
+                conds.push(format!("(v.sku ILIKE ${p} OR p.name ILIKE ${p})"));
+            }
+        }
+        let where_sql = if conds.is_empty() { String::new() } else { format!("WHERE {}", conds.join(" AND ")) };
+        let rows = db.query_all(Statement::from_sql_and_values(
+            sea_orm::DatabaseBackend::Postgres,
+            format!("SELECT s.id FROM warehouse_stock s JOIN product_productvariant v ON v.id = s.product_variant_id JOIN product_product p ON p.id = v.product_id {where_sql} ORDER BY s.id"),
+            params,
+        )).await.map_err(|e| Error::new(e.to_string()))?;
+        let ids: Vec<i32> = rows.into_iter().filter_map(|r| r.try_get::<i32>("", "id").ok()).collect();
+        let total = ids.len();
+        let mut edges = vec![];
+        for sid in ids.into_iter().skip(off).take(lim) {
+            if let Some(node) = stock_node(db, sid).await.map_err(Error::new)? {
+                edges.push(GqlStockEdge { node: Some(node) });
+            }
+        }
+        Ok(Some(GqlStockConnection {
+            page_info: crate::common::PageInfo { has_next_page: off + lim < total, has_previous_page: off > 0, start_cursor: None, end_cursor: None },
+            edges: edges.into_iter().map(|e| GqlStockEdge { node: e.node }).collect(),
+            total_count: Some(total as i32),
+        }))
+    }
+
+    async fn tax_class(&self, ctx: &Context<'_>, id: ID) -> Result<Option<gen::TaxClass>> {
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let Some(tid) = rustygod_db::catalog::parse_gid(&id.0) else { return Ok(None) };
+        let rows = rustygod_db::commerce::list_tax_classes(db).await.map_err(|e| Error::new(e.to_string()))?;
+        Ok(rows.into_iter().find(|(i, _)| *i == tid).map(|(id, name)| {
+            let mut t = crate::metadata::lit_tax_class(crate::common::gid("TaxClass", id), vec![], vec![]);
+            t.name = Some(name);
+            t
+        }))
+    }
+
+    async fn tax_configuration(&self, ctx: &Context<'_>, id: ID) -> Result<Option<gen::TaxConfiguration>> {
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let Some(tid) = rustygod_db::catalog::parse_gid(&id.0) else { return Ok(None) };
+        tax_config_node(db, tid).await.map_err(Error::new)
+    }
+
+    async fn tax_country_configuration(&self, ctx: &Context<'_>, #[graphql(name = "countryCode")] country_code: gen::CountryCode) -> Result<Option<gen::TaxCountryConfiguration>> {
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let code = format!("{country_code:?}");
+        use sea_orm::{ConnectionTrait, Statement};
+        let rows = db.query_all(Statement::from_sql_and_values(
+            sea_orm::DatabaseBackend::Postgres,
+            "SELECT r.country, r.tax_class_id, c.name AS class_name, r.rate FROM tax_taxclasscountryrate r LEFT JOIN tax_taxclass c ON c.id = r.tax_class_id WHERE r.country = $1 ORDER BY r.id",
+            [code.clone().into()],
+        )).await.map_err(|e| Error::new(e.to_string()))?;
+        let mut rates = vec![];
+        for r in rows {
+            rates.push(gen::TaxClassCountryRate {
+                country: Some(crate::common::GqlCountryDisplay { code: code.clone(), country: code.clone() }),
+                tax_class: r.try_get::<Option<i32>>("", "tax_class_id").ok().flatten().map(|tc| {
+                    let mut t = crate::metadata::lit_tax_class(crate::common::gid("TaxClass", tc), vec![], vec![]);
+                    t.name = r.try_get::<Option<String>>("", "class_name").ok().flatten();
+                    Box::new(t)
+                }),
+                rate: r.try_get::<rust_decimal::Decimal>("", "rate").ok().and_then(|d| d.to_string().parse::<f64>().ok()),
+            });
+        }
+        Ok(Some(gen::TaxCountryConfiguration {
+            country: Some(crate::common::GqlCountryDisplay { code: code.clone(), country: code }),
+            tax_class_country_rates: rates,
+        }))
+    }
+
+    /// Deprecated in Saleor (use `taxClasses`): tax classes as gateway types.
+    async fn tax_types(&self, ctx: &Context<'_>) -> Result<Vec<GqlTaxType>> {
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let rows = rustygod_db::commerce::list_tax_classes(db).await.map_err(|e| Error::new(e.to_string()))?;
+        Ok(rows.into_iter().map(|(_, name)| GqlTaxType { description: Some(name.clone()), tax_code: Some(name) }).collect())
+    }
+
+    async fn gift_card_currencies(&self, ctx: &Context<'_>) -> Result<Vec<String>> {
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        use sea_orm::{ConnectionTrait, Statement};
+        let rows = db.query_all(Statement::from_string(
+            sea_orm::DatabaseBackend::Postgres,
+            "SELECT DISTINCT currency FROM giftcard_giftcard ORDER BY 1".to_string(),
+        )).await.map_err(|e| Error::new(e.to_string()))?;
+        Ok(rows.into_iter().filter_map(|r| r.try_get::<String>("", "currency").ok()).collect())
+    }
+
+    async fn gift_card_tags(
+        &self, ctx: &Context<'_>,
+        first: Option<i32>, after: Option<String>, before: Option<String>, last: Option<i32>,
+        filter: Option<gen::GiftCardTagFilterInput>,
+    ) -> Result<gen::GiftCardTagCountableConnection> {
+        let _ = (before, last);
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let off = after.and_then(|c| crate::common::decode_cursor(&c)).unwrap_or(0);
+        let lim = first.unwrap_or(20).clamp(1, 100) as usize;
+        use sea_orm::{ConnectionTrait, Statement};
+        let (sql, params) = match filter.as_ref().and_then(|f| f.search.clone()).filter(|s| !s.trim().is_empty()) {
+            Some(s) => ("SELECT id, name FROM giftcard_giftcardtag WHERE name ILIKE $1 ORDER BY name".to_string(), vec![format!("%{s}%").into()]),
+            None => ("SELECT id, name FROM giftcard_giftcardtag ORDER BY name".to_string(), vec![]),
+        };
+        let rows = db.query_all(Statement::from_sql_and_values(sea_orm::DatabaseBackend::Postgres, sql, params))
+            .await.map_err(|e| Error::new(e.to_string()))?;
+        let total = rows.len();
+        let edges = rows.into_iter().skip(off).take(lim).filter_map(|r| {
+            Some(gen::GiftCardTagCountableEdge { node: Some(gen::GiftCardTag {
+                id: Some(ID(crate::common::gid("GiftCardTag", r.try_get::<i32>("", "id").ok()?))),
+                name: Some(r.try_get::<String>("", "name").ok()?),
+            }) })
+        }).collect();
+        Ok(gen::GiftCardTagCountableConnection {
+            page_info: Some(crate::common::PageInfo { has_next_page: off + lim < total, has_previous_page: off > 0, start_cursor: None, end_cursor: None }),
+            edges,
+            total_count: Some(total as i32),
+        })
+    }
+
+    async fn gift_card_settings(&self, ctx: &Context<'_>) -> Result<gen::GiftCardSettings> {
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        use sea_orm::{ConnectionTrait, Statement};
+        let row = db.query_one(Statement::from_string(
+            sea_orm::DatabaseBackend::Postgres,
+            "SELECT gift_card_expiry_type, gift_card_expiry_period, gift_card_expiry_period_type FROM site_sitesettings WHERE id = 1".to_string(),
+        )).await.map_err(|e| Error::new(e.to_string()))?;
+        let et = row.as_ref().and_then(|r| r.try_get::<String>("", "gift_card_expiry_type").ok()).unwrap_or_else(|| "never_expire".into());
+        let expiry_type = match et.as_str() {
+            "expiry_period" => "EXPIRY_PERIOD",
+            _ => "NEVER_EXPIRE",
+        }.to_string();
+        let period = row.as_ref().and_then(|r| r.try_get::<Option<i32>>("", "gift_card_expiry_period").ok().flatten())
+            .map(|n| gen::TimePeriod {
+                amount: Some(n),
+                r#type: row.as_ref().and_then(|r| r.try_get::<Option<String>>("", "gift_card_expiry_period_type").ok().flatten()),
+            });
+        Ok(gen::GiftCardSettings { expiry_type: Some(expiry_type), expiry_period: period })
+    }
+
+    async fn menu_item(&self, ctx: &Context<'_>, id: ID, channel: Option<String>) -> Result<Option<gen::MenuItem>> {
+        let _ = channel;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let Some(mid) = rustygod_db::catalog::parse_gid(&id.0) else { return Ok(None) };
+        menu_item_node(db, mid).await.map_err(Error::new)
+    }
+
+    async fn menu_items(
+        &self, ctx: &Context<'_>,
+        first: Option<i32>, after: Option<String>, before: Option<String>, last: Option<i32>,
+        channel: Option<String>, #[graphql(name = "sortBy")] sort_by: Option<gen::MenuItemSortingInput>,
+        filter: Option<gen::MenuItemFilterInput>,
+    ) -> Result<Option<GqlMenuItemConnection>> {
+        let _ = (before, last, channel, sort_by);
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let off = after.and_then(|c| crate::common::decode_cursor(&c)).unwrap_or(0);
+        let lim = first.unwrap_or(20).clamp(1, 100) as usize;
+        use sea_orm::{ConnectionTrait, Statement};
+        let (sql, params) = match filter.as_ref().and_then(|f| f.search.clone()).filter(|s| !s.trim().is_empty()) {
+            Some(s) => ("SELECT id FROM menu_menuitem WHERE name ILIKE $1 ORDER BY id".to_string(), vec![format!("%{s}%").into()]),
+            None => ("SELECT id FROM menu_menuitem ORDER BY id".to_string(), vec![]),
+        };
+        let rows = db.query_all(Statement::from_sql_and_values(sea_orm::DatabaseBackend::Postgres, sql, params))
+            .await.map_err(|e| Error::new(e.to_string()))?;
+        let ids: Vec<i32> = rows.into_iter().filter_map(|r| r.try_get::<i32>("", "id").ok()).collect();
+        let total = ids.len();
+        let mut edges = vec![];
+        for mid in ids.into_iter().skip(off).take(lim) {
+            if let Some(node) = menu_item_node(db, mid).await.map_err(Error::new)? {
+                edges.push(GqlMenuItemEdge { node: Some(node) });
+            }
+        }
+        Ok(Some(GqlMenuItemConnection {
+            page_info: crate::common::PageInfo { has_next_page: off + lim < total, has_previous_page: off > 0, start_cursor: None, end_cursor: None },
+            edges: edges.into_iter().map(|e| GqlMenuItemEdge { node: e.node }).collect(),
+            total_count: Some(total as i32),
+        }))
     }
 
     async fn shipping_methods(&self, ctx: &Context<'_>, channel: Option<String>) -> Result<Vec<GqlShippingMethod>> {

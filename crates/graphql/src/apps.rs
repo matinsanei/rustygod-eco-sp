@@ -140,6 +140,25 @@ pub struct GqlAppExtensionConnection {
     pub page_info: PageInfo,
 }
 
+#[derive(SimpleObject, Clone)]
+pub struct GqlWebhookEvent {
+    pub name: String,
+    #[graphql(name = "eventType")]
+    pub event_type: gen::WebhookEventTypeEnum,
+}
+
+#[derive(SimpleObject, Clone)]
+pub struct GqlExportFileEdge { pub node: Option<gen::ExportFile> }
+
+#[derive(SimpleObject, Clone)]
+pub struct GqlExportFileConnection {
+    #[graphql(name = "totalCount")]
+    pub total_count: Option<i32>,
+    pub edges: Vec<GqlExportFileEdge>,
+    #[graphql(name = "pageInfo")]
+    pub page_info: PageInfo,
+}
+
 #[derive(Default)]
 pub struct AppsQuery;
 
@@ -206,6 +225,58 @@ impl AppsQuery {
         Ok(GqlAppExtensionConnection {
             total_count: Some(total),
             edges,
+            page_info: PageInfo { has_next_page: false, has_previous_page: false, start_cursor: None, end_cursor: None },
+        })
+    }
+
+    async fn app_extension(&self, ctx: &Context<'_>, id: ID) -> Result<Option<GqlAppExtension>> {
+        let g = ctx.data::<GqlContext>()?;
+        let db = g.db()?;
+        let eid = rustygod_db::catalog::parse_gid(&id.0).unwrap_or(-1);
+        let rows = load_extensions(db).await.map_err(|e| Error::new(e.to_string()))?;
+        Ok(rows.into_iter().find(|e| {
+            rustygod_db::catalog::parse_gid(&e.id.0).unwrap_or(-2) == eid
+        }))
+    }
+
+    /// Events this backend emits that have Saleor enum equivalents (outbox
+    /// fan-out). `checkout_completed` / `fulfillment_returned` are internal
+    /// outbox names with no Saleor counterpart yet — documented, not faked.
+    async fn webhook_events(&self) -> Result<Vec<GqlWebhookEvent>> {
+        use gen::WebhookEventTypeEnum as E;
+        Ok(vec![
+            GqlWebhookEvent { name: "order_created".into(), event_type: E::ORDERCREATED },
+            GqlWebhookEvent { name: "order_updated".into(), event_type: E::ORDERUPDATED },
+            GqlWebhookEvent { name: "order_cancelled".into(), event_type: E::ORDERCANCELLED },
+        ])
+    }
+
+    async fn webhook_sample_payload(
+        &self, #[graphql(name = "eventType")] event_type: gen::WebhookEventTypeEnum,
+    ) -> Result<Option<serde_json::Value>> {
+        let name = format!("{event_type:?}");
+        let sample = match name.as_str() {
+            "ORDERCREATED" => serde_json::json!({"id": "T3JkZXI6MQ==", "number": "1", "status": "unfulfilled", "checkout_token": "00000000-0000-0000-0000-000000000000"}),
+            "ORDERUPDATED" => serde_json::json!({"id": "T3JkZXI6MQ==", "number": "1", "status": "partially_fulfilled"}),
+            "ORDERCANCELLED" => serde_json::json!({"id": "T3JkZXI6MQ==", "number": "1", "status": "canceled"}),
+            "CHECKOUTCOMPLETED" => serde_json::json!({"id": "T3JkZXI6MQ==", "number": "1", "status": "unfulfilled", "checkout_token": "00000000-0000-0000-0000-000000000000"}),
+            "FULFILLMENTRETURNED" => serde_json::json!({"order_id": "T3JkZXI6MQ==", "lines": []}),
+            _ => serde_json::json!({"event": name}),
+        };
+        Ok(Some(sample))
+    }
+
+    /// No export infra yet (CSV intentionally last): valid empty connection
+    /// so the dashboard exports page renders instead of erroring.
+    async fn export_files(
+        &self,
+        first: Option<i32>, after: Option<String>, before: Option<String>, last: Option<i32>,
+        filter: Option<gen::ExportFileFilterInput>,
+    ) -> Result<GqlExportFileConnection> {
+        let _ = (first, after, before, last, filter);
+        Ok(GqlExportFileConnection {
+            total_count: Some(0),
+            edges: vec![],
             page_info: PageInfo { has_next_page: false, has_previous_page: false, start_cursor: None, end_cursor: None },
         })
     }

@@ -33,30 +33,32 @@ Legend: `[x]` real + tested · `[~]` exists but thin/stub · `[ ]` missing.
 - [ ] `invoiceCreate/Request/Delete/Update` + `invoices` (whole subsystem; needs app surface)
 
 ## 5. Warehouse / stock
-- [ ] `stock` / `stocks` queries, `stockBulkUpdate`
-- [ ] `assignWarehouseShippingZone` / `unassignWarehouseShippingZone`
+- [x] `stock` / `stocks` queries (quantity/search filter)
+- [ ] `stockBulkUpdate`, `assignWarehouseShippingZone` / `unassignWarehouseShippingZone`
 - [x] Stock reads in catalog, reservations/allocations, sweeper
 
 ## 6. Gift cards extras
-- [ ] `giftCardCurrencies`, `giftCardTags`, `giftCardSettings` queries
+- [x] `giftCardCurrencies` (distinct), `giftCardTags` (search), `giftCardSettings` (site row)
 - [ ] `giftCardBalanceAdjust`, `exportGiftCards`
 - [x] giftCards list + giftCard details + create/update/deactivate
 
 ## 7. Tax details
-- [ ] `taxClass`, `taxConfiguration`, `taxCountryConfiguration`, `taxTypes` single roots
+- [x] `taxClass`, `taxConfiguration`, `taxCountryConfiguration` singles, `taxTypes` (deprecated → classes)
 - [ ] `taxExemptionManage`, `shopFetchTaxRates`, `orderSettingsUpdate`
 - [x] `taxConfigurations` list + `taxConfigurationUpdate` (Save works)
 
 ## 8. Webhooks / observability
-- [ ] `webhookEvents`, `webhookSamplePayload`, `webhookTrigger`, `eventDeliveryRetry`
+- [x] `webhookEvents` (emitted subset, exact enums), `webhookSamplePayload`, `exportFiles` (honest empty)
+- [ ] `webhookTrigger`, `eventDeliveryRetry`
 - [x] Outbox fan-out + attempts + sweeper
 
 ## 9. Orders extras
-- [ ] `orderByToken`, `orderAddNote`, `orderBulkCancel/BulkCreate`, `orderCreateFromCheckout`
-- [ ] `draftOrderLinesBulkDelete`, `reportProductSales`, `orderSettings`
+- [x] `orderByToken` (public, token-is-secret), `orderSettings`, `reportProductSales` (ranked variants)
+- [ ] `orderAddNote`, `orderBulkCancel/BulkCreate`, `orderCreateFromCheckout`, `draftOrderLinesBulkDelete`
 - [x] order(s) details, cancel/fulfill/returns, granted refunds
 
 ## 10. Catalog leftovers
+- [x] `menuItem(s)` (tree, depth-bounded), `appExtension` single
 - [ ] `productBulkCreate`, `productReorderAttributeValues`, `productVariantReorderAttributeValues`
 - [ ] `productVariantBulkTranslate`, `productBulkTranslate`, `attributeBulk{Create,Update,Translate}`, `attributeValueBulkTranslate`
 - [ ] `promotionBulkDelete`, `promotionRuleTranslate`, `promotionTranslate`, `shopSettingsTranslate`
@@ -70,7 +72,8 @@ Legend: `[x]` real + tested · `[~]` exists but thin/stub · `[ ]` missing.
 - [x] Staff/customer/groups/addresses/password/register/confirm/delete flows (see `ACCOUNT_SECURITY_CHECKLIST.md`)
 
 ## 12. Misc queries
-- [ ] `address`, `appExtension` (single), `checkoutLines`, `exportFiles`, `menuItem(s)`
+- [x] `address` (staff-any or owner), `appExtension` single, `checkoutLines` (admin view), `exportFiles` (empty), `menuItem(s)`
+- [x] `payment(s)` (MANAGE_ORDERS), `transactions` (where/sort)
 - [ ] `_entities` / `_service` (federation — N/A, single binary)
 - [ ] `appTokenVerify`, `appProblemCreate`, `appReenableSyncWebhooks`
 - [ ] `externalNotificationTrigger`, `storedPaymentMethodRequestDelete`, `invoiceRequestDelete`
