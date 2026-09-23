@@ -64,6 +64,8 @@ struct PaymentIntent {
     id: String,
     status: String,
     #[serde(default)]
+    client_secret: Option<String>,
+    #[serde(default)]
     next_action: Option<NextAction>,
 }
 
@@ -156,6 +158,37 @@ impl StripePsp {
             PspAction::Charge => self.charge(req).await,
             PspAction::Refund => self.refund(req).await,
             PspAction::Cancel => self.cancel(req).await,
+        }
+    }
+
+    /// Frontend setup: create a manual-capture PaymentIntent and hand back
+    /// its id + client_secret (what `transactionInitialize` returns as
+    /// gateway `data`). The intent is confirmed later by `authorize` (with
+    /// `data.payment_method`) or captured by `charge` (`data.payment_intent`).
+    pub async fn create_manual_intent(
+        &self,
+        amount: rust_decimal::Decimal,
+        currency: &str,
+        idempotency_key: &str,
+    ) -> Result<(String, String), String> {
+        let minor = minor_units(amount, currency).map_err(|e| e.to_string())?;
+        let form: Vec<(&str, String)> = vec![
+            ("amount", minor.to_string()),
+            ("currency", currency.to_lowercase()),
+            ("capture_method", "manual".into()),
+            ("confirmation_method", "manual".into()),
+        ];
+        let resp = self.post("/v1/payment_intents", &form, idempotency_key).await?;
+        let status = resp.status();
+        let body = resp.text().await.unwrap_or_default();
+        if !status.is_success() {
+            return Err(stripe_message(&body).unwrap_or_else(|| format!("stripe HTTP {status}")));
+        }
+        let pi: PaymentIntent =
+            serde_json::from_str(&body).map_err(|e| format!("stripe bad intent body: {e}"))?;
+        match (pi.id, pi.client_secret) {
+            (id, Some(secret)) if !id.is_empty() && !secret.is_empty() => Ok((id, secret)),
+            _ => Err("stripe intent missing id/client_secret".into()),
         }
     }
 
@@ -430,6 +463,26 @@ mod tests {
             }
             other => panic!("want ActionRequired, got {other:?}"),
         }
+    }
+
+    #[tokio::test]
+    async fn create_manual_intent_returns_id_and_secret() {
+        let (base, seen) = mock_stripe(|path, _| {
+            assert!(path == "/v1/payment_intents", "{path}");
+            (200, r#"{"id":"pi_init_1","status":"requires_payment_method","client_secret":"pi_init_1_secret_x"}"#.into())
+        })
+        .await;
+        let p = StripePsp::with_base("sk_test_x", base);
+        let (id, secret) = p
+            .create_manual_intent(rust_decimal::Decimal::new(2500, 2), "USD", "init-key-1")
+            .await
+            .unwrap();
+        assert_eq!(id, "pi_init_1");
+        assert_eq!(secret, "pi_init_1_secret_x");
+        let s = seen.lock().unwrap();
+        assert_eq!(s[0].idempotency_key, "init-key-1");
+        assert!(s[0].body.contains("amount=2500"), "{}", s[0].body);
+        assert!(s[0].body.contains("confirmation_method=manual"), "{}", s[0].body);
     }
 
     #[tokio::test]

@@ -1234,3 +1234,99 @@ pub async fn has_event(
         .await?
         .is_some())
 }
+
+/// Initialize a transaction session (Django `transactionInitialize`):
+/// creates the item on a checkout or order plus a *_REQUEST event, so the
+/// ledger starts honest (request events never move buckets).
+pub struct InitSpec {
+    pub checkout_id: Option<Uuid>,
+    pub order_id: Option<Uuid>,
+    pub currency: String,
+    pub name: String,
+    pub app_identifier: Option<String>,
+    pub idempotency_key: Option<String>,
+    pub available_actions: Vec<String>,
+    /// AUTHORIZATION or CHARGE flow (drives the request event family).
+    pub charge_flow: bool,
+}
+
+pub async fn initialize_transaction(
+    db: &DatabaseConnection,
+    spec: &InitSpec,
+    amount: Decimal,
+) -> Result<TxnView> {
+    let t = create_transaction(
+        db,
+        &NewTransaction {
+            checkout_id: spec.checkout_id,
+            order_id: spec.order_id,
+            currency: spec.currency.clone(),
+            name: spec.name.clone(),
+            app_identifier: spec.app_identifier.clone(),
+            idempotency_key: spec.idempotency_key.clone(),
+            available_actions: spec.available_actions.clone(),
+        },
+    )
+    .await?;
+    let ty = if spec.charge_flow { "charge_request" } else { "authorization_request" };
+    report_event(
+        db,
+        t.id,
+        &NewEvent {
+            event_type: ty.into(),
+            amount,
+            currency: spec.currency.clone(),
+            psp_reference: None,
+            message: "initialize".into(),
+            idempotency_key: spec.idempotency_key.clone().map(|k| format!("{k}-req")),
+            include_in_calculations: false,
+            related_granted_refund_id: None,
+            external_url: None,
+        },
+    )
+    .await
+}
+
+/// Outstanding amount + next action for `transactionProcess`: the linked
+/// checkout/order total minus what is already charged. Nothing authorized
+/// yet → AUTHORIZE the outstanding; authorized remainder → CHARGE it.
+pub async fn outstanding(
+    db: &impl sea_orm::ConnectionTrait,
+    transaction_id: i32,
+) -> Result<(Decimal, PspAction, String)> {
+    use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QuerySelect};
+    let item = payment_transactionitem::Entity::find_by_id(transaction_id)
+        .one(db)
+        .await?
+        .ok_or_else(|| gateway_err("transaction not found"))?;
+    let total: Option<Decimal> = if let Some(tok) = item.checkout_id {
+        crate::entities::checkout_checkout::Entity::find_by_id(tok)
+            .select_only()
+            .column(crate::entities::checkout_checkout::Column::TotalGrossAmount)
+            .into_tuple::<Decimal>()
+            .one(db)
+            .await?
+    } else if let Some(oid) = item.order_id {
+        crate::entities::order_order::Entity::find_by_id(oid)
+            .select_only()
+            .column(crate::entities::order_order::Column::TotalGrossAmount)
+            .into_tuple::<Decimal>()
+            .one(db)
+            .await?
+    } else {
+        None
+    };
+    let Some(total) = total else {
+        return Err(gateway_err("transaction is not linked to a checkout or order"));
+    };
+    let rest = (total - item.charged_value).max(Decimal::ZERO);
+    if rest <= Decimal::ZERO {
+        return Err(gateway_err("transaction is already fully processed"));
+    }
+    let next = if item.authorized_value <= Decimal::ZERO {
+        PspAction::Authorize
+    } else {
+        PspAction::Charge
+    };
+    Ok((rest, next, item.currency.clone()))
+}

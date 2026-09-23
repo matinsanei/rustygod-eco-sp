@@ -23,7 +23,7 @@ Legend: `[x]` real + tested · `[~]` exists but thin/stub · `[ ]` missing.
 - [x] `paymentCapture/Refund/Void` (legacy ledger with guards + cumulative refund counter), `paymentCheckBalance` (honest unsupported-gateway error, like Django without plugin)
 - [x] `payment(s)`, `transactions` queries
 - [x] `transactionAuthorize/Charge` (manual ledger, `handle_payments`-gated)
-- [ ] `transactionInitialize/Process`, `paymentInitialize`, gateway init + tokenization (PSP frontend flows)
+- [x] `transactionInitialize` (default amount, channel flow strategy, Stripe intent clientSecret / manual {}), `transactionProcess` (outstanding → PSP execute), `paymentInitialize` (manual config / honest gateway errors)
 - [~] Stripe skeleton (mock tests only) + live routing in requestAction when app names stripe; Adyen missing
 
 ## 3. Legacy sales (`sale*`)

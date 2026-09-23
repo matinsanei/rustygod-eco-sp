@@ -230,3 +230,53 @@ async fn scalar_patch_validates() {
     update_transaction_scalars(&db, tid, &ItemPatch { psp_reference: Some(uniq.clone()), ..Default::default() }).await.unwrap();
     assert!(update_transaction_scalars(&db, tid2, &ItemPatch { psp_reference: Some(uniq), ..Default::default() }).await.is_err());
 }
+
+#[tokio::test]
+async fn initialize_then_process_manual_flow() {
+    use saleor_rustify_db::{catalog, checkout_store};
+    let db = db().await;
+    let (ch_id, currency) = catalog::channel_info(&db, "default-channel").await.unwrap();
+    let token = checkout_store::create_checkout_row(&db, ch_id, &currency, "init@example.com").await.unwrap();
+    let products = catalog::list_products(&db, "default-channel", None, 100).await.unwrap();
+    let vid: i32 = products.iter().flat_map(|p| &p.variants)
+        .find(|v| v.quantity_available >= 1).unwrap().id.parse().unwrap();
+    let pricing = catalog::checkout_pricing(&db, "default-channel", &[vid]).await.unwrap();
+    checkout_store::add_line_row(&db, token, vid, 1, pricing[&vid].0.amount, &currency, None).await.unwrap();
+    checkout_store::refresh_totals(&db, token).await.unwrap();
+
+    // Initialize: REQUEST event only, buckets untouched.
+    let t = initialize_transaction(
+        &db,
+        &InitSpec {
+            checkout_id: Some(token),
+            order_id: None,
+            currency: currency.clone(),
+            name: "init cover".into(),
+            app_identifier: Some("manual".into()),
+            idempotency_key: Some(format!("init-{}", uuid::Uuid::new_v4())),
+            available_actions: vec!["charge".into(), "cancel".into()],
+            charge_flow: false,
+        },
+        pricing[&vid].0.amount,
+    )
+    .await
+    .unwrap();
+    assert_eq!(t.authorized, Decimal::ZERO);
+    // Outstanding = total, next = authorize.
+    let (rest, next, cur) = outstanding(&db, t.id).await.unwrap();
+    assert_eq!(cur, currency);
+    assert!(rest > Decimal::ZERO);
+    assert!(matches!(next, saleor_rustify_core::psp::PspAction::Authorize));
+    // Process the authorization through manual PSP.
+    use saleor_rustify_core::psp::ManualPsp;
+    let v = request_action(&db, t.id, saleor_rustify_core::psp::PspAction::Authorize, rest, &format!("proc-{}", uuid::Uuid::new_v4()), &ManualPsp, None).await.unwrap();
+    assert_eq!(v.authorized, rest);
+    // Then the charge remainder.
+    let (rest2, next2, _) = outstanding(&db, t.id).await.unwrap();
+    assert!(matches!(next2, saleor_rustify_core::psp::PspAction::Charge));
+    let v = request_action(&db, t.id, saleor_rustify_core::psp::PspAction::Charge, rest2, &format!("proc2-{}", uuid::Uuid::new_v4()), &ManualPsp, None).await.unwrap();
+    assert_eq!(v.charged, rest2);
+    // Fully processed now.
+    assert!(outstanding(&db, t.id).await.is_err());
+    checkout_store::delete_checkout_row(&db, token).await.unwrap();
+}

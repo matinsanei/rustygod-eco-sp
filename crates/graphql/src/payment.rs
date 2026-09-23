@@ -130,6 +130,24 @@ async fn txn_access(ctx: &Context<'_>, db: &sea_orm::DatabaseConnection, tid: i3
     }
 }
 
+/// Resolve the PSP and execute one requested action (shared by the
+/// plain and grant-linked refund paths).
+async fn execute_with_psp(
+    db: &sea_orm::DatabaseConnection,
+    tid: i32,
+    action: saleor_rustify_core::psp::PspAction,
+    amt: rust_decimal::Decimal,
+    key: &str,
+    app: Option<&str>,
+    message: Option<String>,
+) -> Result<(), String> {
+    let psp = psp_for(app)?;
+    saleor_rustify_db::payments::request_action(db, tid, action, amt, key, psp.as_ref(), message)
+        .await
+        .map(|_| ())
+        .map_err(|e| e.to_string())
+}
+
 /// PSP choice for live execution: Stripe when the owning app names it and
 /// a key is configured, manual ledger otherwise (documented fallback).
 fn psp_for(app_identifier: Option<&str>) -> Result<Box<dyn saleor_rustify_core::psp::Psp>, String> {
@@ -198,6 +216,38 @@ pub struct GqlPaymentVoid {
 #[derive(SimpleObject, Clone)]
 pub struct GqlPaymentCheckBalance {
     pub data: Option<serde_json::Value>,
+    pub errors: Vec<GqlPaymentError>,
+}
+
+#[derive(SimpleObject, Clone)]
+pub struct GqlTransactionInitialize {
+    pub transaction: Option<gen::TransactionItem>,
+    #[graphql(name = "transactionEvent")]
+    pub transaction_event: Option<gen::TransactionEvent>,
+    pub data: Option<serde_json::Value>,
+    pub errors: Vec<GqlTransactionUpdateError>,
+}
+
+#[derive(SimpleObject, Clone)]
+pub struct GqlTransactionProcess {
+    pub transaction: Option<gen::TransactionItem>,
+    #[graphql(name = "transactionEvent")]
+    pub transaction_event: Option<gen::TransactionEvent>,
+    pub data: Option<serde_json::Value>,
+    pub errors: Vec<GqlTransactionUpdateError>,
+}
+
+#[derive(SimpleObject, Clone)]
+pub struct GqlPaymentInitialized {
+    pub gateway: String,
+    pub name: String,
+    pub data: Option<String>,
+}
+
+#[derive(SimpleObject, Clone)]
+pub struct GqlPaymentInitialize {
+    #[graphql(name = "initializedPayment")]
+    pub initialized_payment: Option<GqlPaymentInitialized>,
     pub errors: Vec<GqlPaymentError>,
 }
 
@@ -543,16 +593,19 @@ impl PaymentMutation {
         &self, ctx: &Context<'_>,
         #[graphql(name = "actionType")] action_type: gen::TransactionActionEnum,
         amount: Option<gen::GenPositiveDecimal>,
-        id: ID,
+        id: Option<ID>,
         #[graphql(name = "refundReason")] refund_reason: Option<String>,
+        #[graphql(name = "refundReasonReference")] refund_reason_reference: Option<ID>,
+        token: Option<String>,
     ) -> Result<gen::TransactionRequestAction> {
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
-        let tid = match resolve_tid(db, Some(id), None).await {
+        let terr = |m: String| gen::TransactionRequestAction { transaction: None, errors: vec![gen::TransactionRequestActionError { field: None, message: Some(m), code: None }] };
+        let tid = match resolve_tid(db, id, token).await {
             Ok(t) => t,
-            Err(e) => return Ok(gen::TransactionRequestAction { transaction: None, errors: vec![gen::TransactionRequestActionError { field: None, message: Some(e.to_string()), code: None }] }),
+            Err(e) => return Ok(terr(e)),
         };
         if let Err(e) = txn_access(ctx, db, tid).await {
-            return Ok(gen::TransactionRequestAction { transaction: None, errors: vec![gen::TransactionRequestActionError { field: None, message: Some(e.to_string()), code: None }] });
+            return Ok(terr(e));
         }
         let amt = amount.as_ref().and_then(|a| a.0.parse::<rust_decimal::Decimal>().ok()).unwrap_or(rust_decimal::Decimal::ZERO);
         let (action, need_amount) = match format!("{action_type:?}").as_str() {
@@ -566,17 +619,28 @@ impl PaymentMutation {
         let app: Option<String> = saleor_rustify_db::entities::payment_transactionitem::Entity::find_by_id(tid)
             .one(db).await.map_err(|e| Error::new(e.to_string()))?
             .ok_or_else(|| Error::new("transaction not found"))?.app_identifier;
-        let psp = match psp_for(app.as_deref()) {
-            Ok(p) => p,
-            Err(e) => return Ok(gen::TransactionRequestAction { transaction: None, errors: vec![gen::TransactionRequestActionError { field: None, message: Some(e), code: None }] }),
-        };
         let key = format!("req-{}-{}-{}", tid, format!("{action_type:?}").to_lowercase(), amt);
-        match saleor_rustify_db::payments::request_action(db, tid, action, amt, &key, psp.as_ref(), refund_reason).await {
+        // Granted-refund linkage (Django `refund_request_refund_for_granted_refund`):
+        // manual PSP links the grant id into the refund event.
+        let grant_id = refund_reason_reference.as_ref().and_then(|i| saleor_rustify_db::catalog::parse_gid(&i.0));
+        let is_manual = !app.as_deref().is_some_and(|a| a.to_lowercase().contains("stripe"));
+        let out = if matches!(action, saleor_rustify_core::psp::PspAction::Refund) {
+            if let (Some(gid), true) = (grant_id, is_manual) {
+                saleor_rustify_db::payments::refund_for_grant(db, tid, amt, &key, gid).await
+                    .map(|_| ())
+                    .map_err(|e| e.to_string())
+            } else {
+                execute_with_psp(db, tid, action, amt, &key, app.as_deref(), refund_reason.clone()).await
+            }
+        } else {
+            execute_with_psp(db, tid, action, amt, &key, app.as_deref(), refund_reason.clone()).await
+        };
+        match out {
             Ok(_) => Ok(gen::TransactionRequestAction {
                 transaction: Some(assemble_item(db, tid).await.map_err(Error::new)?),
                 errors: vec![],
             }),
-            Err(e) => Ok(gen::TransactionRequestAction { transaction: None, errors: vec![gen::TransactionRequestActionError { field: None, message: Some(e.to_string()), code: None }] }),
+            Err(e) => Ok(terr(e)),
         }
     }
 
@@ -638,5 +702,164 @@ impl PaymentMutation {
         // never a fabricated balance.
         let _ = input;
         Ok(GqlPaymentCheckBalance { data: None, errors: vec![perr("balance check is not supported by any configured gateway".into())] })
+    }
+
+    /// Start a transaction session (Django `transactionInitialize`): attach
+    /// to a checkout or order, default the amount to total-minus-processed,
+    /// emit the *_REQUEST event, and hand back gateway data (Stripe intent
+    /// client secret when live, {} for manual).
+    async fn transaction_initialize(
+        &self, ctx: &Context<'_>,
+        action: Option<gen::TransactionFlowStrategyEnum>,
+        amount: Option<gen::GenPositiveDecimal>,
+        #[graphql(name = "customerIpAddress")] customer_ip_address: Option<String>,
+        id: ID,
+        #[graphql(name = "idempotencyKey")] idempotency_key: Option<String>,
+        #[graphql(name = "paymentGateway")] payment_gateway: Option<gen::PaymentGatewayToInitialize>,
+    ) -> Result<GqlTransactionInitialize> {
+        let _ = customer_ip_address;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let err = |m: String| GqlTransactionInitialize { transaction: None, transaction_event: None, data: None, errors: vec![tuerr(m)] };
+        let Some(uuid) = crate::common::parse_uuid_gid(&id.0) else {
+            return Ok(err("bad checkout/order id".into()));
+        };
+        // Checkout or order?
+        use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QuerySelect};
+        let co = saleor_rustify_db::entities::checkout_checkout::Entity::find_by_id(uuid).one(db).await.map_err(|e| Error::new(e.to_string()))?;
+        let od = saleor_rustify_db::entities::order_order::Entity::find_by_id(uuid).one(db).await.map_err(|e| Error::new(e.to_string()))?;
+        let (checkout_id, order_id, currency, total, channel_id) = match (co, od) {
+            (Some(c), _) => (Some(c.token), None, c.currency.clone(), c.total_gross_amount, c.channel_id),
+            (None, Some(o)) => (None, Some(o.id), o.currency.clone(), o.total_gross_amount, o.channel_id),
+            (None, None) => return Ok(err("no checkout or order with this id".into())),
+        };
+        // Default amount = total minus already-charged across linked items.
+        let charged_sum: rust_decimal::Decimal = saleor_rustify_db::entities::payment_transactionitem::Entity::find()
+            .select_only().column(saleor_rustify_db::entities::payment_transactionitem::Column::ChargedValue)
+            .filter(if checkout_id.is_some() {
+                saleor_rustify_db::entities::payment_transactionitem::Column::CheckoutId.eq(uuid)
+            } else {
+                saleor_rustify_db::entities::payment_transactionitem::Column::OrderId.eq(uuid)
+            })
+            .into_tuple::<rust_decimal::Decimal>().all(db).await.map_err(|e| Error::new(e.to_string()))?
+            .into_iter().sum();
+        let amt = amount.as_ref()
+            .and_then(|a| a.0.parse::<rust_decimal::Decimal>().ok())
+            .unwrap_or((total - charged_sum).max(rust_decimal::Decimal::ZERO));
+        if amt <= rust_decimal::Decimal::ZERO {
+            return Ok(err("nothing left to initialize: total already processed".into()));
+        }
+        // Flow: explicit arg wins, else the channel default.
+        let charge_flow = match action.as_ref().map(|a| format!("{a:?}")).as_deref() {
+            Some("CHARGE") => true,
+            Some("AUTHORIZATION") => false,
+            _ => {
+                let strat: Option<String> = saleor_rustify_db::entities::channel_channel::Entity::find_by_id(channel_id)
+                    .select_only().column(saleor_rustify_db::entities::channel_channel::Column::DefaultTransactionFlowStrategy)
+                    .into_tuple::<String>().one(db).await.map_err(|e| Error::new(e.to_string()))?;
+                strat.is_some_and(|s| s == "charge")
+            }
+        };
+        let gw_id = payment_gateway.as_ref().map(|p| p.id.clone()).unwrap_or_else(|| "manual".into());
+        let item = match saleor_rustify_db::payments::initialize_transaction(db, &saleor_rustify_db::payments::InitSpec {
+            checkout_id, order_id, currency: currency.clone(), name: "initialize".into(),
+            app_identifier: Some(gw_id.clone()), idempotency_key: idempotency_key.clone(),
+            available_actions: vec!["charge".into(), "refund".into(), "cancel".into()],
+            charge_flow,
+        }, amt).await {
+            Ok(v) => v,
+            Err(e) => return Ok(err(e.to_string())),
+        };
+        // Gateway data: live Stripe intent, else manual empty config.
+        let mut data = serde_json::json!({});
+        if gw_id.to_lowercase().contains("stripe") {
+            match saleor_rustify_psp::StripePsp::from_env() {
+                Some(psp) => match psp.create_manual_intent(amt, &currency, &idempotency_key.clone().unwrap_or_else(|| format!("init-{}", item.id))).await {
+                    Ok((pi, secret)) => { data = serde_json::json!({"id": pi, "clientSecret": secret}); }
+                    Err(e) => return Ok(err(format!("stripe: {e}"))),
+                },
+                None => return Ok(err("stripe selected but STRIPE_SECRET_KEY is unset".into())),
+            }
+        }
+        let full = assemble_item(db, item.id).await.map_err(Error::new)?;
+        let ev = full.events.last().cloned();
+        Ok(GqlTransactionInitialize { transaction: Some(full), transaction_event: ev, data: Some(data), errors: vec![] })
+    }
+
+    /// Run the transaction's next step through its PSP (Django
+    /// `transactionProcess`): authorize the outstanding (or charge the
+    /// remainder), with the frontend-supplied gateway data.
+    async fn transaction_process(
+        &self, ctx: &Context<'_>,
+        #[graphql(name = "customerIpAddress")] customer_ip_address: Option<String>,
+        data: Option<serde_json::Value>,
+        id: Option<ID>, token: Option<String>,
+    ) -> Result<GqlTransactionProcess> {
+        let _ = customer_ip_address;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let err = |m: String| GqlTransactionProcess { transaction: None, transaction_event: None, data: None, errors: vec![tuerr(m)] };
+        let tid = match resolve_tid(db, id, token).await {
+            Ok(t) => t,
+            Err(e) => return Ok(err(e)),
+        };
+        if let Err(e) = txn_access(ctx, db, tid).await {
+            return Ok(err(e));
+        }
+        let (amount, action, currency) = match saleor_rustify_db::payments::outstanding(db, tid).await {
+            Ok(v) => v,
+            Err(e) => return Ok(err(e.to_string())),
+        };
+        let app: Option<String> = saleor_rustify_db::entities::payment_transactionitem::Entity::find_by_id(tid)
+            .one(db).await.map_err(|e| Error::new(e.to_string()))?
+            .ok_or_else(|| Error::new("transaction not found"))?.app_identifier;
+        let psp = match psp_for(app.as_deref()) {
+            Ok(p) => p,
+            Err(e) => return Ok(err(e)),
+        };
+        let data_str = data.map(|v| v.to_string());
+        let key = format!("process-{tid}-{amount}");
+        let outcome = saleor_rustify_db::payments::execute_via(
+            db, tid, action, amount, &key, psp.as_ref(), None, data_str.as_deref(),
+        )
+        .await;
+        let _ = currency;
+        match outcome {
+            Ok(out) => {
+                let full = assemble_item(db, tid).await.map_err(Error::new)?;
+                let ev = full.events.last().cloned();
+                let data = serde_json::json!({
+                    "actionRequired": out.action_required,
+                    "redirectUrl": out.redirect_url,
+                    "charged": out.txn.charged.to_string(),
+                    "authorized": out.txn.authorized.to_string(),
+                });
+                Ok(GqlTransactionProcess { transaction: Some(full), transaction_event: ev, data: Some(data), errors: vec![] })
+            }
+            Err(e) => Ok(err(e.to_string())),
+        }
+    }
+
+    /// Legacy gateway init (Django `paymentInitialize`): manual returns an
+    /// empty config (nothing to configure); anything else needs a live key.
+    async fn payment_initialize(
+        &self, ctx: &Context<'_>,
+        channel: Option<String>, gateway: String, #[graphql(name = "paymentData")] payment_data: Option<String>,
+    ) -> Result<GqlPaymentInitialize> {
+        let _ = (channel, payment_data);
+        let _ = crate::account::require_perm(ctx, "handle_payments").await?;
+        let err = |m: String| GqlPaymentInitialize { initialized_payment: None, errors: vec![perr(m)] };
+        match gateway.as_str() {
+            "manual" => Ok(GqlPaymentInitialize {
+                initialized_payment: Some(GqlPaymentInitialized { gateway: "manual".into(), name: "Manual".into(), data: Some("{}".into()) }),
+                errors: vec![],
+            }),
+            "stripe" => match std::env::var("STRIPE_SECRET_KEY").ok().filter(|k| !k.trim().is_empty()) {
+                Some(_) => Ok(GqlPaymentInitialize {
+                    initialized_payment: Some(GqlPaymentInitialized { gateway: "stripe".into(), name: "Stripe".into(), data: Some("{}".into()) }),
+                    errors: vec![],
+                }),
+                None => Ok(err("stripe selected but STRIPE_SECRET_KEY is unset".into())),
+            },
+            other => Ok(err(format!("gateway {other} is not configured"))),
+        }
     }
 }
