@@ -546,3 +546,147 @@ pub fn to_domain(
     }
     out
 }
+
+/// New-checkout-API row writers (Saleor `checkout*` mutations parity).
+/// Every writer refreshes totals via the caller (GQL layer calls
+/// `refresh_totals` once per mutation, like Django's recalculation).
+
+/// Update a line's quantity (0 deletes the line, like Django).
+pub async fn update_line_quantity(
+    db: &impl sea_orm::ConnectionTrait,
+    checkout_token: Uuid,
+    line_id: Uuid,
+    quantity: i32,
+) -> Result<()> {
+    use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, Set};
+    let Some(l) = checkout_checkoutline::Entity::find_by_id(line_id)
+        .filter(checkout_checkoutline::Column::CheckoutId.eq(checkout_token))
+        .one(db)
+        .await?
+    else {
+        return Err(DbError::CheckoutNotFound(format!("line {line_id}")));
+    };
+    if quantity <= 0 {
+        return delete_line(db, checkout_token, line_id).await;
+    }
+    let mut am: checkout_checkoutline::ActiveModel = l.into();
+    am.quantity = Set(quantity);
+    am.update(db).await?;
+    Ok(())
+}
+
+/// Delete one line (no-op when missing — Django is idempotent here).
+pub async fn delete_line(
+    db: &impl sea_orm::ConnectionTrait,
+    checkout_token: Uuid,
+    line_id: Uuid,
+) -> Result<()> {
+    use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
+    checkout_checkoutline::Entity::delete_many()
+        .filter(checkout_checkoutline::Column::Id.eq(line_id))
+        .filter(checkout_checkoutline::Column::CheckoutId.eq(checkout_token))
+        .exec(db)
+        .await?;
+    Ok(())
+}
+
+macro_rules! checkout_setter {
+    ($name:ident, $col:ident, $ty:ty) => {
+        pub async fn $name(
+            db: &impl sea_orm::ConnectionTrait,
+            checkout_token: Uuid,
+            value: $ty,
+        ) -> Result<()> {
+            use sea_orm::EntityTrait;
+            let Some(co) = checkout_checkout::Entity::find_by_id(checkout_token).one(db).await?
+            else {
+                return Err(DbError::CheckoutNotFound(checkout_token.to_string()));
+            };
+            let mut am: checkout_checkout::ActiveModel = co.into();
+            am.$col = Set(value);
+            am.update(db).await?;
+            Ok(())
+        }
+    };
+}
+
+checkout_setter!(set_email_opt, email, Option<String>);
+checkout_setter!(set_note_text, note, String);
+checkout_setter!(set_language_code, language_code, String);
+checkout_setter!(set_customer_opt, user_id, Option<i32>);
+checkout_setter!(set_shipping_method_opt, shipping_method_id, Option<i32>);
+checkout_setter!(set_collection_point_opt, collection_point_id, Option<Uuid>);
+checkout_setter!(set_metadata_opt, metadata, Option<serde_json::Value>);
+
+/// Standalone address row for a checkout side (Django checkout addresses
+/// are owned rows, not address-book links).
+pub async fn set_checkout_address(
+    db: &impl sea_orm::ConnectionTrait,
+    checkout_token: Uuid,
+    billing: bool,
+    first_name: &str,
+    last_name: &str,
+    street_1: &str,
+    city: &str,
+    postal_code: &str,
+    country: &str,
+) -> Result<i32> {
+    use sea_orm::EntityTrait;
+    let aid = crate::entities::account_address::ActiveModel {
+        first_name: Set(first_name.to_string()),
+        last_name: Set(last_name.to_string()),
+        company_name: Set(String::new()),
+        street_address_1: Set(street_1.to_string()),
+        street_address_2: Set(String::new()),
+        city: Set(city.to_string()),
+        postal_code: Set(postal_code.to_string()),
+        country: Set(country.to_string()),
+        country_area: Set(String::new()),
+        city_area: Set(String::new()),
+        phone: Set(String::new()),
+        metadata: Set(serde_json::json!({})),
+        private_metadata: Set(serde_json::json!({})),
+        validation_skipped: Set(false),
+        ..Default::default()
+    }
+    .insert(db)
+    .await?
+    .id;
+    let Some(co) = checkout_checkout::Entity::find_by_id(checkout_token).one(db).await?
+    else {
+        return Err(DbError::CheckoutNotFound(checkout_token.to_string()));
+    };
+    let mut am: checkout_checkout::ActiveModel = co.into();
+    if billing {
+        am.billing_address_id = Set(Some(aid));
+    } else {
+        am.shipping_address_id = Set(Some(aid));
+    }
+    am.update(db).await?;
+    Ok(aid)
+}
+
+/// Clear the voucher code (Django `removePromoCode` for vouchers; usage is
+/// only increased at completion, so nothing else unwinds).
+pub async fn remove_voucher_code(
+    db: &impl sea_orm::ConnectionTrait,
+    checkout_token: Uuid,
+    code: Option<&str>,
+) -> Result<bool> {
+    use sea_orm::EntityTrait;
+    let Some(co) = checkout_checkout::Entity::find_by_id(checkout_token).one(db).await?
+    else {
+        return Err(DbError::CheckoutNotFound(checkout_token.to_string()));
+    };
+    let cur = co.voucher_code.clone().unwrap_or_default();
+    if code.is_some_and(|c| !cur.eq_ignore_ascii_case(c)) {
+        return Ok(false);
+    }
+    if co.voucher_code.is_none() {
+        return Ok(false);
+    }
+    let mut am: checkout_checkout::ActiveModel = co.into();
+    am.voucher_code = Set(None);
+    am.update(db).await?;
+    Ok(true)
+}
