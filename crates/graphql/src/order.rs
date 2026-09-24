@@ -379,7 +379,7 @@ pub(crate) async fn to_gen_order(
         lines,
         actions: vec![],
         shipping_methods: vec![],
-        invoices: vec![],
+        invoices: order_invoices(db, h.id).await,
         number: Some(h.number.to_string()),
         is_paid: None,
         payment_status: Some("NOT_CHARGED".into()),
@@ -1313,6 +1313,216 @@ impl OrderMutation {
         }
     }
 
+    /// Legacy alias of `orderNoteAdd` (Django kept both names; same row).
+    #[graphql(name = "orderAddNote")]
+    async fn order_add_note_legacy(
+        &self, ctx: &Context<'_>, order: ID, input: gen::OrderAddNoteInput,
+    ) -> Result<GqlOrderAddNoteLegacy> {
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        authorize(ctx, crate::context::MANAGE_ORDERS).await?;
+        let (uid, _) = crate::account::requester(ctx, db).await.unwrap_or((0, String::new()));
+        let oid = parse_id(&order.0);
+        if input.message.trim().is_empty() {
+            return Ok(GqlOrderAddNoteLegacy { order: None, errors: vec![oerr("message is required".into())] });
+        }
+        if let Err(e) = saleor_rustify_db::order_store::add_order_note(db, oid, Some(uid), input.message.trim()).await {
+            return Ok(GqlOrderAddNoteLegacy { order: None, errors: vec![oerr(e.to_string())] });
+        }
+        let (h, ls) = saleor_rustify_db::order_store::get_order_rows(db, oid).await.map_err(|e| Error::new(e.to_string()))?.ok_or_else(|| Error::new("order vanished"))?;
+        Ok(GqlOrderAddNoteLegacy { order: Some(to_gen_order(db, &h, ls).await), errors: vec![] })
+    }
+
+    /// Request an invoice (Django `invoiceRequest`): pending row + event.
+    /// Requires a billing address (Django parity).
+    async fn invoice_request(
+        &self, ctx: &Context<'_>,
+        number: Option<String>,
+        #[graphql(name = "orderId")] order_id: ID,
+    ) -> Result<gen::InvoiceRequest> {
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        authorize(ctx, crate::context::MANAGE_ORDERS).await?;
+        let (uid, _) = crate::account::requester(ctx, db).await.unwrap_or((0, String::new()));
+        let oid = parse_id(&order_id.0);
+        match saleor_rustify_db::invoices::request_invoice(db, oid, number, Some(uid)).await {
+            Ok(row) => Ok(gen::InvoiceRequest {
+                order: order_view(db, oid).await?,
+                errors: vec![],
+                invoice: Some(assemble_invoice(&row)),
+            }),
+            Err(e) => Ok(gen::InvoiceRequest { order: None, errors: vec![invoice_err(e.to_string())], invoice: None }),
+        }
+    }
+
+    /// Send an invoice to the customer's email (Django
+    /// `invoiceSendNotification`; the send itself rides the SMTP milestone —
+    /// recorded as a SENT event today).
+    async fn invoice_send_notification(&self, ctx: &Context<'_>, id: ID) -> Result<gen::InvoiceSendNotification> {
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        authorize(ctx, crate::context::MANAGE_ORDERS).await?;
+        let (uid, _) = crate::account::requester(ctx, db).await.unwrap_or((0, String::new()));
+        let iid = saleor_rustify_db::catalog::parse_gid(&id.0).unwrap_or(-1);
+        let email = match invoice_order_email(db, iid).await {
+            Ok(e) => e,
+            Err(e) => return Ok(gen::InvoiceSendNotification { errors: vec![invoice_err(e)], invoice: None }),
+        };
+        match saleor_rustify_db::invoices::send_invoice(db, iid, &email, Some(uid)).await {
+            Ok(row) => Ok(gen::InvoiceSendNotification { errors: vec![], invoice: Some(assemble_invoice(&row)) }),
+            Err(e) => Ok(gen::InvoiceSendNotification { errors: vec![invoice_err(e.to_string())], invoice: None }),
+        }
+    }
+
+    /// Create an invoice from number+url (Django `invoiceCreate`): request
+    /// a pending row, then fulfill it with the given document.
+    async fn invoice_create(
+        &self, ctx: &Context<'_>, input: gen::InvoiceCreateInput, #[graphql(name = "orderId")] order_id: ID,
+    ) -> Result<GqlInvoiceCreate> {
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        authorize(ctx, crate::context::MANAGE_ORDERS).await?;
+        let (uid, _) = crate::account::requester(ctx, db).await.unwrap_or((0, String::new()));
+        let oid = parse_id(&order_id.0);
+        let number = input.number.clone();
+        let url = input.url.clone();
+        let meta = input.metadata.as_ref().map(meta_value).unwrap_or(serde_json::Value::Object(Default::default()));
+        let pmeta = input.private_metadata.as_ref().map(meta_value).unwrap_or(serde_json::Value::Object(Default::default()));
+        let row = match saleor_rustify_db::invoices::request_invoice(db, oid, Some(number.clone()), Some(uid)).await {
+            Ok(r) => r,
+            Err(e) => return Ok(GqlInvoiceCreate { errors: vec![invoice_err(e.to_string())], invoice: None }),
+        };
+        match saleor_rustify_db::invoices::fulfill_invoice(db, row.id, &number, &url, Some(uid)).await {
+            Ok(mut full) => {
+                // Attach metadata (fulfill path doesn't take it).
+                use sea_orm::{ActiveModelTrait, EntityTrait, Set};
+                if let Some(r) = saleor_rustify_db::entities::invoice_invoice::Entity::find_by_id(full.id)
+                    .one(db).await.map_err(|e| Error::new(e.to_string()))?
+                {
+                    let mut am: saleor_rustify_db::entities::invoice_invoice::ActiveModel = r.into();
+                    am.metadata = Set(meta);
+                    am.private_metadata = Set(pmeta);
+                    full = am.update(db).await.map_err(|e| Error::new(e.to_string()))?;
+                }
+                Ok(GqlInvoiceCreate { errors: vec![], invoice: Some(assemble_invoice(&full)) })
+            }
+            Err(e) => Ok(GqlInvoiceCreate { errors: vec![invoice_err(e.to_string())], invoice: None }),
+        }
+    }
+
+    /// Update an invoice (Django `invoiceUpdate`).
+    async fn invoice_update(
+        &self, ctx: &Context<'_>, id: ID, input: gen::UpdateInvoiceInput,
+    ) -> Result<GqlInvoiceUpdate> {
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        authorize(ctx, crate::context::MANAGE_ORDERS).await?;
+        let iid = saleor_rustify_db::catalog::parse_gid(&id.0).unwrap_or(-1);
+        let meta = input.metadata.as_ref().map(meta_value);
+        let pmeta = input.private_metadata.as_ref().map(meta_value);
+        match saleor_rustify_db::invoices::update_invoice(db, iid, input.number.clone(), input.url.clone(), meta, pmeta).await {
+            Ok(row) => Ok(GqlInvoiceUpdate { errors: vec![], invoice: Some(assemble_invoice(&row)) }),
+            Err(e) => Ok(GqlInvoiceUpdate { errors: vec![invoice_err(e.to_string())], invoice: None }),
+        }
+    }
+
+    /// Delete an invoice (Django `invoiceDelete`).
+    async fn invoice_delete(&self, ctx: &Context<'_>, id: ID) -> Result<GqlInvoiceDelete> {
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        authorize(ctx, crate::context::MANAGE_ORDERS).await?;
+        let (uid, _) = crate::account::requester(ctx, db).await.unwrap_or((0, String::new()));
+        let iid = saleor_rustify_db::catalog::parse_gid(&id.0).unwrap_or(-1);
+        match saleor_rustify_db::invoices::delete_invoice(db, iid, Some(uid)).await {
+            Ok(_) => Ok(GqlInvoiceDelete { errors: vec![], invoice: None }),
+            Err(e) => Ok(GqlInvoiceDelete { errors: vec![invoice_err(e.to_string())], invoice: None }),
+        }
+    }
+
+    /// Request invoice deletion (Django `invoiceRequestDelete`): back to
+    /// pending with a deletion event.
+    async fn invoice_request_delete(&self, ctx: &Context<'_>, id: ID) -> Result<GqlInvoiceRequestDelete> {
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        authorize(ctx, crate::context::MANAGE_ORDERS).await?;
+        let (uid, _) = crate::account::requester(ctx, db).await.unwrap_or((0, String::new()));
+        let iid = saleor_rustify_db::catalog::parse_gid(&id.0).unwrap_or(-1);
+        match saleor_rustify_db::invoices::request_deletion(db, iid, Some(uid)).await {
+            Ok(row) => Ok(GqlInvoiceRequestDelete { errors: vec![], invoice: Some(assemble_invoice(&row)) }),
+            Err(e) => Ok(GqlInvoiceRequestDelete { errors: vec![invoice_err(e.to_string())], invoice: None }),
+        }
+    }
+
+    /// Retry an event delivery (Django `eventDeliveryRetry`).
+    async fn event_delivery_retry(&self, ctx: &Context<'_>, id: ID) -> Result<GqlEventDeliveryRetry> {
+        let _ = crate::account::require_perm(ctx, "manage_apps").await?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let did = saleor_rustify_db::catalog::parse_gid(&id.0).unwrap_or(-1);
+        match saleor_rustify_db::webhooks::retry_delivery(db, did).await {
+            Ok(v) => Ok(GqlEventDeliveryRetry { delivery: Some(delivery_view(&v)), errors: vec![] }),
+            Err(e) => Ok(GqlEventDeliveryRetry {
+                delivery: None,
+                errors: vec![gen::WebhookError { field: None, message: Some(e.to_string()), code: None }],
+            }),
+        }
+    }
+
+    /// Manually trigger a webhook (Django `webhookTrigger`).
+    async fn webhook_trigger(
+        &self, ctx: &Context<'_>,
+        #[graphql(name = "objectId")] object_id: ID, #[graphql(name = "webhookId")] webhook_id: ID,
+    ) -> Result<GqlWebhookTrigger> {
+        let _ = crate::account::require_perm(ctx, "manage_apps").await?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let wid = saleor_rustify_db::catalog::parse_gid(&webhook_id.0).unwrap_or(-1);
+        match saleor_rustify_db::webhooks::trigger_manual(db, wid, &object_id.0).await {
+            Ok(v) => Ok(GqlWebhookTrigger { delivery: Some(delivery_view(&v)), errors: vec![] }),
+            Err(e) => Ok(GqlWebhookTrigger {
+                delivery: None,
+                errors: vec![GqlWebhookTriggerError { field: None, message: Some(e.to_string()), code: None }],
+            }),
+        }
+    }
+
+    /// Bulk order import (Django `orderBulkCreate`, migration path): up to
+    /// 50 orders, each validated independently; stock decrements when free
+    /// stock covers the line (Django UPDATE policy).
+    async fn order_bulk_create(
+        &self, ctx: &Context<'_>,
+        #[graphql(name = "errorPolicy")] error_policy: Option<gen::ErrorPolicyEnum>,
+        orders: Vec<gen::OrderBulkCreateInput>,
+        #[graphql(name = "stockUpdatePolicy")] stock_update_policy: Option<gen::StockUpdatePolicyEnum>,
+    ) -> Result<GqlOrderBulkCreate> {
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        authorize(ctx, crate::context::MANAGE_ORDERS).await?;
+        let (uid, _) = crate::account::requester(ctx, db).await.unwrap_or((0, String::new()));
+        let _ = error_policy;
+        let _ = stock_update_policy;
+        if orders.len() > 50 {
+            return Ok(GqlOrderBulkCreate {
+                count: Some(0),
+                results: vec![],
+                errors: vec![oerr("at most 50 orders per call".into())],
+            });
+        }
+        let mut results = vec![];
+        for o in &orders {
+            match bulk_order_from(db, o).await {
+                Ok(import) => match saleor_rustify_db::order_import::import_order(db, &import, Some(uid)).await {
+                    Ok(oid) => {
+                        results.push(GqlOrderBulkCreateResult {
+                            order: order_view(db, oid).await?,
+                            errors: vec![],
+                        });
+                    }
+                    Err(e) => results.push(GqlOrderBulkCreateResult {
+                        order: None,
+                        errors: vec![oerr(e.to_string())],
+                    }),
+                },
+                Err(e) => results.push(GqlOrderBulkCreateResult {
+                    order: None,
+                    errors: vec![oerr(e)],
+                }),
+            }
+        }
+        let n = results.iter().filter(|r| r.errors.is_empty()).count() as i32;
+        Ok(GqlOrderBulkCreate { count: Some(n), results, errors: vec![] })
+    }
+
     /// Draft order create (Django `draftOrderCreate`): full input surface —
     /// customer, addresses, shipping method, voucher code, note, metadata.
     async fn draft_order_create(&self, ctx: &Context<'_>, input: gen::DraftOrderCreateInput) -> Result<gen::DraftOrderCreate> {
@@ -1614,6 +1824,130 @@ async fn order_currency(db: &sea_orm::DatabaseConnection, oid: Uuid) -> Result<S
         .unwrap_or_else(|| "USD".to_string()))
 }
 
+/// Invoice assembly (Django `Invoice` node: status/number/url + dates).
+pub(crate) fn assemble_invoice(
+    row: &saleor_rustify_db::entities::invoice_invoice::Model,
+) -> gen::Invoice {
+    gen::Invoice {
+        private_metadata: vec![],
+        metadata: vec![],
+        status: Some(row.status.to_uppercase()),
+        created_at: Some(row.created_at.into()),
+        id: Some(ID(crate::common::gid("Invoice", row.id))),
+        number: row.number.clone(),
+        url: row.external_url.clone(),
+    }
+}
+
+async fn order_invoices(
+    db: &sea_orm::DatabaseConnection,
+    oid: Uuid,
+) -> Vec<gen::Invoice> {
+    use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QueryOrder};
+    saleor_rustify_db::entities::invoice_invoice::Entity::find()
+        .filter(saleor_rustify_db::entities::invoice_invoice::Column::OrderId.eq(Some(oid)))
+        .order_by_asc(saleor_rustify_db::entities::invoice_invoice::Column::Id)
+        .all(db)
+        .await
+        .unwrap_or_default()
+        .iter()
+        .map(assemble_invoice)
+        .collect()
+}
+
+fn invoice_err(message: String) -> gen::InvoiceError {
+    gen::InvoiceError { field: None, message: Some(message), code: None }
+}
+
+#[derive(SimpleObject, Clone)]
+#[graphql(name = "OrderAddNote")]
+pub struct GqlOrderAddNoteLegacy {
+    pub order: Option<gen::Order>,
+    pub errors: Vec<gen::OrderError>,
+}
+
+#[derive(SimpleObject, Clone)]
+#[graphql(name = "InvoiceCreate")]
+pub struct GqlInvoiceCreate {
+    pub errors: Vec<gen::InvoiceError>,
+    pub invoice: Option<gen::Invoice>,
+}
+
+#[derive(SimpleObject, Clone)]
+#[graphql(name = "InvoiceUpdate")]
+pub struct GqlInvoiceUpdate {
+    pub errors: Vec<gen::InvoiceError>,
+    pub invoice: Option<gen::Invoice>,
+}
+
+#[derive(SimpleObject, Clone)]
+#[graphql(name = "InvoiceDelete")]
+pub struct GqlInvoiceDelete {
+    pub errors: Vec<gen::InvoiceError>,
+    pub invoice: Option<gen::Invoice>,
+}
+
+#[derive(SimpleObject, Clone)]
+#[graphql(name = "InvoiceRequestDelete")]
+pub struct GqlInvoiceRequestDelete {
+    pub errors: Vec<gen::InvoiceError>,
+    pub invoice: Option<gen::Invoice>,
+}
+
+#[derive(SimpleObject, Clone)]
+#[graphql(name = "EventDeliveryRetry")]
+pub struct GqlEventDeliveryRetry {
+    pub delivery: Option<gen::EventDelivery>,
+    pub errors: Vec<gen::WebhookError>,
+}
+
+#[derive(SimpleObject, Clone)]
+#[graphql(name = "WebhookTrigger")]
+pub struct GqlWebhookTrigger {
+    pub delivery: Option<gen::EventDelivery>,
+    pub errors: Vec<GqlWebhookTriggerError>,
+}
+
+#[derive(SimpleObject, Clone)]
+#[graphql(name = "WebhookTriggerError")]
+pub struct GqlWebhookTriggerError {
+    pub field: Option<String>,
+    pub message: Option<String>,
+    pub code: Option<String>,
+}
+
+/// Delivery row → node (attempts render via the attempts connection).
+pub(crate) fn delivery_view(v: &saleor_rustify_db::webhooks::DeliveryView) -> gen::EventDelivery {
+    gen::EventDelivery {
+        id: Some(ID(crate::common::gid("EventDelivery", v.id))),
+        created_at: None,
+        status: Some(v.status.to_uppercase()),
+        event_type: Some(v.event_type.clone()),
+    }
+}
+
+/// Customer email for an invoice's order (send-notification recipient).
+async fn invoice_order_email(db: &sea_orm::DatabaseConnection, iid: i32) -> std::result::Result<String, String> {
+    use sea_orm::{EntityTrait, QuerySelect};
+    let oid: Option<uuid::Uuid> = saleor_rustify_db::entities::invoice_invoice::Entity::find_by_id(iid)
+        .select_only()
+        .column(saleor_rustify_db::entities::invoice_invoice::Column::OrderId)
+        .into_tuple()
+        .one(db)
+        .await
+        .map_err(|e| e.to_string())?
+        .unwrap_or(None);
+    let oid = oid.ok_or_else(|| "invoice has no order".to_string())?;
+    saleor_rustify_db::entities::order_order::Entity::find_by_id(oid)
+        .select_only()
+        .column(saleor_rustify_db::entities::order_order::Column::UserEmail)
+        .into_tuple::<String>()
+        .one(db)
+        .await
+        .map_err(|e| e.to_string())?
+        .ok_or_else(|| "order not found".to_string())
+}
+
 /// Granted-refund decision → dashboard payload (lines embed full order lines).
 async fn granted_refund_view(
     db: &sea_orm::DatabaseConnection,
@@ -1665,6 +1999,197 @@ fn grant_err(message: String) -> gen::OrderGrantRefundCreateError {
 
 fn grant_upd_err(message: String) -> gen::OrderGrantRefundUpdateError {
     gen::OrderGrantRefundUpdateError { field: None, message: Some(message), code: None, add_lines: vec![], remove_lines: vec![] }
+}
+
+#[derive(SimpleObject, Clone)]
+#[graphql(name = "OrderBulkCreateResult")]
+pub struct GqlOrderBulkCreateResult {
+    pub order: Option<gen::Order>,
+    pub errors: Vec<gen::OrderError>,
+}
+
+#[derive(SimpleObject, Clone)]
+#[graphql(name = "OrderBulkCreate")]
+pub struct GqlOrderBulkCreate {
+    pub count: Option<i32>,
+    pub results: Vec<GqlOrderBulkCreateResult>,
+    pub errors: Vec<gen::OrderError>,
+}
+
+fn bulk_addr(a: &gen::AddressInput) -> saleor_rustify_db::order_import::ImportAddress {
+    saleor_rustify_db::order_import::ImportAddress {
+        first_name: a.first_name.clone().unwrap_or_default(),
+        last_name: a.last_name.clone().unwrap_or_default(),
+        street1: a.street_address1.clone().unwrap_or_default(),
+        street2: a.street_address2.clone().unwrap_or_default(),
+        city: a.city.clone().unwrap_or_default(),
+        postal_code: a.postal_code.clone().unwrap_or_default(),
+        country: a.country.as_ref().map(|c| format!("{c:?}")).unwrap_or_default(),
+        country_area: a.country_area.clone().unwrap_or_default(),
+        phone: a.phone.clone().unwrap_or_default(),
+        company_name: a.company_name.clone().unwrap_or_default(),
+    }
+}
+
+/// Validate + convert one bulk order input.
+async fn bulk_order_from(
+    db: &sea_orm::DatabaseConnection,
+    o: &gen::OrderBulkCreateInput,
+) -> std::result::Result<saleor_rustify_db::order_import::ImportOrder, String> {
+    use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QuerySelect};
+    saleor_rustify_db::catalog::channel_info(db, &o.channel).await.map_err(|e| e.to_string())?;
+    if o.lines.is_empty() {
+        return Err("order needs at least one line".to_string());
+    }
+    let (uid, email) = match o.user.id.as_ref().and_then(|i| saleor_rustify_db::catalog::parse_gid(&i.0)) {
+        Some(id) => {
+            let em: Option<String> = saleor_rustify_db::entities::account_user::Entity::find_by_id(id)
+                .select_only()
+                .column(saleor_rustify_db::entities::account_user::Column::Email)
+                .into_tuple()
+                .one(db)
+                .await
+                .map_err(|e| e.to_string())?
+                .unwrap_or(None);
+            match em {
+                Some(e) => (Some(id), o.user.email.clone().unwrap_or(e)),
+                None => return Err("user not found".to_string()),
+            }
+        }
+        None => {
+            let em = o.user.email.clone().unwrap_or_default();
+            if em.trim().is_empty() {
+                return Err("user email is required".to_string());
+            }
+            let id: Option<i32> = saleor_rustify_db::entities::account_user::Entity::find()
+                .select_only()
+                .column(saleor_rustify_db::entities::account_user::Column::Id)
+                .filter(saleor_rustify_db::entities::account_user::Column::Email.eq(em.trim()))
+                .into_tuple()
+                .one(db)
+                .await
+                .map_err(|e| e.to_string())?
+                .unwrap_or(None);
+            (id, em)
+        }
+    };
+    let mut lines = vec![];
+    for l in &o.lines {
+        let vid = match l.variant_id.as_ref().and_then(|i| saleor_rustify_db::catalog::parse_gid(&i.0)) {
+            Some(v) => Some(v),
+            None => match l.variant_sku.as_ref().map(|s| s.trim()).filter(|s| !s.is_empty()) {
+                Some(sku) => saleor_rustify_db::entities::product_productvariant::Entity::find()
+                    .select_only()
+                    .column(saleor_rustify_db::entities::product_productvariant::Column::Id)
+                    .filter(saleor_rustify_db::entities::product_productvariant::Column::Sku.eq(sku))
+                    .into_tuple::<i32>()
+                    .one(db)
+                    .await
+                    .map_err(|e| e.to_string())?,
+                None => None,
+            },
+        };
+        if l.quantity < 1 {
+            return Err("line quantity must be positive".to_string());
+        }
+        lines.push(saleor_rustify_db::order_import::ImportLine {
+            variant_id: vid,
+            variant_sku: l.variant_sku.clone().or_else(|| l.product_sku.clone()),
+            product_name: l.product_name.clone().unwrap_or_default(),
+            variant_name: l.variant_name.clone().unwrap_or_default(),
+            quantity: l.quantity,
+            is_shipping_required: l.is_shipping_required,
+            is_gift_card: l.is_gift_card,
+            created_at: l.created_at.into(),
+        });
+    }
+    let status = match o.status.as_ref() {
+        Some(gen::OrderStatus::DRAFT) => "draft",
+        Some(gen::OrderStatus::UNCONFIRMED) => "unconfirmed",
+        Some(gen::OrderStatus::PARTIALLYFULFILLED) => "partially_fulfilled",
+        Some(gen::OrderStatus::PARTIALLYRETURNED) => "partially_returned",
+        Some(gen::OrderStatus::RETURNED) => "returned",
+        Some(gen::OrderStatus::FULFILLED) => "fulfilled",
+        Some(gen::OrderStatus::CANCELED) => "canceled",
+        Some(gen::OrderStatus::EXPIRED) => "expired",
+        _ => "unfulfilled",
+    }
+    .to_string();
+    let mut fulfillments = vec![];
+    for f in o.fulfillments.clone().unwrap_or_default() {
+        let mut flines = vec![];
+        for fl in f.lines.clone().unwrap_or_default() {
+            let wid = crate::common::parse_uuid_gid(&fl.warehouse.0)
+                .ok_or_else(|| "bad warehouse id".to_string())?;
+            flines.push(saleor_rustify_db::order_import::ImportFulfillmentLine {
+                order_line_index: fl.order_line_index.max(0) as usize,
+                quantity: fl.quantity,
+                warehouse_id: wid,
+            });
+        }
+        fulfillments.push(saleor_rustify_db::order_import::ImportFulfillment {
+            tracking_code: f.tracking_code.clone().unwrap_or_default(),
+            lines: flines,
+        });
+    }
+    let mut transactions = vec![];
+    for t in o.transactions.clone().unwrap_or_default() {
+        let money = |m: &Option<gen::MoneyInput>| {
+            m.as_ref().and_then(|x| x.amount.0.parse::<rust_decimal::Decimal>().ok()).unwrap_or(rust_decimal::Decimal::ZERO)
+        };
+        transactions.push(saleor_rustify_db::order_import::ImportTransaction {
+            currency: t.amount_charged.as_ref().map(|m| m.currency.clone()).unwrap_or_else(|| o.currency.clone()),
+            authorized: money(&t.amount_authorized),
+            charged: money(&t.amount_charged),
+            refunded: money(&t.amount_refunded),
+            canceled: money(&t.amount_canceled),
+        });
+    }
+    let meta = |m: &Option<Vec<crate::common::MetadataInput>>| {
+        let mut map = serde_json::Map::new();
+        for i in m.clone().unwrap_or_default() {
+            map.insert(i.key.clone(), serde_json::Value::String(i.value.clone()));
+        }
+        serde_json::Value::Object(map)
+    };
+    Ok(saleor_rustify_db::order_import::ImportOrder {
+        external_reference: o.external_reference.clone(),
+        channel_slug: o.channel.clone(),
+        created_at: o.created_at.into(),
+        status,
+        user_id: uid,
+        user_email: email,
+        billing: bulk_addr(&o.billing_address),
+        shipping: o.shipping_address.as_ref().map(bulk_addr),
+        currency: o.currency.clone(),
+        metadata: meta(&o.metadata),
+        private_metadata: meta(&o.private_metadata),
+        customer_note: o.customer_note.clone().unwrap_or_default(),
+        notes: o.notes.clone().unwrap_or_default().into_iter().map(|n| {
+            saleor_rustify_db::order_import::ImportNote { message: n.message.clone(), user_id: None }
+        }).collect(),
+        language_code: format!("{:?}", o.language_code).to_lowercase().replace('_', "-"),
+        weight: o.weight.as_ref().and_then(|w| w.0.parse::<f64>().ok()).unwrap_or(0.0),
+        redirect_url: o.redirect_url.clone(),
+        lines,
+        gift_cards: o.gift_cards.clone().unwrap_or_default(),
+        voucher_code: o.voucher_code.clone(),
+        discounts: o.discounts.clone().unwrap_or_default().into_iter().map(|d| {
+            saleor_rustify_db::order_import::ImportDiscount {
+                value_type: if matches!(d.value_type, gen::DiscountValueTypeEnum::PERCENTAGE) { "percentage".to_string() } else { "fixed".to_string() },
+                value: d.value.0.parse::<rust_decimal::Decimal>().unwrap_or(rust_decimal::Decimal::ZERO),
+                reason: d.reason.clone(),
+            }
+        }).collect(),
+        fulfillments,
+        transactions,
+        invoices: o.invoices.clone().unwrap_or_default().into_iter().map(|i| {
+            saleor_rustify_db::order_import::ImportInvoice { number: i.number.clone(), url: i.url.clone() }
+        }).collect(),
+        shipping_price: o.delivery_method.as_ref().and_then(|d| d.shipping_price.as_ref())
+            .and_then(|p| p.gross.0.parse::<rust_decimal::Decimal>().ok()).unwrap_or(rust_decimal::Decimal::ZERO),
+        shipping_method_name: o.delivery_method.as_ref().and_then(|d| d.shipping_method_name.clone()),
+    })
 }
 
 async fn order_view(db: &sea_orm::DatabaseConnection, oid: Uuid) -> Result<Option<gen::Order>> {

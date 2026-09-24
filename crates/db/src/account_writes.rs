@@ -1522,3 +1522,37 @@ pub async fn prune_security_tables(db: &DatabaseConnection) -> Result<u64> {
         .await?;
     Ok(a.rows_affected() + b.rows_affected())
 }
+
+/// Update a staff notification recipient (Django
+/// `staffNotificationRecipientUpdate`).
+pub async fn update_notification_recipient(
+    db: &impl ConnectionTrait,
+    id: i32,
+    user_id: Option<Option<i32>>,
+    email: Option<Option<String>>,
+    active: Option<bool>,
+) -> Result<()> {
+    use crate::entities::account_staffnotificationrecipient;
+    let row = account_staffnotificationrecipient::Entity::find_by_id(id)
+        .one(db)
+        .await?
+        .ok_or_else(|| fail(format!("recipient {id} not found")))?;
+    let mut am: account_staffnotificationrecipient::ActiveModel = row.into();
+    if let Some(u) = user_id {
+        if let Some(uid) = u {
+            let usr = identity(db, uid).await?.ok_or_else(|| fail("user not found"))?;
+            if !usr.is_staff {
+                return Err(fail("only staff users can receive notifications"));
+            }
+        }
+        am.user_id = Set(u);
+    }
+    if let Some(e) = email {
+        am.staff_email = Set(e.map(|s| s.trim().to_string()).filter(|s| !s.is_empty()));
+    }
+    if let Some(a) = active {
+        am.active = Set(a);
+    }
+    am.update(db).await?;
+    Ok(())
+}

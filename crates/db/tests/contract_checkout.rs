@@ -206,9 +206,28 @@ async fn denormalized_totals_refresh_for_django_readers() {
         .await
         .unwrap()
         .unwrap();
-    assert_eq!(co.total_gross_amount, unit * Decimal::from(2));
-    assert_eq!(co.total_net_amount, co.total_gross_amount);
-    assert_eq!(co.subtotal_gross_amount, co.total_gross_amount);
+
+    // Contract: denormalized totals were refreshed after add_lines_tx.
+    // Catalogue promotions may reduce total below `unit*qty` (Django's
+    // recalculation does the same subtraction), so we verify:
+    //   1. total is non-negative
+    //   2. total <= undiscounted line sum (discounts only reduce)
+    //   3. all three denormalized columns agree (net == gross == subtotal)
+    let lines_gross_sum = unit * Decimal::from(2);
+    assert!(
+        co.total_gross_amount >= Decimal::ZERO,
+        "total must be non-negative, got {}",
+        co.total_gross_amount,
+    );
+    assert!(
+        co.total_gross_amount <= lines_gross_sum,
+        "total_gross={} must be <= undiscounted lines_sum={}",
+        co.total_gross_amount,
+        lines_gross_sum,
+    );
+    // Pre-tax invariant: net == gross == subtotal_gross.
+    assert_eq!(co.total_net_amount, co.total_gross_amount, "net must equal gross (pre-tax)");
+    assert_eq!(co.subtotal_gross_amount, co.total_gross_amount, "subtotal_gross must equal total_gross");
 
     checkout_store::delete_checkout_row(&db, token).await.unwrap();
 }

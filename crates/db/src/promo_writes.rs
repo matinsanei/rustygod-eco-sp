@@ -776,26 +776,12 @@ pub fn infer_voucher_type(products: usize, variants: usize, categories: usize, c
     }
 }
 
-/// Legacy-sale bridge: a `sale*` call becomes one promotion + one rule
-/// (Saleor ≥3.9 stores legacy sales as promotions; the `Sale` node resolves
-/// from the promotion row).
-pub async fn create_sale_as_promotion(
-    db: &sea_orm::DatabaseConnection,
-    name: Option<String>,
-    discount_type: &str,
-    value: Decimal,
-    products: Vec<i32>,
-    variants: Vec<i32>,
-    categories: Vec<i32>,
-    collections: Vec<i32>,
-    start: Option<chrono::DateTime<Utc>>,
-    channel_ids: Vec<i32>,
-) -> Result<Uuid> {
+/// Catalogue predicate in engine shape, shared by sales + rules.
+pub fn catalogue_predicate_json(products: &[i32], variants: &[i32], categories: &[i32], collections: &[i32]) -> Value {
     use base64::Engine;
     let gid = |kind: &str, pk: i32| {
         base64::engine::general_purpose::STANDARD.encode(format!("{kind}:{pk}"))
     };
-    // Catalogue predicate in engine shape (global-id lists per slot).
     let mut slots = serde_json::Map::new();
     if !products.is_empty() {
         slots.insert("productPredicate".to_string(), json!({"ids": products.iter().map(|p| gid("Product", *p)).collect::<Vec<_>>()}));
@@ -809,9 +795,28 @@ pub async fn create_sale_as_promotion(
     if !collections.is_empty() {
         slots.insert("collectionPredicate".to_string(), json!({"ids": collections.iter().map(|c| gid("Collection", *c)).collect::<Vec<_>>()}));
     }
-    let pred = if slots.is_empty() { json!({}) } else { Value::Object(slots) };
+    if slots.is_empty() { json!({}) } else { Value::Object(slots) }
+}
+
+/// Legacy-sale bridge: a `sale*` call becomes one promotion + one rule
+/// (Saleor ≥3.9 stores legacy sales as promotions; the `Sale` node resolves
+/// from the promotion row, tagged `legacy_sale` so the sales list only
+/// shows legacy-origin rows like Django's `Sale` manager).
+pub async fn create_sale_as_promotion(
+    db: &sea_orm::DatabaseConnection,
+    name: Option<String>,
+    discount_type: &str,
+    value: Decimal,
+    products: Vec<i32>,
+    variants: Vec<i32>,
+    categories: Vec<i32>,
+    collections: Vec<i32>,
+    start: Option<chrono::DateTime<Utc>>,
+    channel_ids: Vec<i32>,
+) -> Result<Uuid> {
+    let pred = catalogue_predicate_json(&products, &variants, &categories, &collections);
     let vt = if discount_type.eq_ignore_ascii_case("percentage") { "percentage" } else { "fixed" };
-    create_promotion(
+    let pid = create_promotion(
         db,
         &name.unwrap_or_else(|| "Sale".to_string()),
         "catalogue",
@@ -830,5 +835,154 @@ pub async fn create_sale_as_promotion(
             gift_variant_ids: vec![],
         }],
     )
-    .await
+    .await?;
+    // Legacy-origin tag for the sales list.
+    if let Some(p) = discount_promotion::Entity::find_by_id(pid).one(db).await? {
+        let mut am: discount_promotion::ActiveModel = p.into();
+        am.metadata = Set(json!({"legacy_sale": true}));
+        am.update(db).await?;
+    }
+    Ok(pid)
+}
+
+/// Decode a catalogue predicate back to pk lists (for catalogue merges).
+fn predicate_ids(pred: &Value) -> (Vec<i32>, Vec<i32>, Vec<i32>, Vec<i32>) {
+    use base64::Engine;
+    let mut out = (vec![], vec![], vec![], vec![]);
+    let slots = [
+        ("productPredicate", 0),
+        ("variantPredicate", 1),
+        ("categoryPredicate", 2),
+        ("collectionPredicate", 3),
+    ];
+    for (key, idx) in slots {
+        if let Some(ids) = pred.get(key).and_then(|v| v.get("ids")).and_then(|v| v.as_array()) {
+            for gid in ids.iter().filter_map(|v| v.as_str()) {
+                if let Ok(bytes) = base64::engine::general_purpose::STANDARD.decode(gid) {
+                    if let Ok(s) = String::from_utf8(bytes) {
+                        if let Some((_, pk)) = s.split_once(':') {
+                            if let Ok(n) = pk.parse::<i32>() {
+                                match idx {
+                                    0 => out.0.push(n),
+                                    1 => out.1.push(n),
+                                    2 => out.2.push(n),
+                                    _ => out.3.push(n),
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    out.0.sort_unstable();
+    out.0.dedup();
+    out.1.sort_unstable();
+    out.1.dedup();
+    out.2.sort_unstable();
+    out.2.dedup();
+    out.3.sort_unstable();
+    out.3.dedup();
+    out
+}
+
+/// First rule id of a promotion (legacy sales own exactly one).
+pub async fn sale_rule_id(db: &impl ConnectionTrait, promotion_id: Uuid) -> Result<Uuid> {
+    let id: Option<Uuid> = discount_promotionrule::Entity::find()
+        .select_only()
+        .column(discount_promotionrule::Column::Id)
+        .filter(discount_promotionrule::Column::PromotionId.eq(promotion_id))
+        .into_tuple()
+        .one(db)
+        .await?
+        .unwrap_or(None);
+    id.ok_or_else(|| fail("sale has no rule"))
+}
+
+/// Merge catalogue rows into/out of a sale's rule predicate (Django
+/// `saleCataloguesAdd/Remove`).
+#[allow(clippy::too_many_arguments)]
+pub async fn sale_catalogues(
+    db: &sea_orm::DatabaseConnection,
+    promotion_id: Uuid,
+    add: bool,
+    products: &[i32],
+    variants: &[i32],
+    categories: &[i32],
+    collections: &[i32],
+) -> Result<()> {
+    let txn = db.begin().await?;
+    let rid = sale_rule_id(&txn, promotion_id).await?;
+    let rule = discount_promotionrule::Entity::find_by_id(rid)
+        .one(&txn)
+        .await?
+        .ok_or_else(|| fail("sale rule not found"))?;
+    let (mut p, mut v, mut c, mut co) = predicate_ids(&rule.catalogue_predicate);
+    let merge = |cur: &mut Vec<i32>, delta: &[i32]| {
+        if add {
+            cur.extend(delta.iter().copied());
+            cur.sort_unstable();
+            cur.dedup();
+        } else {
+            cur.retain(|x| !delta.contains(x));
+        }
+    };
+    merge(&mut p, products);
+    merge(&mut v, variants);
+    merge(&mut c, categories);
+    merge(&mut co, collections);
+    let mut am: discount_promotionrule::ActiveModel = rule.into();
+    am.catalogue_predicate = Set(catalogue_predicate_json(&p, &v, &c, &co));
+    am.update(&txn).await?;
+    txn.commit().await?;
+    Ok(())
+}
+
+/// Sale channel listings (Django `saleChannelListingUpdate`): links are
+/// authoritative; the reward follows iff exactly one distinct value is
+/// given (the rule holds a single shared reward — documented boundary).
+pub async fn sale_channel_listing(
+    db: &sea_orm::DatabaseConnection,
+    promotion_id: Uuid,
+    add: &[(i32, Decimal)],
+    remove: &[i32],
+) -> Result<()> {
+    let txn = db.begin().await?;
+    let rid = sale_rule_id(&txn, promotion_id).await?;
+    for (ch, _) in add {
+        let exists = discount_promotionrule_channels::Entity::find()
+            .filter(discount_promotionrule_channels::Column::PromotionruleId.eq(rid))
+            .filter(discount_promotionrule_channels::Column::ChannelId.eq(*ch))
+            .one(&txn)
+            .await?
+            .is_some();
+        if !exists {
+            discount_promotionrule_channels::ActiveModel {
+                promotionrule_id: Set(rid),
+                channel_id: Set(*ch),
+                ..Default::default()
+            }
+            .insert(&txn)
+            .await?;
+        }
+    }
+    if !remove.is_empty() {
+        discount_promotionrule_channels::Entity::delete_many()
+            .filter(discount_promotionrule_channels::Column::PromotionruleId.eq(rid))
+            .filter(discount_promotionrule_channels::Column::ChannelId.is_in(remove.to_vec()))
+            .exec(&txn)
+            .await?;
+    }
+    let mut distinct: Vec<Decimal> = add.iter().map(|(_, v)| *v).collect();
+    distinct.sort();
+    distinct.dedup();
+    if let [only] = distinct.as_slice() {
+        if let Some(rule) = discount_promotionrule::Entity::find_by_id(rid).one(&txn).await? {
+            let mut am: discount_promotionrule::ActiveModel = rule.into();
+            am.reward_value = Set(Some(*only));
+            am.update(&txn).await?;
+        }
+    }
+    txn.commit().await?;
+    Ok(())
 }

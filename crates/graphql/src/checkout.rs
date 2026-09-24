@@ -26,6 +26,94 @@ pub struct GqlCheckout {
     pub lines: Vec<GqlCheckoutLine>,
 }
 
+#[derive(SimpleObject, Clone)]
+#[graphql(name = "CheckoutLinesDelete")]
+pub struct GqlCheckoutLinesDelete {
+    pub checkout: Option<GqlCheckout>,
+    pub errors: Vec<GqlCheckoutError>,
+}
+
+fn ckperr(message: String) -> GqlCheckoutError {
+    GqlCheckoutError { field: None, message: Some(message), code: None }
+}
+
+#[derive(SimpleObject, Clone)]
+#[graphql(name = "DeliveryOptionsCalculateError")]
+pub struct GqlDeliveryOptionsCalculateError {
+    pub field: Option<String>,
+    pub message: Option<String>,
+    pub code: Option<String>,
+}
+
+#[derive(SimpleObject, Clone)]
+#[graphql(name = "CheckoutPaymentCreate")]
+pub struct GqlCheckoutPaymentCreate {
+    pub checkout: Option<GqlCheckout>,
+    pub payment: Option<gen::Payment>,
+    pub errors: Vec<GqlCheckoutError>,
+}
+
+#[derive(SimpleObject, Clone)]
+#[graphql(name = "CheckoutCreateFromOrderUnavailableVariant")]
+pub struct GqlUnavailableVariant {
+    pub message: Option<String>,
+    pub code: Option<String>,
+    #[graphql(name = "variantId")]
+    pub variant_id: Option<ID>,
+    #[graphql(name = "lineId")]
+    pub line_id: Option<ID>,
+}
+
+#[derive(SimpleObject, Clone)]
+#[graphql(name = "CheckoutCreateFromOrder")]
+pub struct GqlCheckoutCreateFromOrder {
+    #[graphql(name = "unavailableVariants")]
+    pub unavailable_variants: Vec<GqlUnavailableVariant>,
+    pub checkout: Option<GqlCheckout>,
+    pub errors: Vec<GqlCheckoutError>,
+}
+
+#[derive(SimpleObject, Clone)]
+#[graphql(name = "CollectionPoint")]
+pub struct GqlCollectionPoint {
+    pub id: ID,
+    pub name: Option<String>,
+}
+
+#[derive(Union, Clone)]
+#[graphql(name = "Delivery")]
+pub enum GqlDelivery {
+    ShippingMethod(Box<gen::ShippingMethodType>),
+    CollectionPoint(GqlCollectionPoint),
+}
+
+#[derive(SimpleObject, Clone)]
+#[graphql(name = "DeliveryOptionsCalculate")]
+pub struct GqlDeliveryOptionsCalculate {
+    pub deliveries: Vec<GqlDelivery>,
+    pub errors: Vec<GqlDeliveryOptionsCalculateError>,
+}
+
+/// Legacy payment row → node (gateway/total/capture state).
+fn assemble_legacy_payment(row: saleor_rustify_db::entities::payment_payment::Model) -> gen::Payment {
+    let cur = row.currency.clone();
+    gen::Payment {
+        id: Some(ID(crate::common::gid("Payment", row.id))),
+        private_metadata: vec![],
+        metadata: vec![],
+        gateway: Some(row.gateway.clone()),
+        is_active: Some(row.is_active),
+        modified: Some(row.modified_at.into()),
+        payment_method_type: Some(row.payment_method_type.clone()),
+        actions: vec![],
+        total: Some(Money { amount: row.total.to_string(), currency: cur.clone(), fraction_digits: None }),
+        captured_amount: Some(Money { amount: row.captured_amount.to_string(), currency: cur, fraction_digits: None }),
+        transactions: vec![],
+        available_capture_amount: None,
+        available_refund_amount: None,
+    }
+}
+
 pub(crate) fn to_gql_checkout(
     co: &saleor_rustify_db::entities::checkout_checkout::Model,
     lines: &[saleor_rustify_db::entities::checkout_checkoutline::Model],
@@ -263,6 +351,224 @@ pub struct CheckoutMutation;
 
 #[Object]
 impl CheckoutMutation {
+    /// Legacy payment create on a checkout (Django `checkoutPaymentCreate`):
+    /// book a gateway payment row for the checkout total (or the given
+    /// amount). The transaction-based flows supersede this; the row stays
+    /// queryable for legacy readers.
+    async fn checkout_payment_create(
+        &self, ctx: &Context<'_>,
+        #[graphql(name = "checkoutId")] checkout_id: Option<ID>,
+        id: Option<ID>,
+        input: gen::PaymentInput,
+        token: Option<String>,
+    ) -> Result<GqlCheckoutPaymentCreate> {
+        let g = ctx.data::<GqlContext>()?;
+        let db = g.db()?;
+        let err = |m: String| GqlCheckoutPaymentCreate { checkout: None, payment: None, errors: vec![ckperr(m)] };
+        let ctoken = checkout_id
+            .as_ref()
+            .and_then(|c| crate::common::parse_uuid_gid(&c.0))
+            .or_else(|| id.as_ref().and_then(|c| crate::common::parse_uuid_gid(&c.0)))
+            .or_else(|| token.as_ref().and_then(|t| t.parse::<Uuid>().ok()));
+        let Some(ctoken) = ctoken else {
+            return Ok(err("checkout id is required".into()));
+        };
+        let (co, _) = saleor_rustify_db::checkout_store::load_checkout(db, ctoken)
+            .await.map_err(|e| Error::new(e.to_string()))?
+            .ok_or_else(|| Error::new("checkout not found"))?;
+        if input.gateway.trim().is_empty() {
+            return Ok(err("gateway is required".into()));
+        }
+        let amount = match input.amount.as_ref().map(|a| a.0.parse::<rust_decimal::Decimal>()) {
+            Some(Ok(a)) if a > rust_decimal::Decimal::ZERO => a,
+            Some(_) => return Ok(err("amount must be positive".into())),
+            None => co.total_gross_amount,
+        };
+        let row = saleor_rustify_db::entities::payment_payment::ActiveModel {
+            gateway: sea_orm::Set(input.gateway.clone()),
+            is_active: sea_orm::Set(true),
+            created_at: sea_orm::Set(chrono::Utc::now().into()),
+            modified_at: sea_orm::Set(chrono::Utc::now().into()),
+            charge_status: sea_orm::Set("not-charged".to_string()),
+            billing_first_name: sea_orm::Set(String::new()),
+            billing_last_name: sea_orm::Set(String::new()),
+            billing_company_name: sea_orm::Set(String::new()),
+            billing_address_1: sea_orm::Set(String::new()),
+            billing_address_2: sea_orm::Set(String::new()),
+            billing_city: sea_orm::Set(String::new()),
+            billing_city_area: sea_orm::Set(String::new()),
+            billing_postal_code: sea_orm::Set(String::new()),
+            billing_country_code: sea_orm::Set(String::new()),
+            billing_country_area: sea_orm::Set(String::new()),
+            billing_email: sea_orm::Set(co.email.clone().unwrap_or_default()),
+            cc_brand: sea_orm::Set(String::new()),
+            cc_first_digits: sea_orm::Set(String::new()),
+            cc_last_digits: sea_orm::Set(String::new()),
+            extra_data: sea_orm::Set(String::new()),
+            token: sea_orm::Set(input.token.clone().unwrap_or_default()),
+            currency: sea_orm::Set(co.currency.clone()),
+            total: sea_orm::Set(amount),
+            captured_amount: sea_orm::Set(rust_decimal::Decimal::ZERO),
+            checkout_id: sea_orm::Set(Some(ctoken)),
+            to_confirm: sea_orm::Set(false),
+            payment_method_type: sea_orm::Set(String::new()),
+            return_url: sea_orm::Set(input.return_url.clone()),
+            partial: sea_orm::Set(false),
+            metadata: sea_orm::Set(serde_json::json!({})),
+            private_metadata: sea_orm::Set(serde_json::json!({})),
+            store_payment_method: sea_orm::Set("none".to_string()),
+            ..Default::default()
+        };
+        use sea_orm::ActiveModelTrait;
+        let inserted = row.insert(db).await.map_err(|e| Error::new(e.to_string()))?;
+        let ch = channel_of(&co);
+        let checkout = load_gql(db, ctoken, &ch).await?;
+        Ok(GqlCheckoutPaymentCreate {
+            checkout: Some(checkout),
+            payment: Some(assemble_legacy_payment(inserted)),
+            errors: vec![],
+        })
+    }
+
+    /// Create a checkout from an order's lines (Django
+    /// `checkoutCreateFromOrder`): variants that can't be listed are
+    /// reported, the rest land on a fresh checkout.
+    async fn checkout_create_from_order(&self, ctx: &Context<'_>, id: ID) -> Result<GqlCheckoutCreateFromOrder> {
+        let g = ctx.data::<GqlContext>()?;
+        let db = g.db()?;
+        let err = |m: String| GqlCheckoutCreateFromOrder {
+            unavailable_variants: vec![],
+            checkout: None,
+            errors: vec![ckperr(m)],
+        };
+        let oid = crate::common::parse_uuid_gid(&id.0).ok_or_else(|| Error::new("bad order id"))?;
+        let (h, ls) = saleor_rustify_db::order_store::get_order_rows(db, oid)
+            .await.map_err(|e| Error::new(e.to_string()))?
+            .ok_or_else(|| Error::new("order not found"))?;
+        let ch = saleor_rustify_db::catalog::channel_slug_for_id(db, h.channel_id)
+            .await.map_err(|e| Error::new(e.to_string()))?;
+        let (ch_id, currency) = saleor_rustify_db::catalog::channel_info(db, &ch)
+            .await.map_err(|e| Error::new(e.to_string()))?;
+        let token = saleor_rustify_db::checkout_store::create_checkout_row(db, ch_id, &currency, &h.user_email)
+            .await.map_err(|e| Error::new(e.to_string()))?;
+        let vids: Vec<i32> = ls.iter().filter_map(|l| l.variant_id).collect();
+        let pricing = saleor_rustify_db::catalog::checkout_pricing(db, &ch, &vids)
+            .await.map_err(|e| Error::new(e.to_string()))?;
+        let mut unavailable = vec![];
+        let mut items = vec![];
+        for l in &ls {
+            match l.variant_id.and_then(|v| pricing.get(&v).map(|(m, _)| (v, m.amount))) {
+                Some((vid, unit)) => items.push(saleor_rustify_db::checkout_store::NewLine {
+                    variant_id: vid,
+                    quantity: l.quantity,
+                    unit_price: unit,
+                    price_override: None,
+                }),
+                None => unavailable.push(GqlUnavailableVariant {
+                    message: Some("variant is not available in this channel".to_string()),
+                    code: None,
+                    variant_id: l.variant_id.map(|v| ID(crate::common::gid("ProductVariant", v))),
+                    line_id: Some(ID(crate::common::gid("OrderLine", l.id))),
+                }),
+            }
+        }
+        if !items.is_empty() {
+            if let Err(e) = saleor_rustify_db::checkout_store::add_lines_tx(db, token, ch_id, &currency, &items).await {
+                return Ok(err(e.to_string()));
+            }
+        }
+        let checkout = load_gql(db, token, &ch).await?;
+        Ok(GqlCheckoutCreateFromOrder { unavailable_variants: unavailable, checkout: Some(checkout), errors: vec![] })
+    }
+
+    /// Delivery options for a checkout (Django `deliveryOptionsCalculate`):
+    /// channel shipping methods + pickup-enabled warehouses.
+    async fn delivery_options_calculate(&self, ctx: &Context<'_>, id: ID) -> Result<GqlDeliveryOptionsCalculate> {
+        let g = ctx.data::<GqlContext>()?;
+        let db = g.db()?;
+        let ctoken = crate::common::parse_uuid_gid(&id.0).ok_or_else(|| Error::new("bad checkout id"))?;
+        let (co, _) = saleor_rustify_db::checkout_store::load_checkout(db, ctoken)
+            .await.map_err(|e| Error::new(e.to_string()))?
+            .ok_or_else(|| Error::new("checkout not found"))?;
+        let mut deliveries = vec![];
+        // Shipping methods with a listing on this channel.
+        use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
+        let methods = saleor_rustify_db::entities::shipping_shippingmethod::Entity::find()
+            .all(db)
+            .await
+            .map_err(|e| Error::new(e.to_string()))?;
+        for m in methods {
+            let listed = saleor_rustify_db::entities::shipping_shippingmethodchannellisting::Entity::find()
+                .filter(saleor_rustify_db::entities::shipping_shippingmethodchannellisting::Column::ShippingMethodId.eq(m.id))
+                .filter(saleor_rustify_db::entities::shipping_shippingmethodchannellisting::Column::ChannelId.eq(co.channel_id))
+                .one(db)
+                .await
+                .map_err(|e| Error::new(e.to_string()))?
+                .is_some();
+            if listed {
+                match crate::commerce::assemble_method(db, m.id).await {
+                    Ok(sm) => deliveries.push(GqlDelivery::ShippingMethod(Box::new(sm))),
+                    Err(_) => {},
+                }
+            }
+        }
+        // Pickup points: channel warehouses with click&collect enabled.
+        let whs = saleor_rustify_db::entities::warehouse_warehouse::Entity::find()
+            .all(db)
+            .await
+            .map_err(|e| Error::new(e.to_string()))?;
+        for w in whs {
+            if w.click_and_collect_option == "disabled" {
+                continue;
+            }
+            let linked = saleor_rustify_db::entities::warehouse_channelwarehouse::Entity::find()
+                .filter(saleor_rustify_db::entities::warehouse_channelwarehouse::Column::WarehouseId.eq(w.id))
+                .filter(saleor_rustify_db::entities::warehouse_channelwarehouse::Column::ChannelId.eq(co.channel_id))
+                .one(db)
+                .await
+                .map_err(|e| Error::new(e.to_string()))?
+                .is_some();
+            if linked {
+                deliveries.push(GqlDelivery::CollectionPoint(GqlCollectionPoint {
+                    id: ID(crate::common::gid("Warehouse", w.id)),
+                    name: Some(w.name.clone()),
+                }));
+            }
+        }
+        Ok(GqlDeliveryOptionsCalculate { deliveries, errors: vec![] })
+    }
+
+    /// Delete several checkout lines (Django `checkoutLinesDelete`).
+    async fn checkout_lines_delete(
+        &self, ctx: &Context<'_>,
+        id: Option<ID>,
+        #[graphql(name = "linesIds")] lines_ids: Vec<ID>,
+        token: Option<String>,
+    ) -> Result<GqlCheckoutLinesDelete> {
+        let g = ctx.data::<GqlContext>()?;
+        let db = g.db()?;
+        let err = |m: String| GqlCheckoutLinesDelete { checkout: None, errors: vec![ckperr(m)] };
+        let ctoken = id
+            .as_ref()
+            .and_then(|c| crate::common::parse_uuid_gid(&c.0))
+            .or_else(|| token.as_ref().and_then(|t| t.parse::<Uuid>().ok()));
+        let Some(ctoken) = ctoken else {
+            return Ok(err("checkout id is required".into()));
+        };
+        let (co, _) = saleor_rustify_db::checkout_store::load_checkout(db, ctoken)
+            .await.map_err(|e| Error::new(e.to_string()))?
+            .ok_or_else(|| Error::new("checkout not found"))?;
+        let ch = channel_of(&co);
+        for lid in &lines_ids {
+            let line_id = crate::common::parse_uuid_gid(&lid.0).ok_or_else(|| Error::new("bad line id"))?;
+            if let Err(e) = saleor_rustify_db::checkout_store::delete_line(db, ctoken, line_id).await {
+                return Ok(err(e.to_string()));
+            }
+        }
+        let checkout = load_gql(db, ctoken, &ch).await?;
+        Ok(GqlCheckoutLinesDelete { checkout: Some(checkout), errors: vec![] })
+    }
+
     async fn create_checkout(&self, ctx: &Context<'_>, channel: Option<String>, email: String) -> Result<GqlCheckout> {
         let g = ctx.data::<GqlContext>()?;
         let db = g.db()?;

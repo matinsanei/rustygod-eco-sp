@@ -39,7 +39,7 @@ async fn customer_type_crud_guards() {
     // Duplicate name/slug rejected.
     assert!(create_customer_type(
         &db,
-        &CustomerTypeCreate { name: Some(" quests ".into()), slug: None, is_default: false },
+        &CustomerTypeCreate { name: Some(tag("quests")), slug: None, is_default: false },
     )
     .await
     .is_ok()); // different name is fine
@@ -165,7 +165,7 @@ async fn notification_recipients() {
         .await
         .unwrap();
     // Duplicate email refused; empty refused.
-    assert!(account_writes::create_notification_recipient(&db, None, Some("x@y.zz".into()), true).await.is_ok());
+    assert!(account_writes::create_notification_recipient(&db, None, Some(format!("{}@y.zz", tag("x"))), true).await.is_ok());
     assert!(account_writes::delete_notification_recipient(&db, -7).await.is_err());
     // Non-staff user refused.
     use saleor_rustify_db::entities::account_user;

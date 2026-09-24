@@ -269,3 +269,33 @@ pub async fn events_of(
         .all(db)
         .await?)
 }
+
+/// Update number/url/metadata (Django `invoiceUpdate`).
+pub async fn update_invoice(
+    db: &DatabaseConnection,
+    invoice_id: i32,
+    number: Option<String>,
+    url: Option<String>,
+    metadata: Option<serde_json::Value>,
+    private_metadata: Option<serde_json::Value>,
+) -> Result<invoice_invoice::Model> {
+    let txn = db.begin().await?;
+    let row = get_row(&txn, invoice_id).await?;
+    let mut am: invoice_invoice::ActiveModel = row.into();
+    if let Some(n) = number {
+        am.number = Set(Some(n));
+    }
+    if let Some(u) = url {
+        am.external_url = Set(Some(u));
+    }
+    if let Some(m) = metadata {
+        am.metadata = Set(m);
+    }
+    if let Some(m) = private_metadata {
+        am.private_metadata = Set(m);
+    }
+    am.updated_at = Set(Utc::now().into());
+    let updated = am.update(&txn).await?;
+    txn.commit().await?;
+    Ok(updated)
+}

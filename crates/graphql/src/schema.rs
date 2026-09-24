@@ -2,13 +2,13 @@
 
 use async_graphql::*;
 
-use crate::{account::{AccountMutation, AccountQuery}, apps::AppsQuery, catalog::{CatalogMutation, CatalogQuery, CatalogWriteMutation}, checkout::{CheckoutMutation, CheckoutQuery}, commerce::{CommerceMutation, CommerceQuery}, context::GqlContext, gen::{GenMutation, GenQuery}, metadata::MetadataMutation, order::{OrderMutation, OrderQuery}, payment::{PaymentMutation, PaymentQuery}, translations::{TranslationMutation, TranslationQuery}};
+use crate::{account::{AccountMutation, AccountQuery}, apps::{AppsMutation, AppsQuery}, catalog::{CatalogMutation, CatalogQuery, CatalogWriteMutation}, checkout::{CheckoutMutation, CheckoutQuery}, commerce::{CommerceMutation, CommerceQuery}, context::GqlContext, gen::{GenMutation, GenQuery}, metadata::MetadataMutation, order::{OrderMutation, OrderQuery}, payment::{PaymentMutation, PaymentQuery}, translations::{TranslationMutation, TranslationQuery}};
 
 #[derive(MergedObject, Default)]
 pub struct Query(CatalogQuery, CheckoutQuery, OrderQuery, PaymentQuery, CommerceQuery, AccountQuery, AppsQuery, TranslationQuery, GenQuery, AnchorQuery);
 
 #[derive(MergedObject, Default)]
-pub struct Mutation(CatalogMutation, CatalogWriteMutation, CheckoutMutation, OrderMutation, PaymentMutation, AccountMutation, CommerceMutation, MetadataMutation, TranslationMutation, GenMutation);
+pub struct Mutation(CatalogMutation, CatalogWriteMutation, CheckoutMutation, OrderMutation, PaymentMutation, AccountMutation, CommerceMutation, MetadataMutation, TranslationMutation, AppsMutation, GenMutation);
 
 /// Anchor for pruned interfaces. async-graphql drops types unreachable from
 /// roots; dashboard metadata mutations spread `... on Node` on the

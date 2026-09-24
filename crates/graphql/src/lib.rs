@@ -27,6 +27,8 @@ pub mod commerce;
 pub mod common;
 pub mod context;
 pub mod metadata;
+
+pub mod mail;
 pub mod order;
 pub mod payment;
 pub mod schema;

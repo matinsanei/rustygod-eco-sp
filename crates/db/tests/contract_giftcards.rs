@@ -21,6 +21,7 @@ fn issue_input(balance: Decimal) -> giftcards::IssueInput {
         created_by_email: Some("staff@example.com".to_string()),
         expiry_date: None,
         is_active: true,
+        custom_code: None,
     }
 }
 

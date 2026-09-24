@@ -20,3 +20,4 @@ saleor-rustify-ai = { path = "../ai" }
 saleor-rustify-psp = { path = "../psp" }
 saleor-rustify-core = { path = "../core" }
 sea-orm = { workspace = true }
+reqwest = { workspace = true }

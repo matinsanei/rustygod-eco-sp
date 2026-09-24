@@ -19,8 +19,8 @@ async fn catalogue_rule_evaluates_on_real_variant() {
     use sea_orm::{EntityTrait, QuerySelect};
 
     let db = db().await;
-    // Variant 353: USD 40.00 with a live 30% catalogue rule (populatedb data).
-    let pid: i32 = product_productvariant::Entity::find_by_id(353)
+    // Variant 332: USD 75.00 with a live 30% catalogue rule (populatedb data).
+    let pid: i32 = product_productvariant::Entity::find_by_id(332)
         .select_only()
         .column(product_productvariant::Column::ProductId)
         .into_tuple()
@@ -28,13 +28,13 @@ async fn catalogue_rule_evaluates_on_real_variant() {
         .await
         .unwrap()
         .unwrap();
-    let eval = promotions::evaluate_line(&db, 1, 353, pid, Decimal::new(4000, 2), 2, "USD")
+    let eval = promotions::evaluate_line(&db, 1, 332, pid, Decimal::new(7500, 2), 2, "USD")
         .await
         .unwrap()
         .expect("rule must apply");
     assert_eq!(eval.reward_value_type, "percentage");
-    // 30% of 40.00 = 12.00 per unit x 2 = 24.00 whole-line amount.
-    assert_eq!(eval.amount, Decimal::new(2400, 2));
+    // 30% of 75.00 = 22.50 per unit x 2 = 45.00 whole-line amount.
+    assert_eq!(eval.amount, Decimal::new(4500, 2));
 }
 
 #[tokio::test]
@@ -51,15 +51,15 @@ async fn checkout_totals_drop_by_promotion() {
         token,
         ch_id,
         &currency,
-        &[NewLine { variant_id: 353, quantity: 1, unit_price: Decimal::new(4000, 2), price_override: None }],
+        &[NewLine { variant_id: 332, quantity: 1, unit_price: Decimal::new(7500, 2), price_override: None }],
     )
     .await
     .unwrap();
 
     let (co, lines) = checkout_store::load_checkout(&db, token).await.unwrap().unwrap();
-    // Undiscounted line stays 40.00; checkout total drops by the 12.00 discount.
-    assert_eq!(lines[0].total_price_gross_amount, Decimal::new(4000, 2));
-    assert_eq!(co.total_gross_amount, Decimal::new(2800, 2));
+    // Undiscounted line stays 75.00; checkout total drops by the 22.50 discount.
+    assert_eq!(lines[0].total_price_gross_amount, Decimal::new(7500, 2));
+    assert_eq!(co.total_gross_amount, Decimal::new(5250, 2));
 
     // The discount row Django would write exists.
     use saleor_rustify_db::entities::discount_checkoutlinediscount;
@@ -71,7 +71,7 @@ async fn checkout_totals_drop_by_promotion() {
         .await
         .unwrap()
         .expect("promotion discount row must exist");
-    assert_eq!(d.amount_value, Decimal::new(1200, 2));
+    assert_eq!(d.amount_value, Decimal::new(2250, 2));
     assert_eq!(d.r#type, "promotion");
 
     checkout_store::delete_checkout_row(&db, token).await.unwrap();
@@ -102,7 +102,7 @@ async fn voucher_entire_order_applies_and_increments_on_complete() {
         token,
         ch_id,
         &currency,
-        &[NewLine { variant_id: 353, quantity: 1, unit_price: Decimal::new(4000, 2), price_override: None }],
+        &[NewLine { variant_id: 332, quantity: 1, unit_price: Decimal::new(7500, 2), price_override: None }],
     )
     .await
     .unwrap();
@@ -115,7 +115,7 @@ async fn voucher_entire_order_applies_and_increments_on_complete() {
         .unwrap()
         .used;
 
-    // DISCOUNT = entire_order fixed 25.00 USD. Base after 30% promo: 28.00.
+    // DISCOUNT = entire_order fixed 25.00 USD. Base after 30% promo: 52.50.
     let applied = promotions::apply_voucher(&db, token, "DISCOUNT", "default-channel")
         .await
         .unwrap();
@@ -123,7 +123,7 @@ async fn voucher_entire_order_applies_and_increments_on_complete() {
     assert_eq!(applied.amount, Decimal::new(2500, 2));
     checkout_store::refresh_totals(&db, token).await.unwrap();
     let (co, _) = checkout_store::load_checkout(&db, token).await.unwrap().unwrap();
-    assert_eq!(co.total_gross_amount, Decimal::new(300, 2)); // 28 - 25
+    assert_eq!(co.total_gross_amount, Decimal::new(2750, 2)); // 52.50 - 25
     assert_eq!(co.voucher_code.as_deref(), Some("DISCOUNT"));
 
     // Complete path increments usage (same call complete_checkout makes).

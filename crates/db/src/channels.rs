@@ -509,7 +509,6 @@ pub async fn add_channel_zones(
     channel_id: i32,
     zone_ids: &[i32],
 ) -> Result<()> {
-    use crate::entities::shipping_shippingzone_channels;
     let txn = db.begin().await?;
     for zid in zone_ids {
         let exists = shipping_shippingzone_channels::Entity::find()

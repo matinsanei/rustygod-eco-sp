@@ -10,9 +10,9 @@
 [![Rust](https://img.shields.io/badge/rust-1.93-orange?logo=rust&logoColor=white)](https://www.rust-lang.org)
 [![gRPC](https://img.shields.io/badge/api-gRPC%20%2B%20GraphQL-blue.svg)](https://github.com/hyperium/tonic)
 [![License](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-215-brightgreen.svg)](#behavioral-contract)
-[![Contract Tests](https://img.shields.io/badge/contract_tests-119-brightgreen.svg)](#behavioral-contract)
-[![Dashboard](https://img.shields.io/badge/dashboard_ops-457%2F457-brightgreen.svg)](#graphql-bff-enterprise)
+[![Tests](https://img.shields.io/badge/tests-171-brightgreen.svg)](#behavioral-contract)
+[![Contract Tests](https://img.shields.io/badge/contract_tests-171-brightgreen.svg)](#behavioral-contract)
+[![Dashboard](https://img.shields.io/badge/dashboard_ops-458%2F458-brightgreen.svg)](#graphql-bff-enterprise)
 
 [Saleor](https://github.com/saleor/saleor) is a great commerce engine trapped in a slow body: Python/Django, gigabytes of RAM,
 GraphQL overhead on every hot path. **saleor-rustify** is a ground-up Rust rewrite that runs
@@ -56,7 +56,7 @@ Because the ceiling is structural: GIL-bound request handling, ORM-per-row overh
 │                                                          │
 │  crates/graphql GraphQL BFF (enterprise, thin + generated)         │
 │    Saleor-compatible /graphql/ — same DB, same logic     │
-│    69 query roots · 244 mutation roots · 457/457 Dashboard ops green │
+│    90 query roots · 327 mutation roots · 458/458 Dashboard ops green │
 │    catalog · checkout · order · payment · commerce · apps             │
 │                                                          │
 │  crates/server  tonic gRPC (21 services) + Axum GraphQL   │
@@ -111,7 +111,7 @@ The stock Saleor Dashboard runs against `/graphql` with zero schema errors
      against live Stripe (mock-server tests only) — Adyen still missing.
    - Still ignored sub-filters: price/attribute/stock/date/metadata, order
      AND/OR nesting, payment-state pseudo-filters; pagination works.
-   - Multipart upload deferred, CSV intentionally last, many non-catalog mutations still validated stubs.
+   - Multipart upload deferred (blocks fileUpload + avatars), XLSX/filtered exports deferred; every schema root resolves, stubs only where noted in docs/SALEOR_PARITY_CHECKLIST.md.
    - `extensions/installed` is correctly empty on a fresh `populatedb` (0 apps).
    - Done and verified, despite what older docs may say: guest→user link +
      address carry (E3/E11, `contract_guest.rs` green), checkout reservation

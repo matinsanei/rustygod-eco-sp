@@ -19,8 +19,8 @@ use sea_orm::{
 
 use crate::{
     entities::{
-        core_eventdelivery, core_eventdeliveryattempt, core_eventpayload, webhook_webhook,
-        webhook_webhookevent,
+        app_app, core_eventdelivery, core_eventdeliveryattempt, core_eventpayload,
+        webhook_webhook, webhook_webhookevent,
     },
     DbError, Result,
 };
@@ -314,4 +314,224 @@ pub async fn webhook_secret(
         .one(db)
         .await?
         .and_then(|w| w.secret_key))
+}
+
+fn hook_fail(msg: impl Into<String>) -> DbError {
+    DbError::App(format!("webhook error: {}", msg.into()))
+}
+
+#[derive(Default, Clone)]
+pub struct NewHook {
+    pub name: Option<String>,
+    pub identifier: Option<String>,
+    pub target_url: Option<String>,
+    pub events: Vec<String>,
+    pub app_id: i32,
+    pub is_active: bool,
+    pub secret_key: Option<String>,
+    pub subscription_query: Option<String>,
+    pub custom_headers: serde_json::Value,
+}
+
+/// Create a webhook row + event links (Django `webhookCreate`).
+pub async fn create_hook(db: &DatabaseConnection, h: &NewHook) -> Result<i32> {
+    use sea_orm::TransactionTrait;
+    if h.target_url.as_ref().map(|s| s.trim().is_empty()).unwrap_or(true) {
+        return Err(hook_fail("target_url is required"));
+    }
+    let txn = db.begin().await?;
+    if app_app::Entity::find_by_id(h.app_id).one(&txn).await?.is_none() {
+        return Err(hook_fail(format!("app {} not found", h.app_id)));
+    }
+    let row = webhook_webhook::ActiveModel {
+        target_url: Set(h.target_url.clone().unwrap_or_default()),
+        is_active: Set(h.is_active),
+        secret_key: Set(h.secret_key.clone()),
+        app_id: Set(h.app_id),
+        name: Set(h.name.clone()),
+        subscription_query: Set(h.subscription_query.clone()),
+        custom_headers: Set(Some(h.custom_headers.clone())),
+        filterable_channel_slugs: Set(vec![]),
+        identifier: Set(h.identifier.clone()),
+        ..Default::default()
+    }
+    .insert(&txn)
+    .await?;
+    for ev in &h.events {
+        webhook_webhookevent::ActiveModel {
+            event_type: Set(ev.clone()),
+            webhook_id: Set(row.id),
+            ..Default::default()
+        }
+        .insert(&txn)
+        .await?;
+    }
+    txn.commit().await?;
+    Ok(row.id)
+}
+
+#[derive(Default)]
+pub struct HookPatch {
+    pub name: Option<Option<String>>,
+    pub target_url: Option<String>,
+    pub events: Option<Vec<String>>,
+    pub is_active: Option<bool>,
+    pub secret_key: Option<Option<String>>,
+    pub subscription_query: Option<Option<String>>,
+    pub custom_headers: Option<serde_json::Value>,
+}
+
+/// Update a webhook (Django `webhookUpdate`).
+pub async fn update_hook(db: &DatabaseConnection, id: i32, p: &HookPatch) -> Result<()> {
+    use sea_orm::TransactionTrait;
+    let txn = db.begin().await?;
+    let w = webhook_webhook::Entity::find_by_id(id)
+        .one(&txn)
+        .await?
+        .ok_or_else(|| hook_fail(format!("webhook {id} not found")))?;
+    let mut am: webhook_webhook::ActiveModel = w.into();
+    if let Some(n) = p.name.clone() {
+        am.name = Set(n);
+    }
+    if let Some(u) = p.target_url.clone() {
+        if u.trim().is_empty() {
+            return Err(hook_fail("target_url cannot be empty"));
+        }
+        am.target_url = Set(u);
+    }
+    if let Some(a) = p.is_active {
+        am.is_active = Set(a);
+    }
+    if let Some(s) = p.secret_key.clone() {
+        am.secret_key = Set(s);
+    }
+    if let Some(q) = p.subscription_query.clone() {
+        am.subscription_query = Set(q);
+    }
+    if let Some(h) = p.custom_headers.clone() {
+        am.custom_headers = Set(Some(h));
+    }
+    am.update(&txn).await?;
+    if let Some(events) = p.events.clone() {
+        webhook_webhookevent::Entity::delete_many()
+            .filter(webhook_webhookevent::Column::WebhookId.eq(id))
+            .exec(&txn)
+            .await?;
+        for ev in &events {
+            webhook_webhookevent::ActiveModel {
+                event_type: Set(ev.clone()),
+                webhook_id: Set(id),
+                ..Default::default()
+            }
+            .insert(&txn)
+            .await?;
+        }
+    }
+    txn.commit().await?;
+    Ok(())
+}
+
+/// Delete a webhook with its events (Django `webhookDelete`; deliveries
+/// keep history? No — deliveries reference the hook; Django cascades.
+/// Clean them explicitly).
+pub async fn delete_hook(db: &DatabaseConnection, id: i32) -> Result<()> {
+    use sea_orm::TransactionTrait;
+    let txn = db.begin().await?;
+    if webhook_webhook::Entity::find_by_id(id).one(&txn).await?.is_none() {
+        return Err(hook_fail(format!("webhook {id} not found")));
+    }
+    webhook_webhookevent::Entity::delete_many()
+        .filter(webhook_webhookevent::Column::WebhookId.eq(id))
+        .exec(&txn)
+        .await?;
+    // Delivery history references the hook; drop it with the hook
+    // (Django's collector cascades the same way).
+    let deliveries: Vec<i32> = core_eventdelivery::Entity::find()
+        .select_only()
+        .column(core_eventdelivery::Column::Id)
+        .filter(core_eventdelivery::Column::WebhookId.eq(id))
+        .into_tuple()
+        .all(&txn)
+        .await?;
+    if !deliveries.is_empty() {
+        core_eventdeliveryattempt::Entity::delete_many()
+            .filter(core_eventdeliveryattempt::Column::DeliveryId.is_in(deliveries.clone()))
+            .exec(&txn)
+            .await?;
+        core_eventdelivery::Entity::delete_many()
+            .filter(core_eventdelivery::Column::Id.is_in(deliveries))
+            .exec(&txn)
+            .await?;
+    }
+    if let Some(w) = webhook_webhook::Entity::find_by_id(id).one(&txn).await? {
+        let am: webhook_webhook::ActiveModel = w.into();
+        am.delete(&txn).await?;
+    }
+    txn.commit().await?;
+    Ok(())
+}
+
+/// Hook events for assembly.
+pub async fn hook_events(db: &impl sea_orm::ConnectionTrait, hook_id: i32) -> Result<Vec<String>> {
+    Ok(webhook_webhookevent::Entity::find()
+        .select_only()
+        .column(webhook_webhookevent::Column::EventType)
+        .filter(webhook_webhookevent::Column::WebhookId.eq(hook_id))
+        .into_tuple()
+        .all(db)
+        .await?)
+}
+
+/// Re-queue a delivery (Django `eventDeliveryRetry`): back to pending with
+/// the attempt history kept (Django preserves attempts for audit).
+pub async fn retry_delivery(db: &DatabaseConnection, delivery_id: i32) -> Result<DeliveryView> {
+    use sea_orm::TransactionTrait;
+    let txn = db.begin().await?;
+    let d = core_eventdelivery::Entity::find_by_id(delivery_id)
+        .one(&txn)
+        .await?
+        .ok_or_else(|| hook_fail(format!("delivery {delivery_id} not found")))?;
+    if d.status == "success" {
+        return Err(hook_fail("succeeded deliveries cannot be retried"));
+    }
+    let mut am: core_eventdelivery::ActiveModel = d.into();
+    am.status = Set("pending".to_string());
+    am.update(&txn).await?;
+    txn.commit().await?;
+    view(db, delivery_id).await
+}
+
+/// Manual trigger (Django `webhookTrigger`): enqueue one delivery of the
+/// webhook with an object-reference payload.
+pub async fn trigger_manual(
+    db: &DatabaseConnection,
+    webhook_id: i32,
+    object_gid: &str,
+) -> Result<DeliveryView> {
+    let wh = webhook_webhook::Entity::find_by_id(webhook_id)
+        .one(db)
+        .await?
+        .ok_or_else(|| hook_fail(format!("webhook {webhook_id} not found")))?;
+    if !wh.is_active {
+        return Err(hook_fail("webhook is not active"));
+    }
+    let payload = serde_json::json!({"object_id": object_gid}).to_string();
+    let payload_row = core_eventpayload::ActiveModel {
+        payload: Set(payload),
+        created_at: Set(Utc::now().into()),
+        ..Default::default()
+    }
+    .insert(db)
+    .await?;
+    let row = core_eventdelivery::ActiveModel {
+        created_at: Set(Utc::now().into()),
+        status: Set("pending".to_string()),
+        event_type: Set("manual_trigger".to_string()),
+        payload_id: Set(Some(payload_row.id)),
+        webhook_id: Set(webhook_id),
+        ..Default::default()
+    }
+    .insert(db)
+    .await?;
+    view(db, row.id).await
 }

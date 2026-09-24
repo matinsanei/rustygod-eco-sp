@@ -43,6 +43,138 @@ fn perr(message: String) -> GqlPaymentError {
     GqlPaymentError { field: None, message: Some(message), code: None }
 }
 
+#[derive(SimpleObject, Clone)]
+#[graphql(name = "StoredPaymentMethodRequestDelete")]
+pub struct GqlStoredPaymentMethodRequestDelete {
+    pub result: gen::StoredPaymentMethodRequestDeleteResult,
+    pub errors: Vec<GqlPaymentMethodRequestDeleteError>,
+}
+
+#[derive(SimpleObject, Clone)]
+#[graphql(name = "PaymentMethodRequestDeleteError")]
+pub struct GqlPaymentMethodRequestDeleteError {
+    pub field: Option<String>,
+    pub message: Option<String>,
+    pub code: Option<String>,
+}
+
+#[derive(SimpleObject, Clone)]
+#[graphql(name = "PaymentGatewayConfigError")]
+pub struct GqlPaymentGatewayConfigError {
+    pub field: Option<String>,
+    pub message: Option<String>,
+    pub code: GqlPaymentGatewayConfigErrorCode,
+}
+
+#[derive(Enum, Clone, Copy, PartialEq, Eq)]
+#[graphql(name = "PaymentGatewayConfigErrorCode")]
+pub enum GqlPaymentGatewayConfigErrorCode {
+    #[graphql(name = "NOT_FOUND")]
+    NOTFOUND,
+    #[graphql(name = "INVALID")]
+    INVALID,
+}
+
+#[derive(SimpleObject, Clone)]
+#[graphql(name = "PaymentGatewayConfig")]
+pub struct GqlPaymentGatewayConfig {
+    pub id: String,
+    pub data: Option<serde_json::Value>,
+    pub errors: Vec<GqlPaymentGatewayConfigError>,
+}
+
+#[derive(SimpleObject, Clone)]
+#[graphql(name = "PaymentGatewayInitialize")]
+pub struct GqlPaymentGatewayInitialize {
+    #[graphql(name = "gatewayConfigs")]
+    pub gateway_configs: Vec<GqlPaymentGatewayConfig>,
+    pub errors: Vec<GqlPaymentGatewayInitializeError>,
+}
+
+#[derive(SimpleObject, Clone)]
+#[graphql(name = "PaymentGatewayInitializeError")]
+pub struct GqlPaymentGatewayInitializeError {
+    pub field: Option<String>,
+    pub message: Option<String>,
+    pub code: Option<String>,
+}
+
+#[derive(Enum, Clone, Copy, PartialEq, Eq)]
+#[graphql(name = "PaymentGatewayInitializeTokenizationResult")]
+pub enum GqlPaymentGatewayInitializeTokenizationResult {
+    #[graphql(name = "SUCCESSFULLY_INITIALIZED")]
+    SUCCESSFULLYINITIALIZED,
+    #[graphql(name = "FAILED_TO_INITIALIZE")]
+    FAILEDTOINITIALIZE,
+    #[graphql(name = "FAILED_TO_DELIVER")]
+    FAILEDTODELIVER,
+}
+
+#[derive(SimpleObject, Clone)]
+#[graphql(name = "PaymentGatewayInitializeTokenizationError")]
+pub struct GqlPaymentGatewayInitializeTokenizationError {
+    pub field: Option<String>,
+    pub message: Option<String>,
+    pub code: Option<String>,
+}
+
+#[derive(SimpleObject, Clone)]
+#[graphql(name = "PaymentGatewayInitializeTokenization")]
+pub struct GqlPaymentGatewayInitializeTokenization {
+    pub result: GqlPaymentGatewayInitializeTokenizationResult,
+    pub data: Option<serde_json::Value>,
+    pub errors: Vec<GqlPaymentGatewayInitializeTokenizationError>,
+}
+
+#[derive(Enum, Clone, Copy, PartialEq, Eq)]
+#[graphql(name = "PaymentMethodTokenizationResult")]
+pub enum GqlPaymentMethodTokenizationResult {
+    #[graphql(name = "SUCCESSFULLY_TOKENIZED")]
+    SUCCESSFULLYTOKENIZED,
+    #[graphql(name = "PENDING")]
+    PENDING,
+    #[graphql(name = "ADDITIONAL_ACTION_REQUIRED")]
+    ADDITIONALACTIONREQUIRED,
+    #[graphql(name = "FAILED_TO_TOKENIZE")]
+    FAILEDTOTOKENIZE,
+    #[graphql(name = "FAILED_TO_DELIVER")]
+    FAILEDTODELIVER,
+}
+
+#[derive(SimpleObject, Clone)]
+#[graphql(name = "PaymentMethodInitializeTokenizationError")]
+pub struct GqlPaymentMethodInitializeTokenizationError {
+    pub field: Option<String>,
+    pub message: Option<String>,
+    pub code: Option<String>,
+}
+
+#[derive(SimpleObject, Clone)]
+#[graphql(name = "PaymentMethodInitializeTokenization")]
+pub struct GqlPaymentMethodInitializeTokenization {
+    pub result: GqlPaymentMethodTokenizationResult,
+    pub id: Option<String>,
+    pub data: Option<serde_json::Value>,
+    pub errors: Vec<GqlPaymentMethodInitializeTokenizationError>,
+}
+
+#[derive(SimpleObject, Clone)]
+#[graphql(name = "PaymentMethodProcessTokenizationError")]
+pub struct GqlPaymentMethodProcessTokenizationError {
+    pub field: Option<String>,
+    pub message: Option<String>,
+    pub code: Option<String>,
+}
+
+#[derive(SimpleObject, Clone)]
+#[graphql(name = "PaymentMethodProcessTokenization")]
+pub struct GqlPaymentMethodProcessTokenization {
+    pub result: GqlPaymentMethodTokenizationResult,
+    pub id: Option<String>,
+    pub data: Option<serde_json::Value>,
+    pub errors: Vec<GqlPaymentMethodProcessTokenizationError>,
+}
+
 fn tuerr(message: String) -> GqlTransactionUpdateError {
     GqlTransactionUpdateError { field: None, message: Some(message), code: None }
 }
@@ -981,6 +1113,133 @@ impl PaymentMutation {
             Ok(t) => Ok(gen::TransactionCreate { transaction: Some(t), errors: vec![] }),
             Err(e) => Ok(err(e)),
         }
+    }
+
+    /// Stored payment-method delete request (Django
+    /// `storedPaymentMethodRequestDelete`): fans out the sync webhook to
+    /// payment apps. No stored-method vault exists here, so with no
+    /// subscriber the honest result is FAILED_TO_DELIVER.
+    async fn stored_payment_method_request_delete(
+        &self, ctx: &Context<'_>,
+        channel: String,
+        id: ID,
+    ) -> Result<GqlStoredPaymentMethodRequestDelete> {
+        let _ = crate::account::require_perm(ctx, "handle_payments").await?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let payload = serde_json::json!({
+            "payment_method_id": id.0,
+            "channel": channel,
+        })
+        .to_string();
+        let deliveries = match saleor_rustify_db::webhooks::trigger_event(
+            db,
+            "stored_payment_method_delete_requested",
+            Some(&channel),
+            &payload,
+        )
+        .await
+        {
+            Ok(d) => d,
+            Err(e) => {
+                return Ok(GqlStoredPaymentMethodRequestDelete {
+                    result: gen::StoredPaymentMethodRequestDeleteResult::FAILEDTODELIVER,
+                    errors: vec![GqlPaymentMethodRequestDeleteError {
+                        field: None,
+                        message: Some(e.to_string()),
+                        code: None,
+                    }],
+                })
+            }
+        };
+        if deliveries.is_empty() {
+            return Ok(GqlStoredPaymentMethodRequestDelete {
+                result: gen::StoredPaymentMethodRequestDeleteResult::FAILEDTODELIVER,
+                errors: vec![],
+            });
+        }
+        Ok(GqlStoredPaymentMethodRequestDelete {
+            result: gen::StoredPaymentMethodRequestDeleteResult::SUCCESSFULLYDELETED,
+            errors: vec![],
+        })
+    }
+
+    /// Gateway initialization (Django `paymentGatewayInitialize`): without a
+    /// gateway plugin every gateway reports NOT_FOUND, like Django.
+    async fn payment_gateway_initialize(
+        &self,
+        amount: Option<gen::GenPositiveDecimal>,
+        id: ID,
+        #[graphql(name = "paymentGateways")] payment_gateways: Option<Vec<gen::PaymentGatewayToInitialize>>,
+    ) -> Result<GqlPaymentGatewayInitialize> {
+        let _ = (amount, id);
+        let mut configs = vec![];
+        for gw in payment_gateways.unwrap_or_default() {
+            configs.push(GqlPaymentGatewayConfig {
+                id: gw.id.clone(),
+                data: None,
+                errors: vec![GqlPaymentGatewayConfigError {
+                    field: None,
+                    message: Some(format!("gateway {} is not configured", gw.id)),
+                    code: GqlPaymentGatewayConfigErrorCode::NOTFOUND,
+                }],
+            });
+        }
+        Ok(GqlPaymentGatewayInitialize { gateway_configs: configs, errors: vec![] })
+    }
+
+    /// Gateway session tokenization init (Django
+    /// `paymentGatewayInitializeTokenization`): no session apps installed.
+    async fn payment_gateway_initialize_tokenization(
+        &self, amount: Option<gen::GenPositiveDecimal>, id: ID,
+        #[graphql(name = "paymentGateways")] payment_gateways: Option<Vec<gen::PaymentGatewayToInitialize>>,
+    ) -> Result<GqlPaymentGatewayInitializeTokenization> {
+        let _ = (amount, id, payment_gateways);
+        Ok(GqlPaymentGatewayInitializeTokenization {
+            result: GqlPaymentGatewayInitializeTokenizationResult::FAILEDTODELIVER,
+            data: None,
+            errors: vec![GqlPaymentGatewayInitializeTokenizationError {
+                field: None,
+                message: Some("no payment gateway with session support is configured".to_string()),
+                code: None,
+            }],
+        })
+    }
+
+    /// Payment-method tokenization init (Django
+    /// `paymentMethodInitializeTokenization`): no vault apps installed.
+    async fn payment_method_initialize_tokenization(
+        &self, channel: String, data: gen::GenJSONString, id: String,
+        #[graphql(name = "paymentFlowToSupport")] payment_flow_to_support: gen::TokenizedPaymentFlowEnum,
+    ) -> Result<GqlPaymentMethodInitializeTokenization> {
+        let _ = (channel, data, id, payment_flow_to_support);
+        Ok(GqlPaymentMethodInitializeTokenization {
+            result: GqlPaymentMethodTokenizationResult::FAILEDTODELIVER,
+            id: None,
+            data: None,
+            errors: vec![GqlPaymentMethodInitializeTokenizationError {
+                field: None,
+                message: Some("no payment app supports stored payment methods".to_string()),
+                code: None,
+            }],
+        })
+    }
+
+    /// Payment-method tokenization process (Django
+    /// `paymentMethodProcessTokenization`): no vault apps installed.
+    async fn payment_method_process_tokenization(
+        &self, channel: String, data: gen::GenJSONString, id: String,
+    ) -> Result<GqlPaymentMethodProcessTokenization> {
+        let _ = (channel, data, id);
+        Ok(GqlPaymentMethodProcessTokenization {
+            result: GqlPaymentMethodTokenizationResult::FAILEDTODELIVER,
+            id: None,
+            data: None,
+            errors: vec![GqlPaymentMethodProcessTokenizationError {
+                field: None,
+                message: Some("no payment app supports stored payment methods".to_string()),
+                code: None,
+            }],
+        })
     }
 
     /// Execute a granted refund's money move (Django

@@ -8,7 +8,7 @@
 //! Kinds without Django tables (PROMOTION/PROMOTION_RULE/SALE — Saleor
 //! 3.24 dropped `discount_sale`) return empty lists / errors honestly.
 
-use async_graphql::{Context, ID, Object, Result};
+use async_graphql::{Context, Error, ID, Object, Result, SimpleObject};
 use sea_orm::{ConnectionTrait, Statement};
 
 use crate::{
@@ -535,6 +535,381 @@ fn gid_of(id: &ID) -> Option<i32> {
     saleor_rustify_db::catalog::parse_gid(&id.0)
 }
 
+/// Bulk payloads (schema shapes; codegen missed these roots).
+#[derive(SimpleObject, Clone)]
+#[graphql(name = "ProductBulkTranslateResult")]
+pub struct GqlProductBulkTranslateResult {
+    pub translation: Option<gen::ProductTranslation>,
+    pub errors: Vec<gen::TranslationError>,
+}
+
+#[derive(SimpleObject, Clone)]
+#[graphql(name = "ProductVariantBulkTranslateResult")]
+pub struct GqlProductVariantBulkTranslateResult {
+    pub translation: Option<gen::ProductVariantTranslation>,
+    pub errors: Vec<gen::TranslationError>,
+}
+
+#[derive(SimpleObject, Clone)]
+#[graphql(name = "AttributeBulkTranslateResult")]
+pub struct GqlAttributeBulkTranslateResult {
+    pub translation: Option<gen::AttributeTranslation>,
+    pub errors: Vec<gen::TranslationError>,
+}
+
+#[derive(SimpleObject, Clone)]
+#[graphql(name = "AttributeValueBulkTranslateResult")]
+pub struct GqlAttributeValueBulkTranslateResult {
+    pub translation: Option<gen::AttributeValueTranslation>,
+    pub errors: Vec<gen::TranslationError>,
+}
+
+#[derive(SimpleObject, Clone)]
+#[graphql(name = "ProductBulkTranslate")]
+pub struct GqlProductBulkTranslate {
+    pub count: Option<i32>,
+    pub results: Vec<GqlProductBulkTranslateResult>,
+    pub errors: Vec<gen::TranslationError>,
+}
+
+#[derive(SimpleObject, Clone)]
+#[graphql(name = "ProductVariantBulkTranslate")]
+pub struct GqlProductVariantBulkTranslate {
+    pub count: Option<i32>,
+    pub results: Vec<GqlProductVariantBulkTranslateResult>,
+    pub errors: Vec<gen::TranslationError>,
+}
+
+#[derive(SimpleObject, Clone)]
+#[graphql(name = "AttributeBulkTranslate")]
+pub struct GqlAttributeBulkTranslate {
+    pub count: Option<i32>,
+    pub results: Vec<GqlAttributeBulkTranslateResult>,
+    pub errors: Vec<gen::TranslationError>,
+}
+
+#[derive(SimpleObject, Clone)]
+#[graphql(name = "AttributeValueBulkTranslate")]
+pub struct GqlAttributeValueBulkTranslate {
+    pub count: Option<i32>,
+    pub results: Vec<GqlAttributeValueBulkTranslateResult>,
+    pub errors: Vec<gen::TranslationError>,
+}
+
+#[derive(SimpleObject, Clone)]
+#[graphql(name = "PromotionTranslate")]
+pub struct GqlPromotionTranslate {
+    pub errors: Vec<gen::TranslationError>,
+    pub promotion: Option<gen::Promotion>,
+}
+
+#[derive(SimpleObject, Clone)]
+#[graphql(name = "PromotionRuleTranslate")]
+pub struct GqlPromotionRuleTranslate {
+    pub errors: Vec<gen::TranslationError>,
+    #[graphql(name = "promotionRule")]
+    pub promotion_rule: Option<gen::PromotionRule>,
+}
+
+#[derive(SimpleObject, Clone)]
+#[graphql(name = "ShopSettingsTranslate")]
+pub struct GqlShopSettingsTranslate {
+    pub shop: Option<gen::Shop>,
+    pub errors: Vec<gen::TranslationError>,
+}
+
+#[derive(SimpleObject, Clone)]
+#[graphql(name = "AttributeBulkCreateResult")]
+pub struct GqlAttributeBulkResult {
+    pub attribute: Option<Box<gen::Attribute>>,
+    pub errors: Vec<gen::TranslationError>,
+}
+
+#[derive(SimpleObject, Clone)]
+#[graphql(name = "AttributeBulkCreate")]
+pub struct GqlAttributeBulkCreate {
+    pub count: Option<i32>,
+    pub results: Vec<GqlAttributeBulkResult>,
+    pub errors: Vec<gen::TranslationError>,
+}
+
+#[derive(SimpleObject, Clone)]
+#[graphql(name = "AttributeBulkUpdate")]
+pub struct GqlAttributeBulkUpdate {
+    pub count: Option<i32>,
+    pub results: Vec<GqlAttributeBulkResult>,
+    pub errors: Vec<gen::TranslationError>,
+}
+
+#[derive(SimpleObject, Clone)]
+#[graphql(name = "ProductReorderAttributeValues")]
+pub struct GqlProductReorderAttributeValues {
+    pub product: Option<gen::Product>,
+    pub errors: Vec<gen::ProductError>,
+}
+
+#[derive(SimpleObject, Clone)]
+#[graphql(name = "ProductVariantReorderAttributeValues")]
+pub struct GqlProductVariantReorderAttributeValues {
+    #[graphql(name = "productVariant")]
+    pub product_variant: Option<gen::ProductVariant>,
+    pub errors: Vec<gen::ProductError>,
+}
+
+fn perr(message: String) -> gen::ProductError {
+    gen::ProductError { field: None, message: Some(message), code: None, attributes: vec![] }
+}
+
+/// UUID-FK variant of `upsert_tr` (promotions/rules/shop rows).
+async fn upsert_tr_uuid(
+    db: &sea_orm::DatabaseConnection,
+    entity_table: &str,
+    tr_table: &str,
+    fk: &str,
+    eid: &uuid::Uuid,
+    lang: &str,
+    strs: &[(&str, Option<String>)],
+    jsons: &[(&str, Option<String>)],
+) -> Result<(), String> {
+    use sea_orm::{ConnectionTrait, Statement};
+    let exists = Statement::from_sql_and_values(
+        sea_orm::DatabaseBackend::Postgres,
+        format!("SELECT 1 FROM {entity_table} WHERE id = $1::uuid LIMIT 1"),
+        [eid.to_string().into()],
+    );
+    let found = db.query_one(exists).await.map_err(|e| e.to_string())?.is_some();
+    if !found {
+        return Err("object not found".into());
+    }
+    let sel = Statement::from_sql_and_values(
+        sea_orm::DatabaseBackend::Postgres,
+        format!("SELECT id FROM {tr_table} WHERE {fk} = $1::uuid AND language_code = $2"),
+        [eid.to_string().into(), lang.to_string().into()],
+    );
+    let existing: Option<i32> = db
+        .query_one(sel)
+        .await
+        .map_err(|e| e.to_string())?
+        .and_then(|r| r.try_get::<i32>("", "id").ok());
+    let wanted_strs: Vec<(&str, String)> =
+        strs.iter().filter_map(|(c, v)| v.clone().map(|s| (*c, s))).collect();
+    let wanted_jsons: Vec<(&str, serde_json::Value)> = jsons
+        .iter()
+        .filter_map(|(c, v)| {
+            v.clone().and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok().map(|j| (*c, j)))
+        })
+        .collect();
+    match existing {
+        Some(tid) => {
+            let mut params: Vec<sea_orm::Value> = vec![tid.into()];
+            let mut sets: Vec<String> = vec![];
+            for (c, v) in &wanted_strs {
+                params.push(v.clone().into());
+                sets.push(format!("{c} = ${}", params.len()));
+            }
+            for (c, j) in &wanted_jsons {
+                params.push(j.to_string().into());
+                sets.push(format!("{c} = ${}::jsonb", params.len()));
+            }
+            if !sets.is_empty() {
+                let upd = Statement::from_sql_and_values(
+                    sea_orm::DatabaseBackend::Postgres,
+                    format!("UPDATE {tr_table} SET {} WHERE id = $1", sets.join(", ")),
+                    params,
+                );
+                db.execute(upd).await.map_err(|e| e.to_string())?;
+            }
+        }
+        None => {
+            let mut cols = vec![fk.to_string(), "language_code".to_string()];
+            let mut vals: Vec<String> = vec!["$1::uuid".into(), "$2".into()];
+            let mut params: Vec<sea_orm::Value> = vec![eid.to_string().into(), lang.to_string().into()];
+            for (c, v) in &wanted_strs {
+                params.push(v.clone().into());
+                vals.push(format!("${}", params.len()));
+                cols.push(c.to_string());
+            }
+            for (c, j) in &wanted_jsons {
+                params.push(j.to_string().into());
+                vals.push(format!("${}::jsonb", params.len()));
+                cols.push(c.to_string());
+            }
+            let ins = Statement::from_sql_and_values(
+                sea_orm::DatabaseBackend::Postgres,
+                format!("INSERT INTO {tr_table} ({}) VALUES ({})", cols.join(", "), vals.join(", ")),
+                params,
+            );
+            db.execute(ins).await.map_err(|e| e.to_string())?;
+        }
+    }
+    Ok(())
+}
+
+async fn product_exists(db: &sea_orm::DatabaseConnection, eid: i32) -> Result<(), String> {
+    use sea_orm::{ConnectionTrait, Statement};
+    let found = db
+        .query_one(Statement::from_sql_and_values(
+            sea_orm::DatabaseBackend::Postgres,
+            "SELECT 1 FROM product_product WHERE id = $1 LIMIT 1".to_string(),
+            [eid.into()],
+        ))
+        .await
+        .map_err(|e| e.to_string())?
+        .is_some();
+    if found {
+        Ok(())
+    } else {
+        Err(format!("product {eid} not found"))
+    }
+}
+
+/// gen AttributeCreateInput → db create (Django field mapping).
+async fn attribute_create_from(
+    db: &sea_orm::DatabaseConnection,
+    a: &gen::AttributeCreateInput,
+) -> Result<i32, String> {
+    let input_type = match a.input_type.as_ref() {
+        Some(gen::AttributeInputTypeEnum::DROPDOWN) => "dropdown",
+        Some(gen::AttributeInputTypeEnum::MULTISELECT) => "multiselect",
+        Some(gen::AttributeInputTypeEnum::FILE) => "file",
+        Some(gen::AttributeInputTypeEnum::REFERENCE) => "reference",
+        Some(gen::AttributeInputTypeEnum::NUMERIC) => "numeric",
+        Some(gen::AttributeInputTypeEnum::RICHTEXT) => "rich-text",
+        Some(gen::AttributeInputTypeEnum::PLAINTEXT) => "plain-text",
+        Some(gen::AttributeInputTypeEnum::SWATCH) => "swatch",
+        Some(gen::AttributeInputTypeEnum::BOOLEAN) => "boolean",
+        Some(gen::AttributeInputTypeEnum::DATE) => "date",
+        Some(gen::AttributeInputTypeEnum::DATETIME) => "date-time",
+        Some(gen::AttributeInputTypeEnum::SINGLEREFERENCE) => "single-reference",
+        None => "dropdown",
+    };
+    let entity_type = a.entity_type.as_ref().map(|e| match e {
+        gen::AttributeEntityTypeEnum::PAGE => "page",
+        gen::AttributeEntityTypeEnum::PRODUCT => "product",
+        gen::AttributeEntityTypeEnum::PRODUCTVARIANT => "product-variant",
+        gen::AttributeEntityTypeEnum::CATEGORY => "category",
+        gen::AttributeEntityTypeEnum::COLLECTION => "collection",
+    });
+    let unit = a.unit.as_ref().map(|u| format!("{u:?}").to_lowercase());
+    let aid = saleor_rustify_db::attribute_writes::create_attribute(
+        db,
+        &saleor_rustify_db::attribute_writes::AttributeCreate {
+            name: a.name.clone(),
+            slug: a.slug.clone(),
+            input_type: input_type.to_string(),
+            attr_type: "product".to_string(),
+            entity_type: entity_type.map(|s| s.to_string()),
+            unit,
+            value_required: a.value_required.unwrap_or(false),
+            external_reference: None,
+            reference_types: vec![],
+        },
+    )
+    .await
+    .map_err(|e| e.to_string())?;
+    // Initial values (Django accepts values on create).
+    for v in a.values.clone().unwrap_or_default() {
+        let _ = saleor_rustify_db::attribute_writes::create_attribute_value(
+            db,
+            aid,
+            &saleor_rustify_db::attribute_writes::ValueCreate {
+                name: v.name.clone(),
+                value: v.value.clone(),
+                plain_text: v.plain_text.clone(),
+                rich_text: v.rich_text.clone().map(|x| serde_json::Value::String(x.0.clone())),
+                file_url: v.file_url.clone(),
+                content_type: v.content_type.clone(),
+                external_reference: v.external_reference.clone(),
+            },
+        )
+        .await
+        .map_err(|e| e.to_string())?;
+    }
+    Ok(aid)
+}
+
+/// gen AttributeUpdateInput → db patch.
+async fn attribute_update_from(
+    db: &sea_orm::DatabaseConnection,
+    aid: i32,
+    f: &gen::AttributeUpdateInput,
+) -> Result<(), String> {
+    let mut add_values = vec![];
+    for v in f.add_values.clone().unwrap_or_default() {
+        add_values.push(saleor_rustify_db::attribute_writes::ValueCreate {
+            name: v.name.clone().unwrap_or_default(),
+            value: None,
+            plain_text: None,
+            rich_text: None,
+            file_url: None,
+            content_type: None,
+            external_reference: None,
+        });
+    }
+    let remove: Vec<i32> = f.remove_values.clone().unwrap_or_default().iter().filter_map(|i| gid_of(i)).collect();
+    saleor_rustify_db::attribute_writes::update_attribute(
+        db,
+        aid,
+        &saleor_rustify_db::attribute_writes::AttributePatch {
+            name: f.name.clone(),
+            slug: f.slug.clone(),
+            unit: None,
+            value_required: f.value_required,
+            is_variant_only: f.is_variant_only,
+            visible_in_storefront: f.visible_in_storefront,
+            filterable_in_storefront: f.filterable_in_storefront,
+            filterable_in_dashboard: f.filterable_in_dashboard,
+            storefront_search_position: f.storefront_search_position,
+            available_in_grid: f.available_in_grid,
+            external_reference: None,
+            entity_type: None,
+            reference_types: None,
+        },
+        &add_values,
+        &remove,
+    )
+    .await
+    .map_err(|e| e.to_string())
+}
+
+/// Reorder assigned attribute values on a product/variant (raw-SQL, the
+/// assigned tables have no other writer).
+async fn reorder_assigned_values(
+    db: &sea_orm::DatabaseConnection,
+    scope: &str,
+    owner_id: i32,
+    attribute_id: i32,
+    moves: &[(i32, i32)],
+) -> Result<(), String> {
+    use sea_orm::{ConnectionTrait, Statement};
+    let (table, owner_col) = match scope {
+        "variant" => ("attribute_assignedvariantattributevalue", "variant_id"),
+        _ => ("attribute_assignedproductattributevalue", "product_id"),
+    };
+    for (value_id, sort) in moves {
+        // Guard: the assigned row must join this owner + attribute's value.
+        let check = Statement::from_sql_and_values(
+            sea_orm::DatabaseBackend::Postgres,
+            format!(
+                "SELECT a.id FROM {table} a JOIN attribute_attributevalue v ON v.id = a.value_id \
+                 WHERE a.{owner_col} = $1 AND v.attribute_id = $2 AND a.value_id = $3 LIMIT 1"
+            ),
+            [owner_id.into(), attribute_id.into(), (*value_id).into()],
+        );
+        let found = db.query_one(check).await.map_err(|e| e.to_string())?.is_some();
+        if !found {
+            continue;
+        }
+        let upd = Statement::from_sql_and_values(
+            sea_orm::DatabaseBackend::Postgres,
+            format!("UPDATE {table} SET sort_order = $1 WHERE {owner_col} = $2 AND value_id = $3"),
+            [(*sort).into(), owner_id.into(), (*value_id).into()],
+        );
+        db.execute(upd).await.map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
 #[Object]
 impl TranslationMutation {
     async fn product_translate(
@@ -786,6 +1161,311 @@ impl TranslationMutation {
     ) -> Result<gen::SaleTranslate> {
         let _ = (ctx, id, input, language_code);
         Ok(gen::SaleTranslate { errors: vec![terr("legacy sales no longer exist in Saleor 3.24".into())], sale: None })
+    }
+
+    /// Bulk product translates (Django `productBulkTranslate`): pre-validate
+    /// all rows so REJECT_EVERYTHING is truly all-or-nothing, then upsert.
+    async fn product_bulk_translate(
+        &self, ctx: &Context<'_>,
+        #[graphql(name = "errorPolicy")] error_policy: Option<gen::ErrorPolicyEnum>,
+        translations: Vec<gen::ProductBulkTranslateInput>,
+    ) -> Result<GqlProductBulkTranslate> {
+        let _ = crate::account::require_perm(ctx, "manage_translations").await?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let _ = error_policy;
+        // Pre-validation pass (existence) for all-or-nothing semantics.
+        let mut rows = vec![];
+        for t in &translations {
+            let eid = match t.id.as_ref().and_then(|i| gid_of(i)) {
+                Some(e) => e,
+                None => return Ok(GqlProductBulkTranslate {
+                    count: Some(0),
+                    results: vec![],
+                    errors: vec![terr("bad product id (externalReference lookup is not supported)".into())],
+                }),
+            };
+            let lang = gen::language_code_value(&t.language_code);
+            rows.push((eid, lang, t.translation_fields.clone()));
+        }
+        for (eid, _, _) in &rows {
+            if product_exists(db, *eid).await.is_err() {
+                return Ok(GqlProductBulkTranslate {
+                    count: Some(0),
+                    results: vec![],
+                    errors: vec![terr(format!("product {eid} not found"))],
+                });
+            }
+        }
+        let mut results = vec![];
+        for (eid, lang, f) in rows {
+            let r = upsert_tr(
+                db, "product_product", "product_producttranslation", "product_id", eid, &lang,
+                &[("name", f.name.clone()), ("slug", f.slug.clone()),
+                  ("seo_title", f.seo_title.clone()), ("seo_description", f.seo_description.clone())],
+                &[("description", f.description.clone().map(|d| d.0.clone()))],
+            )
+            .await;
+            match r {
+                Ok(()) => results.push(GqlProductBulkTranslateResult { translation: None, errors: vec![] }),
+                Err(e) => results.push(GqlProductBulkTranslateResult { translation: None, errors: vec![terr(e)] }),
+            }
+        }
+        let n = results.iter().filter(|r| r.errors.is_empty()).count() as i32;
+        Ok(GqlProductBulkTranslate { count: Some(n), results, errors: vec![] })
+    }
+
+    /// Bulk variant translates (Django `productVariantBulkTranslate`).
+    async fn product_variant_bulk_translate(
+        &self, ctx: &Context<'_>,
+        #[graphql(name = "errorPolicy")] error_policy: Option<gen::ErrorPolicyEnum>,
+        translations: Vec<gen::ProductVariantBulkTranslateInput>,
+    ) -> Result<GqlProductVariantBulkTranslate> {
+        let _ = crate::account::require_perm(ctx, "manage_translations").await?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let _ = error_policy;
+        let mut rows = vec![];
+        for t in &translations {
+            let eid = match t.id.as_ref().and_then(|i| gid_of(i)) {
+                Some(e) => e,
+                None => return Ok(GqlProductVariantBulkTranslate {
+                    count: Some(0),
+                    results: vec![],
+                    errors: vec![terr("bad variant id (externalReference lookup is not supported)".into())],
+                }),
+            };
+            rows.push((eid, gen::language_code_value(&t.language_code), t.translation_fields.clone()));
+        }
+        let mut results = vec![];
+        for (eid, lang, f) in rows {
+            let r = upsert_tr(
+                db, "product_productvariant", "product_productvarianttranslation", "product_variant_id",
+                eid, &lang, &[("name", f.name.clone())], &[],
+            )
+            .await;
+            match r {
+                Ok(()) => results.push(GqlProductVariantBulkTranslateResult { translation: None, errors: vec![] }),
+                Err(e) => results.push(GqlProductVariantBulkTranslateResult { translation: None, errors: vec![terr(e)] }),
+            }
+        }
+        let n = results.iter().filter(|r| r.errors.is_empty()).count() as i32;
+        Ok(GqlProductVariantBulkTranslate { count: Some(n), results, errors: vec![] })
+    }
+
+    /// Bulk attribute translates (Django `attributeBulkTranslate`).
+    async fn attribute_bulk_translate(
+        &self, ctx: &Context<'_>,
+        #[graphql(name = "errorPolicy")] error_policy: Option<gen::ErrorPolicyEnum>,
+        translations: Vec<gen::AttributeBulkTranslateInput>,
+    ) -> Result<GqlAttributeBulkTranslate> {
+        let _ = crate::account::require_perm(ctx, "manage_translations").await?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let _ = error_policy;
+        let mut results = vec![];
+        for t in &translations {
+            let eid = match t.id.as_ref().and_then(|i| gid_of(i)) {
+                Some(e) => e,
+                None => {
+                    results.push(GqlAttributeBulkTranslateResult { translation: None, errors: vec![terr("bad attribute id".into())] });
+                    continue;
+                }
+            };
+            let r = upsert_tr(
+                db, "attribute_attribute", "attribute_attributetranslation", "attribute_id",
+                eid, &gen::language_code_value(&t.language_code),
+                &[("name", t.translation_fields.name.clone())], &[],
+            )
+            .await;
+            match r {
+                Ok(()) => results.push(GqlAttributeBulkTranslateResult { translation: None, errors: vec![] }),
+                Err(e) => results.push(GqlAttributeBulkTranslateResult { translation: None, errors: vec![terr(e)] }),
+            }
+        }
+        let n = results.iter().filter(|r| r.errors.is_empty()).count() as i32;
+        Ok(GqlAttributeBulkTranslate { count: Some(n), results, errors: vec![] })
+    }
+
+    /// Bulk attribute-value translates (Django `attributeValueBulkTranslate`).
+    async fn attribute_value_bulk_translate(
+        &self, ctx: &Context<'_>,
+        #[graphql(name = "errorPolicy")] error_policy: Option<gen::ErrorPolicyEnum>,
+        translations: Vec<gen::AttributeValueBulkTranslateInput>,
+    ) -> Result<GqlAttributeValueBulkTranslate> {
+        let _ = crate::account::require_perm(ctx, "manage_translations").await?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let _ = error_policy;
+        let mut results = vec![];
+        for t in &translations {
+            let eid = match t.id.as_ref().and_then(|i| gid_of(i)) {
+                Some(e) => e,
+                None => {
+                    results.push(GqlAttributeValueBulkTranslateResult { translation: None, errors: vec![terr("bad value id".into())] });
+                    continue;
+                }
+            };
+            let r = upsert_tr(
+                db, "attribute_attributevalue", "attribute_attributevaluetranslation", "attribute_value_id",
+                eid, &gen::language_code_value(&t.language_code),
+                &[("name", t.translation_fields.name.clone()),
+                  ("plain_text", t.translation_fields.plain_text.clone())],
+                &[("rich_text", t.translation_fields.rich_text.clone().map(|v| v.0.clone()))],
+            )
+            .await;
+            match r {
+                Ok(()) => results.push(GqlAttributeValueBulkTranslateResult { translation: None, errors: vec![] }),
+                Err(e) => results.push(GqlAttributeValueBulkTranslateResult { translation: None, errors: vec![terr(e)] }),
+            }
+        }
+        let n = results.iter().filter(|r| r.errors.is_empty()).count() as i32;
+        Ok(GqlAttributeValueBulkTranslate { count: Some(n), results, errors: vec![] })
+    }
+
+    /// Promotion translate (Django `promotionTranslate`).
+    async fn promotion_translate(
+        &self, ctx: &Context<'_>, id: ID, input: gen::PromotionTranslationInput, #[graphql(name = "languageCode")] language_code: gen::LanguageCodeEnum,
+    ) -> Result<GqlPromotionTranslate> {
+        let _ = crate::account::require_perm(ctx, "manage_translations").await?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let lang = gen::language_code_value(&language_code);
+        let Some(pid) = common::parse_uuid_gid(&id.0) else {
+            return Ok(GqlPromotionTranslate { errors: vec![terr("bad promotion id".into())], promotion: None });
+        };
+        let desc = input.description.clone().map(|v| v.to_string());
+        match upsert_tr_uuid(
+            db, "discount_promotion", "discount_promotiontranslation", "promotion_id", &pid, &lang,
+            &[("name", input.name.clone())],
+            &[("description", desc)],
+        )
+        .await
+        {
+            Ok(()) => Ok(GqlPromotionTranslate { errors: vec![], promotion: None }),
+            Err(e) => Ok(GqlPromotionTranslate { errors: vec![terr(e)], promotion: None }),
+        }
+    }
+
+    /// Promotion-rule translate (Django `promotionRuleTranslate`).
+    async fn promotion_rule_translate(
+        &self, ctx: &Context<'_>, id: ID, input: gen::PromotionRuleTranslationInput, #[graphql(name = "languageCode")] language_code: gen::LanguageCodeEnum,
+    ) -> Result<GqlPromotionRuleTranslate> {
+        let _ = crate::account::require_perm(ctx, "manage_translations").await?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let lang = gen::language_code_value(&language_code);
+        let Some(rid) = common::parse_uuid_gid(&id.0) else {
+            return Ok(GqlPromotionRuleTranslate { errors: vec![terr("bad rule id".into())], promotion_rule: None });
+        };
+        let desc = input.description.clone().map(|v| v.to_string());
+        match upsert_tr_uuid(
+            db, "discount_promotionrule", "discount_promotionruletranslation", "promotion_rule_id", &rid, &lang,
+            &[("name", input.name.clone())],
+            &[("description", desc)],
+        )
+        .await
+        {
+            Ok(()) => Ok(GqlPromotionRuleTranslate { errors: vec![], promotion_rule: None }),
+            Err(e) => Ok(GqlPromotionRuleTranslate { errors: vec![terr(e)], promotion_rule: None }),
+        }
+    }
+
+    /// Shop-settings translate (Django `shopSettingsTranslate`).
+    async fn shop_settings_translate(
+        &self, ctx: &Context<'_>, input: gen::ShopSettingsTranslationInput, #[graphql(name = "languageCode")] language_code: gen::LanguageCodeEnum,
+    ) -> Result<GqlShopSettingsTranslate> {
+        let _ = crate::account::require_perm(ctx, "manage_translations").await?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let lang = gen::language_code_value(&language_code);
+        // Site row id is 1 in this schema (Django's singleton).
+        match upsert_tr(
+            db, "site_sitesettings", "site_sitesettingstranslation", "site_settings_id", 1, &lang,
+            &[("header_text", input.header_text.clone()), ("description", input.description.clone())],
+            &[],
+        )
+        .await
+        {
+            Ok(()) => Ok(GqlShopSettingsTranslate { shop: None, errors: vec![] }),
+            Err(e) => Ok(GqlShopSettingsTranslate { shop: None, errors: vec![terr(e)] }),
+        }
+    }
+
+    /// Bulk attribute create (Django `attributeBulkCreate`).
+    async fn attribute_bulk_create(
+        &self, ctx: &Context<'_>,
+        attributes: Vec<gen::AttributeCreateInput>, #[graphql(name = "errorPolicy")] error_policy: Option<gen::ErrorPolicyEnum>,
+    ) -> Result<GqlAttributeBulkCreate> {
+        let _ = crate::account::require_perm(ctx, "manage_product_types_and_attributes").await?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let _ = error_policy;
+        let mut results = vec![];
+        for a in &attributes {
+            match attribute_create_from(db, a).await {
+                Ok(aid) => results.push(GqlAttributeBulkResult {
+                    attribute: crate::catalog::assemble_attribute(db, aid).await.map_err(Error::new)?.map(Box::new),
+                    errors: vec![],
+                }),
+                Err(e) => results.push(GqlAttributeBulkResult { attribute: None, errors: vec![terr(e)] }),
+            }
+        }
+        let n = results.iter().filter(|r| r.errors.is_empty()).count() as i32;
+        Ok(GqlAttributeBulkCreate { count: Some(n), results, errors: vec![] })
+    }
+
+    /// Bulk attribute update (Django `attributeBulkUpdate`).
+    async fn attribute_bulk_update(
+        &self, ctx: &Context<'_>,
+        attributes: Vec<gen::AttributeBulkUpdateInput>, #[graphql(name = "errorPolicy")] error_policy: Option<gen::ErrorPolicyEnum>,
+    ) -> Result<GqlAttributeBulkUpdate> {
+        let _ = crate::account::require_perm(ctx, "manage_product_types_and_attributes").await?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let _ = error_policy;
+        let mut results = vec![];
+        for a in &attributes {
+            let aid = match a.id.as_ref().and_then(|i| gid_of(i)) {
+                Some(id) => id,
+                None => {
+                    results.push(GqlAttributeBulkResult { attribute: None, errors: vec![terr("bad attribute id".into())] });
+                    continue;
+                }
+            };
+            match attribute_update_from(db, aid, &a.fields).await {
+                Ok(()) => results.push(GqlAttributeBulkResult {
+                    attribute: crate::catalog::assemble_attribute(db, aid).await.map_err(Error::new)?.map(Box::new),
+                    errors: vec![],
+                }),
+                Err(e) => results.push(GqlAttributeBulkResult { attribute: None, errors: vec![terr(e)] }),
+            }
+        }
+        let n = results.iter().filter(|r| r.errors.is_empty()).count() as i32;
+        Ok(GqlAttributeBulkUpdate { count: Some(n), results, errors: vec![] })
+    }
+
+    /// Reorder a product's attribute values (Django `productReorderAttributeValues`).
+    async fn product_reorder_attribute_values(
+        &self, ctx: &Context<'_>,
+        #[graphql(name = "attributeId")] attribute_id: ID, moves: Vec<gen::ReorderInput>, #[graphql(name = "productId")] product_id: ID,
+    ) -> Result<GqlProductReorderAttributeValues> {
+        let _ = crate::account::require_perm(ctx, "manage_products").await?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let aid = gid_of(&attribute_id).unwrap_or(-1);
+        let pid = gid_of(&product_id).unwrap_or(-1);
+        let mv: Vec<(i32, i32)> = moves.iter().filter_map(|m| gid_of(&m.id).map(|vid| (vid, m.sort_order.unwrap_or(0)))).collect();
+        match reorder_assigned_values(db, "product", pid, aid, &mv).await {
+            Ok(()) => Ok(GqlProductReorderAttributeValues { product: None, errors: vec![] }),
+            Err(e) => Ok(GqlProductReorderAttributeValues { product: None, errors: vec![perr(e)] }),
+        }
+    }
+
+    /// Reorder a variant's attribute values (Django `productVariantReorderAttributeValues`).
+    async fn product_variant_reorder_attribute_values(
+        &self, ctx: &Context<'_>,
+        #[graphql(name = "attributeId")] attribute_id: ID, moves: Vec<gen::ReorderInput>, #[graphql(name = "variantId")] variant_id: ID,
+    ) -> Result<GqlProductVariantReorderAttributeValues> {
+        let _ = crate::account::require_perm(ctx, "manage_products").await?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let aid = gid_of(&attribute_id).unwrap_or(-1);
+        let vid = gid_of(&variant_id).unwrap_or(-1);
+        let mv: Vec<(i32, i32)> = moves.iter().filter_map(|m| gid_of(&m.id).map(|v| (v, m.sort_order.unwrap_or(0)))).collect();
+        match reorder_assigned_values(db, "variant", vid, aid, &mv).await {
+            Ok(()) => Ok(GqlProductVariantReorderAttributeValues { product_variant: None, errors: vec![] }),
+            Err(e) => Ok(GqlProductVariantReorderAttributeValues { product_variant: None, errors: vec![perr(e)] }),
+        }
     }
 }
 /// Human language names from Saleor's own `saleor/core/languages.py`

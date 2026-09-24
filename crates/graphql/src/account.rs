@@ -147,10 +147,20 @@ fn bearer_token(ctx: &Context<'_>) -> Result<String> {
         .ok_or_else(|| Error::new("authentication required"))
 }
 
+/// Calling app from an app-token bearer (Django's app-context auth).
+/// Staff JWTs are rejected — problems attach to apps, not users.
+pub(crate) async fn app_caller(ctx: &Context<'_>, db: &sea_orm::DatabaseConnection) -> Result<i32> {
+    let token = bearer_token(ctx)?;
+    match saleor_rustify_db::apps::verify_app_token(db, &token).await {
+        Ok(Some(v)) => Ok(v.app_id),
+        Ok(None) => Err(Error::new("invalid app token")),
+        Err(e) => Err(Error::new(e.to_string())),
+    }
+}
+
 /// Authenticated requester: valid access JWT + active user + matching token
 /// key (rotation revokes). Returns (user id, claims user id).
-pub(crate) async fn requester(ctx: &Context<'_>, db: &sea_orm::DatabaseConnection) -> Result<(i32, String)> {
-    let token = bearer_token(ctx)?;
+pub(crate) async fn requester(ctx: &Context<'_>, db: &sea_orm::DatabaseConnection) -> Result<(i32, String)> {    let token = bearer_token(ctx)?;
     let claims = saleor_rustify_core::auth::decode(&token).map_err(|e| Error::new(format!("auth: {e}")))?;
     if claims.token_type != saleor_rustify_core::auth::TOKEN_TYPE_ACCESS {
         return Err(Error::new("authentication required"));
@@ -378,6 +388,18 @@ pub struct AccountQuery;
 
 #[Object]
 impl AccountQuery {
+    /// Address validation rules (Django `addressValidationRules`).
+    async fn address_validation_rules(
+        &self,
+        #[graphql(name = "countryCode")] country_code: gen::CountryCode,
+        #[graphql(name = "countryArea")] country_area: Option<String>,
+        city: Option<String>,
+        #[graphql(name = "cityArea")] city_area: Option<String>,
+    ) -> Result<gen::AddressValidationData> {
+        let _ = (country_area, city, city_area);
+        address_validation_rules(&country_code).await
+    }
+
     async fn me(&self, ctx: &Context<'_>) -> Result<Option<gen::User>> {
         let bearer = ctx.data_opt::<Bearer>().map(|b| b.0.as_str().to_string())
             .or_else(|| ctx.data_opt::<GqlContext>().and_then(|g| g.bearer.clone()));
@@ -805,6 +827,95 @@ pub struct GqlAccountAddressCreate {
     pub errors: Vec<GqlAccountError>,
 }
 
+#[derive(SimpleObject, Clone)]
+#[graphql(name = "AccountAddressUpdate")]
+pub struct GqlAccountAddressUpdate {
+    pub user: Option<gen::User>,
+    pub address: Option<crate::order::GqlAddress>,
+    pub errors: Vec<GqlAccountError>,
+}
+
+#[derive(SimpleObject, Clone)]
+#[graphql(name = "AccountAddressDelete")]
+pub struct GqlAccountAddressDelete {
+    pub user: Option<gen::User>,
+    pub address: Option<crate::order::GqlAddress>,
+    pub errors: Vec<GqlAccountError>,
+}
+
+#[derive(SimpleObject, Clone)]
+#[graphql(name = "ExternalVerify")]
+pub struct GqlExternalVerify {
+    pub user: Option<gen::User>,
+    #[graphql(name = "isValid")]
+    pub is_valid: Option<bool>,
+    #[graphql(name = "verifyData")]
+    pub verify_data: Option<serde_json::Value>,
+    pub errors: Vec<GqlAccountError>,
+}
+
+#[derive(SimpleObject, Clone)]
+#[graphql(name = "AccountSetDefaultAddress")]
+pub struct GqlAccountSetDefaultAddress {
+    pub user: Option<gen::User>,
+    pub errors: Vec<GqlAccountError>,
+}
+
+/// Address validation rules (Django `addressValidationRules`, backed by
+/// the `i18naddress` dataset there). Compact built-in table here: full US
+/// state + CA province choices, standard allowed-fields everywhere, EU
+/// refused like Django. Covers the dashboard AddressEdit form.
+async fn address_validation_rules(
+    country_code: &gen::CountryCode,
+) -> Result<gen::AddressValidationData, Error> {
+    let cc = format!("{country_code:?}");
+    if cc == "EU" {
+        return Err(Error::new("Cannot validate address for EU country code."));
+    }
+    let allowed = vec![
+        "name", "organization", "street_address", "locality", "dependent_locality",
+        "postal_code", "sorting_code", "administrative_area", "country",
+    ]
+    .into_iter()
+    .map(|s| s.to_string())
+    .collect();
+    let choices: Vec<gen::ChoiceValue> = match cc.as_str() {
+        "US" => US_STATES.iter().map(|(raw, verbose)| gen::ChoiceValue {
+            raw: Some(raw.to_string()),
+            verbose: Some(verbose.to_string()),
+        }).collect(),
+        "CA" => CA_PROVINCES.iter().map(|(raw, verbose)| gen::ChoiceValue {
+            raw: Some(raw.to_string()),
+            verbose: Some(verbose.to_string()),
+        }).collect(),
+        _ => vec![],
+    };
+    Ok(gen::AddressValidationData { allowed_fields: allowed, country_area_choices: choices })
+}
+
+const US_STATES: &[(&str, &str)] = &[
+    ("AL", "Alabama"), ("AK", "Alaska"), ("AZ", "Arizona"), ("AR", "Arkansas"),
+    ("CA", "California"), ("CO", "Colorado"), ("CT", "Connecticut"), ("DE", "Delaware"),
+    ("DC", "District of Columbia"), ("FL", "Florida"), ("GA", "Georgia"), ("HI", "Hawaii"),
+    ("ID", "Idaho"), ("IL", "Illinois"), ("IN", "Indiana"), ("IA", "Iowa"),
+    ("KS", "Kansas"), ("KY", "Kentucky"), ("LA", "Louisiana"), ("ME", "Maine"),
+    ("MD", "Maryland"), ("MA", "Massachusetts"), ("MI", "Michigan"), ("MN", "Minnesota"),
+    ("MS", "Mississippi"), ("MO", "Missouri"), ("MT", "Montana"), ("NE", "Nebraska"),
+    ("NV", "Nevada"), ("NH", "New Hampshire"), ("NJ", "New Jersey"), ("NM", "New Mexico"),
+    ("NY", "New York"), ("NC", "North Carolina"), ("ND", "North Dakota"), ("OH", "Ohio"),
+    ("OK", "Oklahoma"), ("OR", "Oregon"), ("PA", "Pennsylvania"), ("RI", "Rhode Island"),
+    ("SC", "South Carolina"), ("SD", "South Dakota"), ("TN", "Tennessee"), ("TX", "Texas"),
+    ("UT", "Utah"), ("VT", "Vermont"), ("VA", "Virginia"), ("WA", "Washington"),
+    ("WV", "West Virginia"), ("WI", "Wisconsin"), ("WY", "Wyoming"),
+];
+
+const CA_PROVINCES: &[(&str, &str)] = &[
+    ("AB", "Alberta"), ("BC", "British Columbia"), ("MB", "Manitoba"), ("NB", "New Brunswick"),
+    ("NL", "Newfoundland and Labrador"), ("NS", "Nova Scotia"), ("ON", "Ontario"),
+    ("PE", "Prince Edward Island"), ("QC", "Quebec"), ("SK", "Saskatchewan"),
+    ("NT", "Northwest Territories"), ("NU", "Nunavut"), ("YT", "Yukon"),
+];
+
 async fn resolve_user_id(db: &sea_orm::DatabaseConnection, id: Option<ID>, ext: Option<String>) -> Result<Option<i32>> {
     use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QuerySelect};
     use saleor_rustify_db::entities::account_user::{Column as UCol, Entity as UEnt};
@@ -863,6 +974,12 @@ async fn apply_default_addresses(
 
 #[derive(Default)]
 pub struct AccountMutation;
+
+#[derive(SimpleObject, Clone)]
+#[graphql(name = "SendConfirmationEmail")]
+pub struct GqlSendConfirmationEmail {
+    pub errors: Vec<GqlAccountError>,
+}
 
 #[Object]
 impl AccountMutation {
@@ -1277,6 +1394,204 @@ impl AccountMutation {
             }),
             Err(e) => Ok(err(e.to_string())),
         }
+    }
+
+    /// Resend the confirmation email to the authenticated user (Django
+    /// `sendConfirmationEmail`). Mail failures never fail the mutation —
+    /// the token is also logged (console-backend parity in dev).
+    async fn send_confirmation_email(
+        &self, ctx: &Context<'_>, channel: String, #[graphql(name = "redirectUrl")] redirect_url: String,
+    ) -> Result<GqlSendConfirmationEmail> {
+        let _ = channel;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let err = |m: String| GqlSendConfirmationEmail { errors: vec![aerr("INVALID", None, m)] };
+        let (uid, _) = match requester(ctx, db).await {
+            Ok(u) => u,
+            Err(_) => return Ok(err("authentication required".into())),
+        };
+        let user = saleor_rustify_db::entities::account_user::Entity::find_by_id(uid)
+            .one(db).await.map_err(|e| Error::new(e.to_string()))?
+            .ok_or_else(|| Error::new("user not found"))?;
+        if user.is_confirmed {
+            return Ok(err("account is already confirmed".into()));
+        }
+        let token = saleor_rustify_db::account_writes::issue_token(db, "confirm", uid, 24 * 7, "")
+            .await.map_err(|e| Error::new(e.to_string()))?;
+        tracing::info!("account-confirm token for {}: {}", user.email, token);
+        if let Err(e) = crate::mail::send_confirmation(&user.email, &redirect_url, &token).await {
+            tracing::warn!("confirmation mail to {} failed: {e:?}", user.email);
+        }
+        Ok(GqlSendConfirmationEmail { errors: vec![] })
+    }
+
+    /// Own address update (Django `accountAddressUpdate`): must own the row.
+    async fn account_address_update(&self, ctx: &Context<'_>, id: ID, input: gen::AddressInput) -> Result<GqlAccountAddressUpdate> {
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let err = |m: String| GqlAccountAddressUpdate { user: None, address: None, errors: vec![aerr("INVALID", None, m)] };
+        let (uid, _) = match requester(ctx, db).await {
+            Ok(u) => u,
+            Err(_) => return Ok(err("authentication required".into())),
+        };
+        let aid = saleor_rustify_db::catalog::parse_gid(&id.0).unwrap_or(-1);
+        let patch = saleor_rustify_db::account_writes::AddressPatch {
+            first_name: input.first_name.clone(),
+            last_name: input.last_name.clone(),
+            company_name: input.company_name.clone(),
+            street_1: input.street_address1.clone(),
+            street_2: input.street_address2.clone(),
+            city: input.city.clone(),
+            postal_code: input.postal_code.clone(),
+            country: input.country.as_ref().map(|c| format!("{c:?}")),
+            country_area: input.country_area.clone(),
+            city_area: input.city_area.clone(),
+            phone: input.phone.clone(),
+        };
+        if let Err(e) = saleor_rustify_db::account_writes::update_address(db, uid, aid, &patch).await {
+            return Ok(err(e.to_string()));
+        }
+        let addr = saleor_rustify_db::entities::account_address::Entity::find_by_id(aid)
+            .one(db).await.map_err(|e| Error::new(e.to_string()))?
+            .ok_or_else(|| Error::new("address vanished"))?;
+        Ok(GqlAccountAddressUpdate {
+            user: Some(assemble_user(db, uid, &uid.to_string()).await.map_err(Error::new)?),
+            address: Some(to_gql_address(&addr)),
+            errors: vec![],
+        })
+    }
+
+    /// Own address delete (Django `accountAddressDelete`).
+    async fn account_address_delete(&self, ctx: &Context<'_>, id: ID) -> Result<GqlAccountAddressDelete> {
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let err = |m: String| GqlAccountAddressDelete { user: None, address: None, errors: vec![aerr("INVALID", None, m)] };
+        let (uid, _) = match requester(ctx, db).await {
+            Ok(u) => u,
+            Err(_) => return Ok(err("authentication required".into())),
+        };
+        let aid = saleor_rustify_db::catalog::parse_gid(&id.0).unwrap_or(-1);
+        if let Err(e) = saleor_rustify_db::account_writes::delete_address(db, uid, aid).await {
+            return Ok(err(e.to_string()));
+        }
+        Ok(GqlAccountAddressDelete {
+            user: Some(assemble_user(db, uid, &uid.to_string()).await.map_err(Error::new)?),
+            address: None,
+            errors: vec![],
+        })
+    }
+    /// External authentication URL (Django `externalAuthenticationUrl`):
+    /// no external-auth plugin is installed here, so the honest result is
+    /// an error naming the missing plugin (same as Django without one).
+    async fn external_authentication_url(
+        &self, input: gen::GenJSONString, #[graphql(name = "pluginId")] plugin_id: String,
+    ) -> Result<gen::ExternalAuthenticationUrl> {
+        let _ = input;
+        Ok(gen::ExternalAuthenticationUrl {
+            authentication_data: None,
+            errors: vec![GqlAccountError {
+                field: None,
+                message: format!("external authentication plugin {plugin_id} is not configured"),
+                code: "NOT_FOUND".to_string(),
+                address_type: None,
+                attributes: None,
+            }],
+        })
+    }
+
+    /// External logout (Django `externalLogout`): same honest gap.
+    async fn external_logout(
+        &self, input: gen::GenJSONString, #[graphql(name = "pluginId")] plugin_id: String,
+    ) -> Result<gen::ExternalLogout> {
+        let _ = input;
+        Ok(gen::ExternalLogout {
+            logout_data: None,
+            errors: vec![GqlAccountError {
+                field: None,
+                message: format!("external authentication plugin {plugin_id} is not configured"),
+                code: "NOT_FOUND".to_string(),
+                address_type: None,
+                attributes: None,
+            }],
+        })
+    }
+
+    /// External token obtain (Django `externalObtainAccessTokens`): same gap.
+    async fn external_obtain_access_tokens(
+        &self, input: gen::GenJSONString, #[graphql(name = "pluginId")] plugin_id: String,
+    ) -> Result<gen::ExternalObtainAccessTokens> {
+        let _ = input;
+        Ok(gen::ExternalObtainAccessTokens {
+            token: None,
+            refresh_token: None,
+            user: None,
+            errors: vec![GqlAccountError {
+                field: None,
+                message: format!("external authentication plugin {plugin_id} is not configured"),
+                code: "NOT_FOUND".to_string(),
+                address_type: None,
+                attributes: None,
+            }],
+        })
+    }
+
+    /// External token refresh (Django `externalRefresh`): same gap.
+    async fn external_refresh(
+        &self, input: gen::GenJSONString, #[graphql(name = "pluginId")] plugin_id: String,
+    ) -> Result<gen::ExternalRefresh> {        let _ = input;
+        Ok(gen::ExternalRefresh {
+            token: None,
+            refresh_token: None,
+            user: None,
+            errors: vec![GqlAccountError {
+                field: None,
+                message: format!("external authentication plugin {plugin_id} is not configured"),
+                code: "NOT_FOUND".to_string(),
+                address_type: None,
+                attributes: None,
+            }],
+        })
+    }
+
+    /// External verify (Django `externalVerify`): same gap — no plugin
+    /// can vouch for the payload.
+    async fn external_verify(
+        &self, input: gen::GenJSONString, #[graphql(name = "pluginId")] plugin_id: String,
+    ) -> Result<GqlExternalVerify> {
+        let _ = input;
+        Ok(GqlExternalVerify {
+            user: None,
+            is_valid: Some(false),
+            verify_data: None,
+            errors: vec![GqlAccountError {
+                field: None,
+                message: format!("external authentication plugin {plugin_id} is not configured"),
+                code: "NOT_FOUND".to_string(),
+                address_type: None,
+                attributes: None,
+            }],
+        })
+    }
+
+    /// Own default address (Django `accountSetDefaultAddress`).
+    async fn account_set_default_address(
+        &self, ctx: &Context<'_>, id: ID, r#type: gen::AddressTypeEnum,
+    ) -> Result<GqlAccountSetDefaultAddress> {
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let err = |m: String| GqlAccountSetDefaultAddress { user: None, errors: vec![aerr("INVALID", None, m)] };
+        let (uid, _) = match requester(ctx, db).await {
+            Ok(u) => u,
+            Err(_) => return Ok(err("authentication required".into())),
+        };
+        let aid = saleor_rustify_db::catalog::parse_gid(&id.0).unwrap_or(-1);
+        let kind = match format!("{type:?}").as_str() {
+            "BILLING" => saleor_rustify_db::account_writes::DefaultKind::Billing,
+            _ => saleor_rustify_db::account_writes::DefaultKind::Shipping,
+        };
+        if let Err(e) = saleor_rustify_db::account_writes::set_default_address(db, uid, kind, aid).await {
+            return Ok(err(e.to_string()));
+        }
+        Ok(GqlAccountSetDefaultAddress {
+            user: Some(assemble_user(db, uid, &uid.to_string()).await.map_err(Error::new)?),
+            errors: vec![],
+        })
     }
 
     /// Own-address creation (Django `accountAddressCreate`: no customerId =
@@ -1814,6 +2129,32 @@ impl AccountMutation {
             Err(e) => Ok(gen::StaffNotificationRecipientDelete { errors: vec![shop_err(e.to_string())] }),
         }
     }
+
+    /// Update a staff notification recipient (Django
+    /// `staffNotificationRecipientUpdate`).
+    async fn staff_notification_recipient_update(
+        &self, ctx: &Context<'_>, id: ID, input: gen::StaffNotificationRecipientInput,
+    ) -> Result<GqlStaffNotificationRecipientUpdate> {
+        require_perm(ctx, "manage_settings").await?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let err = |m: String| GqlStaffNotificationRecipientUpdate {
+            staff_notification_recipient: None,
+            errors: vec![shop_err(m)],
+        };
+        let Some(rid) = saleor_rustify_db::catalog::parse_gid(&id.0) else {
+            return Ok(err("bad id".into()));
+        };
+        let uid = input.user.as_ref().map(|i| saleor_rustify_db::catalog::parse_gid(&i.0));
+        match saleor_rustify_db::account_writes::update_notification_recipient(
+            db, rid, uid, Some(input.email.clone()), input.active,
+        ).await {
+            Ok(()) => Ok(GqlStaffNotificationRecipientUpdate {
+                staff_notification_recipient: assemble_recipient(db, rid).await.map_err(Error::new)?,
+                errors: vec![],
+            }),
+            Err(e) => Ok(err(e.to_string())),
+        }
+    }
 }
 
 fn err_update(code: &str, message: &str) -> GqlAccountUpdate {
@@ -1821,6 +2162,14 @@ fn err_update(code: &str, message: &str) -> GqlAccountUpdate {
         user: None,
         errors: vec![GqlAccountError { address_type: None, attributes: None, field: None, message: message.into(), code: code.into() }],
     }
+}
+
+#[derive(SimpleObject, Clone)]
+#[graphql(name = "StaffNotificationRecipientUpdate")]
+pub struct GqlStaffNotificationRecipientUpdate {
+    #[graphql(name = "staffNotificationRecipient")]
+    pub staff_notification_recipient: Option<gen::StaffNotificationRecipient>,
+    pub errors: Vec<gen::ShopError>,
 }
 
 /// Slim customer-list row (identity fields only; see `customers`).

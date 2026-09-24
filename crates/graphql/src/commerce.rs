@@ -532,8 +532,159 @@ async fn gift_card_code(db: &sea_orm::DatabaseConnection, gid: &str) -> std::res
         .ok_or_else(|| "gift card not found".to_string())
 }
 
+#[derive(SimpleObject, Clone)]
+#[graphql(name = "ShopFetchTaxRates")]
+pub struct GqlShopFetchTaxRates {
+    pub shop: Option<gen::Shop>,
+    pub errors: Vec<gen::ShopError>,
+}
+
 fn merr(field: Option<String>, message: String) -> gen::MenuError {
     gen::MenuError { field, message: Some(message), code: None }
+}
+
+#[derive(SimpleObject, Clone)]
+#[graphql(name = "ShippingPriceBulkDelete")]
+pub struct GqlShippingPriceBulkDelete {
+    pub count: Option<i32>,
+    pub errors: Vec<gen::ShippingError>,
+}
+
+#[derive(SimpleObject, Clone)]
+#[graphql(name = "ShopDomainUpdate")]
+pub struct GqlShopDomainUpdate {
+    pub shop: Option<gen::Shop>,
+    pub errors: Vec<gen::ShopError>,
+}
+
+/// Site domain update (Django `shopDomainUpdate` on django_site id 1).
+async fn update_site_domain(
+    db: &sea_orm::DatabaseConnection,
+    input: Option<&gen::SiteDomainInput>,
+) -> std::result::Result<(), String> {
+    use sea_orm::{ActiveModelTrait, EntityTrait, Set};
+    let Some(input) = input else { return Err("input is required".to_string()) };
+    let row = saleor_rustify_db::entities::django_site::Entity::find_by_id(1)
+        .one(db)
+        .await
+        .map_err(|e| e.to_string())?
+        .ok_or_else(|| "site not found".to_string())?;
+    let mut am: saleor_rustify_db::entities::django_site::ActiveModel = row.into();
+    if let Some(d) = input.domain.clone() {
+        if d.trim().is_empty() {
+            return Err("domain cannot be empty".to_string());
+        }
+        am.domain = Set(d.trim().to_string());
+    }
+    if let Some(n) = input.name.clone() {
+        am.name = Set(n);
+    }
+    am.update(db).await.map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+fn orerr(message: String) -> GqlOrderSettingsError {
+    GqlOrderSettingsError { field: None, message: Some(message), code: None }
+}
+
+#[derive(SimpleObject, Clone)]
+#[graphql(name = "OrderSettingsError")]
+pub struct GqlOrderSettingsError {
+    pub field: Option<String>,
+    pub message: Option<String>,
+    pub code: Option<String>,
+}
+
+#[derive(SimpleObject, Clone)]
+#[graphql(name = "OrderSettingsUpdate")]
+pub struct GqlOrderSettingsUpdate {
+    #[graphql(name = "orderSettings")]
+    pub order_settings: Option<gen::OrderSettings>,
+    pub errors: Vec<GqlOrderSettingsError>,
+}
+
+/// Legacy sale payloads (schema-only roots; dashboard uses promotions).
+#[derive(SimpleObject, Clone)]
+#[graphql(name = "SaleCreate")]
+pub struct GqlSaleCreate {
+    pub errors: Vec<gen::DiscountError>,
+    pub sale: Option<gen::Sale>,
+}
+
+#[derive(SimpleObject, Clone)]
+#[graphql(name = "SaleDelete")]
+pub struct GqlSaleDelete {
+    pub errors: Vec<gen::DiscountError>,
+    pub sale: Option<gen::Sale>,
+}
+
+#[derive(SimpleObject, Clone)]
+#[graphql(name = "SaleBulkDelete")]
+pub struct GqlSaleBulkDelete {
+    pub count: Option<i32>,
+    pub errors: Vec<gen::DiscountError>,
+}
+
+#[derive(SimpleObject, Clone)]
+#[graphql(name = "SaleUpdate")]
+pub struct GqlSaleUpdate {
+    pub errors: Vec<gen::DiscountError>,
+    pub sale: Option<gen::Sale>,
+}
+
+#[derive(SimpleObject, Clone)]
+#[graphql(name = "SaleAddCatalogues")]
+pub struct GqlSaleAddCatalogues {
+    pub sale: Option<gen::Sale>,
+    pub errors: Vec<gen::DiscountError>,
+}
+
+#[derive(SimpleObject, Clone)]
+#[graphql(name = "SaleRemoveCatalogues")]
+pub struct GqlSaleRemoveCatalogues {
+    pub sale: Option<gen::Sale>,
+    pub errors: Vec<gen::DiscountError>,
+}
+
+#[derive(SimpleObject, Clone)]
+#[graphql(name = "SaleChannelListingUpdate")]
+pub struct GqlSaleChannelListingUpdate {
+    pub sale: Option<gen::Sale>,
+    pub errors: Vec<gen::DiscountError>,
+}
+
+/// Plugin configuration update (Django `pluginUpdate` semantics: active
+/// flag + key/value configuration map on the identifier's rows).
+async fn update_plugin_config(
+    db: &sea_orm::DatabaseConnection,
+    identifier: &str,
+    active: Option<bool>,
+    configuration: Option<&Vec<gen::ConfigurationItemInput>>,
+) -> std::result::Result<(), String> {
+    use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, Set};
+    let rows = saleor_rustify_db::entities::plugins_pluginconfiguration::Entity::find()
+        .filter(saleor_rustify_db::entities::plugins_pluginconfiguration::Column::Identifier.eq(identifier))
+        .all(db)
+        .await
+        .map_err(|e| e.to_string())?;
+    if rows.is_empty() {
+        return Err("plugin not found".to_string());
+    }
+    for r in rows {
+        let mut am: saleor_rustify_db::entities::plugins_pluginconfiguration::ActiveModel = r.into();
+        if let Some(a) = active {
+            am.active = Set(a);
+        }
+        if let Some(items) = configuration {
+            let mut map = serde_json::Map::new();
+            for i in items {
+                map.insert(i.name.clone(), serde_json::Value::String(i.value.clone().unwrap_or_default()));
+            }
+            am.configuration = Set(serde_json::Value::Object(map));
+        }
+        am.update(db).await.map_err(|e| e.to_string())?;
+    }
+    Ok(())
 }
 
 fn ship_err(field: Option<String>, message: String) -> gen::ShippingError {
@@ -593,7 +744,7 @@ async fn method_currency(db: &sea_orm::DatabaseConnection, mid: i32) -> String {
 }
 
 /// Shipping method assembly (listings + postal rules + weights).
-async fn assemble_method(db: &sea_orm::DatabaseConnection, mid: i32) -> Result<gen::ShippingMethodType, Error> {
+pub(crate) async fn assemble_method(db: &sea_orm::DatabaseConnection, mid: i32) -> Result<gen::ShippingMethodType, Error> {
     use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
     let m = saleor_rustify_db::entities::shipping_shippingmethod::Entity::find_by_id(mid)
         .one(db)
@@ -686,6 +837,125 @@ async fn assemble_tax_class(db: &sea_orm::DatabaseConnection, tid: i32) -> Resul
         name: Some(name),
         countries,
     })
+}
+
+/// Legacy sale assembly from its promotion row (Django `Sale` node).
+async fn assemble_sale(db: &sea_orm::DatabaseConnection, pid: uuid::Uuid) -> Result<Option<gen::Sale>, Error> {
+    use sea_orm::EntityTrait;
+    let p = saleor_rustify_db::entities::discount_promotion::Entity::find_by_id(pid)
+        .one(db)
+        .await
+        .map_err(|e| Error::new(e.to_string()))?;
+    let Some(p) = p else { return Ok(None) };
+    let rules = saleor_rustify_db::entities::discount_promotionrule::Entity::find()
+        .filter(saleor_rustify_db::entities::discount_promotionrule::Column::PromotionId.eq(pid))
+        .all(db)
+        .await
+        .map_err(|e| Error::new(e.to_string()))?;
+    let first = rules.first();
+    let rtype = first
+        .and_then(|r| r.reward_value_type.clone())
+        .map(|t| t.to_uppercase())
+        .unwrap_or_else(|| "FIXED".to_string());
+    use sea_orm::ColumnTrait;
+    use sea_orm::QueryFilter;
+    use sea_orm::QuerySelect;
+    let mut channel_listings = vec![];
+    if let Some(r) = first {
+        let ch_ids: Vec<i32> = saleor_rustify_db::entities::discount_promotionrule_channels::Entity::find()
+            .select_only()
+            .column(saleor_rustify_db::entities::discount_promotionrule_channels::Column::ChannelId)
+            .filter(saleor_rustify_db::entities::discount_promotionrule_channels::Column::PromotionruleId.eq(r.id))
+            .into_tuple()
+            .all(db)
+            .await
+            .map_err(|e| Error::new(e.to_string()))?;
+        for ch in ch_ids {
+            channel_listings.push(gen::SaleChannelListing {
+                id: Some(ID(crate::common::gid("SaleChannelListing", ch))),
+                channel: None,
+                discount_value: r.reward_value.map(|v| v.to_string().parse::<f64>().unwrap_or(0.0)),
+                currency: None,
+            });
+        }
+    }
+    Ok(Some(gen::Sale {
+        id: Some(ID(crate::common::gid("Sale", pid))),
+        private_metadata: vec![],
+        metadata: vec![],
+        name: Some(p.name.clone()),
+        r#type: Some(rtype),
+        start_date: Some(p.start_date.into()),
+        end_date: p.end_date.map(|d| d.into()),
+        channel_listings,
+    }))
+}
+
+/// Plugin assembly (global + per-channel configurations).
+async fn assemble_plugin(db: &sea_orm::DatabaseConnection, gid: &str) -> Result<Option<gen::Plugin>, Error> {
+    use base64::Engine as _;
+    let text = base64::engine::general_purpose::STANDARD
+        .decode(gid)
+        .ok()
+        .and_then(|b| String::from_utf8(b).ok())
+        .unwrap_or_default();
+    let (kind, pk) = text.split_once(':').unwrap_or(("", ""));
+    if kind != "Plugin" {
+        return Ok(None);
+    }
+    assemble_plugin_by_identifier(db, pk).await
+}
+
+async fn assemble_plugin_by_identifier(db: &sea_orm::DatabaseConnection, identifier: &str) -> Result<Option<gen::Plugin>, Error> {
+    use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
+    let rows = saleor_rustify_db::entities::plugins_pluginconfiguration::Entity::find()
+        .filter(saleor_rustify_db::entities::plugins_pluginconfiguration::Column::Identifier.eq(identifier))
+        .all(db)
+        .await
+        .map_err(|e| Error::new(e.to_string()))?;
+    if rows.is_empty() {
+        return Ok(None);
+    }
+    let first = &rows[0];
+    let mut global_configuration = None;
+    let mut channel_configurations = vec![];
+    for r in &rows {
+        let cfg = plugin_config_view(r);
+        match r.channel_id {
+            None => global_configuration = Some(cfg),
+            Some(_) => channel_configurations.push(cfg),
+        }
+    }
+    Ok(Some(gen::Plugin {
+        id: Some(ID(crate::common::gid("Plugin", identifier))),
+        name: Some(first.name.clone()),
+        description: Some(first.description.clone()),
+        global_configuration,
+        channel_configurations,
+    }))
+}
+
+fn plugin_config_view(r: &saleor_rustify_db::entities::plugins_pluginconfiguration::Model) -> gen::PluginConfiguration {
+    let items: Vec<gen::ConfigurationItem> = r
+        .configuration
+        .as_object()
+        .map(|o| {
+            o.iter()
+                .map(|(k, v)| gen::ConfigurationItem {
+                    name: Some(k.clone()),
+                    value: Some(v.as_str().unwrap_or("").to_string()),
+                    r#type: None,
+                    help_text: None,
+                    label: None,
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    gen::PluginConfiguration {
+        active: Some(r.active),
+        channel: None,
+        configuration: items,
+    }
 }
 
 /// Warehouse by id xor externalReference.
@@ -1182,6 +1452,97 @@ pub struct GqlShop {
 #[derive(Default)]
 pub struct CommerceQuery;
 
+/// Refund settings (page-type FK on the site row, Django `refundSettings`).
+async fn refund_settings_view(db: &sea_orm::DatabaseConnection) -> Result<gen::RefundSettings, Error> {
+    use sea_orm::{EntityTrait, QuerySelect};
+    let ptid: Option<i32> = saleor_rustify_db::entities::site_sitesettings::Entity::find_by_id(1)
+        .select_only()
+        .column(saleor_rustify_db::entities::site_sitesettings::Column::RefundReasonReferenceTypeId)
+        .into_tuple()
+        .one(db)
+        .await
+        .map_err(|e| Error::new(e.to_string()))?
+        .flatten();
+    let pt = match ptid {
+        Some(id) => assemble_page_type(db, id).await?.map(|p| {
+            // PageType → gen shape shared with the content assembler.
+            p
+        }),
+        None => None,
+    };
+    // gen::RefundSettings.reason_reference_type is Option<PageType>; reuse.
+    Ok(gen::RefundSettings { reason_reference_type: pt })
+}
+
+/// Set the refund/return reason page type on the site row (validates the
+/// page type exists — Django parity).
+async fn set_reason_reference_type(
+    db: &sea_orm::DatabaseConnection,
+    refund_side: bool,
+    page_type_id: i32,
+) -> std::result::Result<(), String> {
+    use sea_orm::{ActiveModelTrait, EntityTrait, Set};
+    if saleor_rustify_db::entities::page_pagetype::Entity::find_by_id(page_type_id)
+        .one(db)
+        .await
+        .map_err(|e| e.to_string())?
+        .is_none()
+    {
+        return Err("page type not found".to_string());
+    }
+    let row = saleor_rustify_db::entities::site_sitesettings::Entity::find_by_id(1)
+        .one(db)
+        .await
+        .map_err(|e| e.to_string())?
+        .ok_or_else(|| "site settings not found".to_string())?;
+    let mut am: saleor_rustify_db::entities::site_sitesettings::ActiveModel = row.into();
+    if refund_side {
+        am.refund_reason_reference_type_id = Set(Some(page_type_id));
+    } else {
+        am.return_reason_reference_type_id = Set(Some(page_type_id));
+    }
+    am.update(db).await.map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+async fn clear_reason_reference_type(
+    db: &sea_orm::DatabaseConnection,
+    refund_side: bool,
+) -> std::result::Result<(), String> {
+    use sea_orm::{ActiveModelTrait, EntityTrait, Set};
+    let row = saleor_rustify_db::entities::site_sitesettings::Entity::find_by_id(1)
+        .one(db)
+        .await
+        .map_err(|e| e.to_string())?
+        .ok_or_else(|| "site settings not found".to_string())?;
+    let mut am: saleor_rustify_db::entities::site_sitesettings::ActiveModel = row.into();
+    if refund_side {
+        am.refund_reason_reference_type_id = Set(None);
+    } else {
+        am.return_reason_reference_type_id = Set(None);
+    }
+    am.update(db).await.map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+/// Return settings (Django `returnSettings`).
+async fn return_settings_view(db: &sea_orm::DatabaseConnection) -> Result<gen::ReturnSettings, Error> {
+    use sea_orm::{EntityTrait, QuerySelect};
+    let ptid: Option<i32> = saleor_rustify_db::entities::site_sitesettings::Entity::find_by_id(1)
+        .select_only()
+        .column(saleor_rustify_db::entities::site_sitesettings::Column::ReturnReasonReferenceTypeId)
+        .into_tuple()
+        .one(db)
+        .await
+        .map_err(|e| Error::new(e.to_string()))?
+        .flatten();
+    let pt = match ptid {
+        Some(id) => assemble_page_type(db, id).await?,
+        None => None,
+    };
+    Ok(gen::ReturnSettings { reason_reference_type: pt })
+}
+
 /// Shared shop assembly: real site rows + permissions where we have them,
 /// stubs elsewhere (matches every Dashboard shop fragment by construction
 /// since `gen::Shop` is generated from them).
@@ -1237,6 +1598,283 @@ async fn to_gen_shop(ctx: &Context<'_>) -> Result<gen::Shop, async_graphql::Erro
 impl CommerceQuery {
     async fn shop(&self, ctx: &Context<'_>) -> Result<gen::Shop> {
         to_gen_shop(ctx).await
+    }
+
+    /// Global refund-reason settings (Django `refundSettings`).
+    async fn refund_settings(&self, ctx: &Context<'_>) -> Result<gen::RefundSettings> {
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        refund_settings_view(db).await
+    }
+
+    /// Fetch tax rates (Django `shopFetchTaxRates`, deprecated): rate
+    /// syncing needs a tax provider app; without one the honest result is
+    /// an error (rates are managed via tax classes here).
+    async fn shop_fetch_tax_rates(&self, ctx: &Context<'_>) -> Result<GqlShopFetchTaxRates> {
+        let _ = crate::account::require_perm(ctx, "manage_settings").await?;
+        Ok(GqlShopFetchTaxRates {
+            shop: None,
+            errors: vec![gen::ShopError {
+                field: None,
+                message: Some("no tax provider configured".to_string()),
+                code: None,
+            }],
+        })
+    }
+
+    /// Global return-reason settings (Django `returnSettings`).
+    async fn return_settings(&self, ctx: &Context<'_>) -> Result<gen::ReturnSettings> {
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        return_settings_view(db).await
+    }
+
+    /// One page by id or slug (Django `page`).
+    async fn page(&self, ctx: &Context<'_>, id: Option<ID>, slug: Option<String>) -> Result<Option<gen::Page>> {
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let pid = match id.as_ref().and_then(|i| saleor_rustify_db::catalog::parse_gid(&i.0)) {
+            Some(p) => p,
+            None => match slug.as_ref().map(|s| s.trim()).filter(|s| !s.is_empty()) {
+                Some(s) => {
+                    use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QuerySelect};
+                    match saleor_rustify_db::entities::page_page::Entity::find()
+                        .select_only()
+                        .column(saleor_rustify_db::entities::page_page::Column::Id)
+                        .filter(saleor_rustify_db::entities::page_page::Column::Slug.eq(s))
+                        .into_tuple::<i32>()
+                        .one(db)
+                        .await
+                        .map_err(|e| Error::new(e.to_string()))? {
+                        Some(p) => p,
+                        None => return Ok(None),
+                    }
+                }
+                None => return Ok(None),
+            },
+        };
+        assemble_page(db, pid).await.map(Some).or(Ok(None))
+    }
+
+    /// One page type (Django `pageType`).
+    async fn page_type(&self, ctx: &Context<'_>, id: ID) -> Result<Option<gen::PageType>> {
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let ptid = saleor_rustify_db::catalog::parse_gid(&id.0).unwrap_or(-1);
+        assemble_page_type(db, ptid).await
+    }
+
+    /// Page types list (Django `pageTypes`): search/slugs + name sort.
+    async fn page_types(
+        &self, ctx: &Context<'_>,
+        #[graphql(name = "sortBy")] sort_by: Option<gen::PageTypeSortingInput>,
+        filter: Option<gen::PageTypeFilterInput>,
+        before: Option<String>, after: Option<String>, first: Option<i32>, last: Option<i32>,
+    ) -> Result<Option<gen::PageTypeCountableConnection>> {
+        let _ = (before, last);
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        use sea_orm::{ColumnTrait, Condition, EntityTrait, QueryFilter, QueryOrder, QuerySelect};
+        let mut cond = Condition::all();
+        if let Some(f) = filter.as_ref() {
+            if let Some(s) = f.search.as_ref().filter(|s| !s.trim().is_empty()) {
+                let mut any = Condition::any();
+                any = any.add(saleor_rustify_db::entities::page_pagetype::Column::Name.like(format!("%{s}%")));
+                any = any.add(saleor_rustify_db::entities::page_pagetype::Column::Slug.like(format!("%{s}%")));
+                cond = cond.add(any);
+            }
+            let slugs = f.slugs.clone().unwrap_or_default();
+            if !slugs.is_empty() {
+                cond = cond.add(saleor_rustify_db::entities::page_pagetype::Column::Slug.is_in(slugs));
+            }
+        }
+        let asc = sort_by.as_ref().map(|s| matches!(s.direction, gen::OrderDirection::ASC)).unwrap_or(true);
+        let mut q = saleor_rustify_db::entities::page_pagetype::Entity::find()
+            .select_only()
+            .column(saleor_rustify_db::entities::page_pagetype::Column::Id)
+            .filter(cond);
+        q = if asc {
+            q.order_by_asc(saleor_rustify_db::entities::page_pagetype::Column::Id)
+        } else {
+            q.order_by_desc(saleor_rustify_db::entities::page_pagetype::Column::Id)
+        };
+        let ids: Vec<i32> = q.into_tuple().all(db).await.map_err(|e| Error::new(e.to_string()))?;
+        let off = after.and_then(|c| crate::common::decode_cursor(&c)).unwrap_or(0);
+        let lim = first.unwrap_or(20).clamp(1, 100) as usize;
+        let mut edges = vec![];
+        for ptid in ids.into_iter().skip(off).take(lim) {
+            edges.push(gen::PageTypeCountableEdge { node: assemble_page_type(db, ptid).await? });
+        }
+        Ok(Some(gen::PageTypeCountableConnection {
+            page_info: Some(crate::common::PageInfo { has_next_page: false, has_previous_page: off > 0, start_cursor: None, end_cursor: None }),
+            edges,
+        }))
+    }
+
+    /// One legacy sale (Django `sale`, promotion-backed).
+    async fn sale(&self, ctx: &Context<'_>, id: ID, channel: Option<String>) -> Result<Option<gen::Sale>> {
+        let _ = channel;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let pid = crate::common::parse_uuid_gid(&id.0).unwrap_or(uuid::Uuid::nil());
+        assemble_sale(db, pid).await
+    }
+
+    /// Legacy sales list (Django `sales`: legacy-origin promotions).
+    async fn sales(
+        &self, ctx: &Context<'_>,
+        filter: Option<gen::SaleFilterInput>,
+        #[graphql(name = "sortBy")] sort_by: Option<gen::SaleSortingInput>,
+        channel: Option<String>,
+        first: Option<i32>, after: Option<String>, before: Option<String>, last: Option<i32>,
+    ) -> Result<Option<gen::SaleCountableConnection>> {
+        let _ = (filter, sort_by, channel, before, last);
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        use sea_orm::{ConnectionTrait, Statement};
+        let rows = db.query_all(Statement::from_string(
+            sea_orm::DatabaseBackend::Postgres,
+            "SELECT id::text AS id FROM discount_promotion WHERE metadata->>'legacy_sale' = 'true' ORDER BY created_at DESC".to_string(),
+        )).await.map_err(|e| Error::new(e.to_string()))?;
+        let ids: Vec<uuid::Uuid> = rows.into_iter().filter_map(|r| r.try_get::<String>("", "id").ok()?.parse().ok()).collect();
+        let off = after.and_then(|c| crate::common::decode_cursor(&c)).unwrap_or(0);
+        let lim = first.unwrap_or(20).clamp(1, 100) as usize;
+        let mut edges = vec![];
+        for pid in ids.into_iter().skip(off).take(lim) {
+            edges.push(gen::SaleCountableEdge { node: assemble_sale(db, pid).await? });
+        }
+        Ok(Some(gen::SaleCountableConnection {
+            page_info: Some(crate::common::PageInfo { has_next_page: false, has_previous_page: off > 0, start_cursor: None, end_cursor: None }),
+            edges,
+        }))
+    }
+
+    /// One voucher (Django `voucher`).
+    async fn voucher(&self, ctx: &Context<'_>, id: ID, channel: Option<String>) -> Result<Option<gen::Voucher>> {
+        let _ = channel;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let vid = saleor_rustify_db::catalog::parse_gid(&id.0).unwrap_or(-1);
+        match assemble_voucher(db, vid).await {
+            Ok(v) => Ok(Some(v)),
+            Err(_) => Ok(None),
+        }
+    }
+
+    /// Vouchers list (Django `vouchers`).
+    async fn vouchers(
+        &self, ctx: &Context<'_>,
+        filter: Option<gen::VoucherFilterInput>,
+        #[graphql(name = "sortBy")] sort_by: Option<gen::VoucherSortingInput>,
+        channel: Option<String>,
+        first: Option<i32>, after: Option<String>, before: Option<String>, last: Option<i32>,
+    ) -> Result<Option<gen::VoucherCountableConnection>> {
+        let _ = (filter, sort_by, channel, before, last);
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        use sea_orm::{EntityTrait, QueryOrder, QuerySelect};
+        let ids: Vec<i32> = saleor_rustify_db::entities::discount_voucher::Entity::find()
+            .select_only()
+            .column(saleor_rustify_db::entities::discount_voucher::Column::Id)
+            .order_by_asc(saleor_rustify_db::entities::discount_voucher::Column::Id)
+            .into_tuple()
+            .all(db)
+            .await
+            .map_err(|e| Error::new(e.to_string()))?;
+        let off = after.and_then(|c| crate::common::decode_cursor(&c)).unwrap_or(0);
+        let lim = first.unwrap_or(20).clamp(1, 100) as usize;
+        let mut edges = vec![];
+        for vid in ids.into_iter().skip(off).take(lim) {
+            match assemble_voucher(db, vid).await {
+                Ok(v) => edges.push(gen::VoucherCountableEdge { node: Some(v) }),
+                Err(_) => {},
+            }
+        }
+        Ok(Some(gen::VoucherCountableConnection {
+            page_info: Some(crate::common::PageInfo { has_next_page: false, has_previous_page: off > 0, start_cursor: None, end_cursor: None }),
+            edges,
+        }))
+    }
+
+    /// One warehouse by id or external reference (Django `warehouse`).
+    async fn warehouse(
+        &self, ctx: &Context<'_>, id: Option<ID>, #[graphql(name = "externalReference")] external_reference: Option<String>,
+    ) -> Result<Option<gen::Warehouse>> {
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let wid = match resolve_warehouse_id(db, id.as_ref(), external_reference.as_deref()).await {
+            Ok(w) => w,
+            Err(_) => return Ok(None),
+        };
+        warehouse_gen(db, wid).await.map_err(Error::new)
+    }
+
+    /// One webhook (Django `webhook`).
+    async fn webhook(&self, ctx: &Context<'_>, id: ID) -> Result<Option<gen::Webhook>> {
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let hid = saleor_rustify_db::catalog::parse_gid(&id.0).unwrap_or(-1);
+        crate::apps::assemble_webhook(db, hid).await
+    }
+
+    /// Per-country tax rates (Django `taxCountryConfigurations`).
+    async fn tax_country_configurations(&self, ctx: &Context<'_>) -> Result<Vec<gen::TaxCountryConfiguration>> {
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        use sea_orm::{ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter, Statement};
+        let rows = db.query_all(Statement::from_string(
+            sea_orm::DatabaseBackend::Postgres,
+            "SELECT DISTINCT country FROM tax_taxclasscountryrate ORDER BY country".to_string(),
+        )).await.map_err(|e| Error::new(e.to_string()))?;
+        let mut out = vec![];
+        for r in rows {
+            let Ok(cc) = r.try_get::<String>("", "country") else { continue };
+            let rates = saleor_rustify_db::entities::tax_taxclasscountryrate::Entity::find()
+                .filter(saleor_rustify_db::entities::tax_taxclasscountryrate::Column::Country.eq(cc.clone()))
+                .all(db)
+                .await
+                .map_err(|e| Error::new(e.to_string()))?;
+            let mut list = vec![];
+            for rate in rates {
+                let tc = match rate.tax_class_id {
+                    Some(tid) => Some(Box::new(assemble_tax_class(db, tid).await?)),
+                    None => None,
+                };
+                list.push(gen::TaxClassCountryRate {
+                    country: Some(crate::common::GqlCountryDisplay { code: cc.clone(), country: cc.clone() }),
+                    rate: Some(rate.rate.to_string().parse::<f64>().unwrap_or(0.0)),
+                    tax_class: tc,
+                });
+            }
+            out.push(gen::TaxCountryConfiguration {
+                country: Some(crate::common::GqlCountryDisplay { code: cc.clone(), country: cc.clone() }),
+                tax_class_country_rates: list,
+            });
+        }
+        Ok(out)
+    }
+
+    /// One plugin by id (Django `plugin`: global or channel-scoped id).
+    async fn plugin(&self, ctx: &Context<'_>, id: ID) -> Result<Option<gen::Plugin>> {
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        assemble_plugin(db, &id.0).await
+    }
+
+    /// Plugins list (Django `plugins`).
+    async fn plugins(
+        &self, ctx: &Context<'_>,
+        filter: Option<gen::PluginFilterInput>,
+        #[graphql(name = "sortBy")] sort_by: Option<gen::PluginSortingInput>,
+        first: Option<i32>, after: Option<String>, before: Option<String>, last: Option<i32>,
+    ) -> Result<Option<gen::PluginCountableConnection>> {
+        let _ = (filter, sort_by, before, last);
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        use sea_orm::{ConnectionTrait, Statement};
+        let rows = db.query_all(Statement::from_string(
+            sea_orm::DatabaseBackend::Postgres,
+            "SELECT DISTINCT identifier FROM plugins_pluginconfiguration ORDER BY identifier".to_string(),
+        )).await.map_err(|e| Error::new(e.to_string()))?;
+        let ids: Vec<String> = rows.into_iter().filter_map(|r| r.try_get::<String>("", "identifier").ok()).collect();
+        let off = after.and_then(|c| crate::common::decode_cursor(&c)).unwrap_or(0);
+        let lim = first.unwrap_or(20).clamp(1, 100) as usize;
+        let mut edges = vec![];
+        for ident in ids.into_iter().skip(off).take(lim) {
+            if let Some(p) = assemble_plugin_by_identifier(db, &ident).await? {
+                edges.push(gen::PluginCountableEdge { node: Some(p) });
+            }
+        }
+        Ok(Some(gen::PluginCountableConnection {
+            page_info: Some(crate::common::PageInfo { has_next_page: false, has_previous_page: off > 0, start_cursor: None, end_cursor: None }),
+            edges,
+        }))
     }
 
     /// Taxes → channels page: per-channel tax configurations with
@@ -2966,6 +3604,36 @@ impl CommerceMutation {
         }
     }
 
+    /// Bulk method delete (Django `shippingPriceBulkDelete`, survivors commit).
+    async fn shipping_price_bulk_delete(&self, ctx: &Context<'_>, ids: Vec<ID>) -> Result<GqlShippingPriceBulkDelete> {
+        let _ = crate::account::require_perm(ctx, "manage_shipping").await?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let mut n = 0;
+        let mut errors = vec![];
+        for i in &ids {
+            let mid = saleor_rustify_db::catalog::parse_gid(&i.0).unwrap_or(-1);
+            match saleor_rustify_db::ship_tax_writes::delete_method(db, mid).await {
+                Ok(()) => n += 1,
+                Err(e) => errors.push(ship_err(Some(i.0.clone()), e.to_string())),
+            }
+        }
+        Ok(GqlShippingPriceBulkDelete { count: Some(n), errors })
+    }
+
+    /// Shop domain update (Django `shopDomainUpdate`).
+    async fn shop_domain_update(&self, ctx: &Context<'_>, input: Option<gen::SiteDomainInput>) -> Result<GqlShopDomainUpdate> {
+        let _ = crate::account::require_perm(ctx, "manage_settings").await?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let err = |m: String| GqlShopDomainUpdate {
+            shop: None,
+            errors: vec![gen::ShopError { field: None, message: Some(m), code: None }],
+        };
+        match update_site_domain(db, input.as_ref()).await {
+            Ok(()) => Ok(GqlShopDomainUpdate { shop: None, errors: vec![] }),
+            Err(e) => Ok(err(e)),
+        }
+    }
+
     /// Delete a shipping zone with its methods (Django `shippingZoneDelete`).
     async fn shipping_zone_delete(&self, ctx: &Context<'_>, id: ID) -> Result<gen::ShippingZoneDelete> {
         let _ = crate::account::require_perm(ctx, "manage_shipping").await?;
@@ -3463,9 +4131,272 @@ impl CommerceMutation {
         }
     }
 
+    /// Update refund-reason settings (Django `refundSettingsUpdate`): the
+    /// reason reference page type.
+    async fn refund_settings_update(&self, ctx: &Context<'_>, input: gen::RefundSettingsUpdateInput) -> Result<gen::RefundSettingsUpdate> {
+        let _ = crate::account::require_perm(ctx, "manage_orders").await?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let err = |m: String| gen::RefundSettingsUpdate {
+            errors: vec![gen::RefundSettingsUpdateError { message: Some(m), code: None }],
+        };
+        let ptid = saleor_rustify_db::catalog::parse_gid(&input.refund_reason_reference_type.0).unwrap_or(-1);
+        if let Err(e) = set_reason_reference_type(db, true, ptid).await {
+            return Ok(err(e));
+        }
+        Ok(gen::RefundSettingsUpdate { errors: vec![] })
+    }
+
+    /// Clear the refund-reason page type (Django `refundReasonReferenceClear`).
+    async fn refund_reason_reference_clear(&self, ctx: &Context<'_>) -> Result<gen::RefundReasonReferenceTypeClear> {
+        let _ = crate::account::require_perm(ctx, "manage_orders").await?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        if let Err(e) = clear_reason_reference_type(db, true).await {
+            return Ok(gen::RefundReasonReferenceTypeClear {
+                errors: vec![gen::RefundReasonReferenceTypeClearError { message: Some(e), code: None }],
+            });
+        }
+        Ok(gen::RefundReasonReferenceTypeClear { errors: vec![] })
+    }
+
+    /// Update return-reason settings (Django `returnSettingsUpdate`).
+    async fn return_settings_update(&self, ctx: &Context<'_>, input: gen::ReturnSettingsUpdateInput) -> Result<gen::ReturnSettingsUpdate> {
+        let _ = crate::account::require_perm(ctx, "manage_orders").await?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let err = |m: String| gen::ReturnSettingsUpdate {
+            errors: vec![gen::ReturnSettingsUpdateError { message: Some(m), code: None }],
+        };
+        let ptid = saleor_rustify_db::catalog::parse_gid(&input.return_reason_reference_type.0).unwrap_or(-1);
+        if let Err(e) = set_reason_reference_type(db, false, ptid).await {
+            return Ok(err(e));
+        }
+        Ok(gen::ReturnSettingsUpdate { errors: vec![] })
+    }
+
+    /// Clear the return-reason page type (Django `returnReasonReferenceClear`).
+    async fn return_reason_reference_clear(&self, ctx: &Context<'_>) -> Result<gen::ReturnReasonReferenceTypeClear> {
+        let _ = crate::account::require_perm(ctx, "manage_orders").await?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        if let Err(e) = clear_reason_reference_type(db, false).await {
+            return Ok(gen::ReturnReasonReferenceTypeClear {
+                errors: vec![gen::ReturnReasonReferenceTypeClearError { message: Some(e), code: None }],
+            });
+        }
+        Ok(gen::ReturnReasonReferenceTypeClear { errors: vec![] })
+    }
+
+    /// Create a legacy sale (Django `saleCreate`, promotion-backed).
+    async fn sale_create(&self, ctx: &Context<'_>, input: gen::SaleInput) -> Result<GqlSaleCreate> {
+        let _ = crate::account::require_perm(ctx, "manage_discounts").await?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let err = |m: String| GqlSaleCreate { errors: vec![discount_err(None, m)], sale: None };
+        let dtype = match input.r#type.as_ref() {
+            Some(gen::DiscountValueTypeEnum::PERCENTAGE) => "percentage",
+            _ => "fixed",
+        };
+        let value = input.value.as_ref().and_then(|v| v.0.parse::<rust_decimal::Decimal>().ok()).unwrap_or(rust_decimal::Decimal::ZERO);
+        if value <= rust_decimal::Decimal::ZERO {
+            return Ok(err("value must be positive".into()));
+        }
+        let ids = |v: &Option<Vec<ID>>| v.clone().unwrap_or_default().iter().filter_map(|i| saleor_rustify_db::catalog::parse_gid(&i.0)).collect::<Vec<_>>();
+        let pid = match saleor_rustify_db::promo_writes::create_sale_as_promotion(
+            db,
+            input.name.clone(),
+            dtype,
+            value,
+            ids(&input.products),
+            ids(&input.variants),
+            ids(&input.categories),
+            ids(&input.collections),
+            input.start_date.map(|d| d.with_timezone(&chrono::Utc)),
+            vec![],
+        ).await {
+            Ok(id) => id,
+            Err(e) => return Ok(err(e.to_string())),
+        };
+        Ok(GqlSaleCreate { errors: vec![], sale: assemble_sale(db, pid).await? })
+    }
+
+    /// Update a legacy sale (Django `saleUpdate`, promotion-backed: header
+    /// + the single rule's reward/predicate).
+    async fn sale_update(&self, ctx: &Context<'_>, id: ID, input: gen::SaleInput) -> Result<GqlSaleUpdate> {
+        let _ = crate::account::require_perm(ctx, "manage_discounts").await?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let err = |m: String| GqlSaleUpdate { errors: vec![discount_err(None, m)], sale: None };
+        let pid = crate::common::parse_uuid_gid(&id.0).unwrap_or(uuid::Uuid::nil());
+        if let Some(n) = input.name.clone() {
+            if let Err(e) = saleor_rustify_db::promo_writes::update_promotion(
+                db, pid, Some(n), None,
+                input.start_date.map(|d| d.with_timezone(&chrono::Utc)),
+                input.end_date.map(|d| Some(d.with_timezone(&chrono::Utc))),
+            ).await {
+                return Ok(err(e.to_string()));
+            }
+        } else if input.start_date.is_some() || input.end_date.is_some() {
+            if let Err(e) = saleor_rustify_db::promo_writes::update_promotion(
+                db, pid, None, None,
+                input.start_date.map(|d| d.with_timezone(&chrono::Utc)),
+                input.end_date.map(|d| Some(d.with_timezone(&chrono::Utc))),
+            ).await {
+                return Ok(err(e.to_string()));
+            }
+        }
+        let ids = |v: &Option<Vec<ID>>| v.clone().unwrap_or_default().iter().filter_map(|i| saleor_rustify_db::catalog::parse_gid(&i.0)).collect::<Vec<_>>();
+        let has_catalogue = input.products.is_some() || input.variants.is_some() || input.categories.is_some() || input.collections.is_some();
+        let has_reward = input.r#type.is_some() || input.value.is_some();
+        if has_catalogue || has_reward {
+            let rid = match saleor_rustify_db::promo_writes::sale_rule_id(db, pid).await {
+                Ok(r) => r,
+                Err(e) => return Ok(err(e.to_string())),
+            };
+            let mut upd = saleor_rustify_db::promo_writes::UpdateRule::default();
+            if has_reward {
+                let vt = match input.r#type.as_ref() {
+                    Some(gen::DiscountValueTypeEnum::PERCENTAGE) => "percentage",
+                    _ => "fixed",
+                };
+                let vv = input.value.as_ref().and_then(|v| v.0.parse::<rust_decimal::Decimal>().ok());
+                if let Some(v) = vv {
+                    if v <= rust_decimal::Decimal::ZERO {
+                        return Ok(err("value must be positive".into()));
+                    }
+                    upd.reward_value_type = Some(Some(vt.to_string()));
+                    upd.reward_value = Some(Some(v));
+                } else if input.value.is_some() {
+                    return Ok(err("bad value".into()));
+                }
+            }
+            if has_catalogue {
+                // Full-replace semantics (Django replaces the sale's
+                // catalogue on update): rebuild from the given lists.
+                let p = ids(&input.products);
+                let v = ids(&input.variants);
+                let c = ids(&input.categories);
+                let co = ids(&input.collections);
+                upd.catalogue_predicate = Some(saleor_rustify_db::promo_writes::catalogue_predicate_json(&p, &v, &c, &co));
+            }
+            if let Err(e) = saleor_rustify_db::promo_writes::update_rule(db, rid, &upd).await {
+                return Ok(err(e.to_string()));
+            }
+        }
+        Ok(GqlSaleUpdate { errors: vec![], sale: assemble_sale(db, pid).await? })
+    }
+
+    /// Add catalogue rows to a sale (Django `saleCataloguesAdd`).
+    async fn sale_catalogues_add(&self, ctx: &Context<'_>, id: ID, input: gen::CatalogueInput) -> Result<GqlSaleAddCatalogues> {
+        let _ = crate::account::require_perm(ctx, "manage_discounts").await?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let pid = crate::common::parse_uuid_gid(&id.0).unwrap_or(uuid::Uuid::nil());
+        let (p, v, c, co) = catalogue_ids(&input);
+        match saleor_rustify_db::promo_writes::sale_catalogues(db, pid, true, &p, &v, &c, &co).await {
+            Ok(()) => Ok(GqlSaleAddCatalogues { sale: assemble_sale(db, pid).await?, errors: vec![] }),
+            Err(e) => Ok(GqlSaleAddCatalogues { sale: None, errors: vec![discount_err(None, e.to_string())] }),
+        }
+    }
+
+    /// Remove catalogue rows from a sale (Django `saleCataloguesRemove`).
+    async fn sale_catalogues_remove(&self, ctx: &Context<'_>, id: ID, input: gen::CatalogueInput) -> Result<GqlSaleRemoveCatalogues> {
+        let _ = crate::account::require_perm(ctx, "manage_discounts").await?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let pid = crate::common::parse_uuid_gid(&id.0).unwrap_or(uuid::Uuid::nil());
+        let (p, v, c, co) = catalogue_ids(&input);
+        match saleor_rustify_db::promo_writes::sale_catalogues(db, pid, false, &p, &v, &c, &co).await {
+            Ok(()) => Ok(GqlSaleRemoveCatalogues { sale: assemble_sale(db, pid).await?, errors: vec![] }),
+            Err(e) => Ok(GqlSaleRemoveCatalogues { sale: None, errors: vec![discount_err(None, e.to_string())] }),
+        }
+    }
+
+    /// Sale channel listings (Django `saleChannelListingUpdate`): links are
+    /// authoritative; the shared rule reward follows a single distinct value.
+    async fn sale_channel_listing_update(&self, ctx: &Context<'_>, id: ID, input: gen::SaleChannelListingInput) -> Result<GqlSaleChannelListingUpdate> {
+        let _ = crate::account::require_perm(ctx, "manage_discounts").await?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let pid = crate::common::parse_uuid_gid(&id.0).unwrap_or(uuid::Uuid::nil());
+        let mut add = vec![];
+        for l in input.add_channels.clone().unwrap_or_default() {
+            let ch = saleor_rustify_db::catalog::parse_gid(&l.channel_id.0).unwrap_or(-1);
+            if ch < 0 {
+                continue;
+            }
+            let dv = l.discount_value.0.parse::<rust_decimal::Decimal>().unwrap_or(rust_decimal::Decimal::ZERO);
+            add.push((ch, dv));
+        }
+        let remove: Vec<i32> = input.remove_channels.clone().unwrap_or_default().iter().filter_map(|c| saleor_rustify_db::catalog::parse_gid(&c.0)).collect();
+        match saleor_rustify_db::promo_writes::sale_channel_listing(db, pid, &add, &remove).await {
+            Ok(()) => Ok(GqlSaleChannelListingUpdate { sale: assemble_sale(db, pid).await?, errors: vec![] }),
+            Err(e) => Ok(GqlSaleChannelListingUpdate { sale: None, errors: vec![discount_err(None, e.to_string())] }),
+        }
+    }
+
+    /// Delete a legacy sale (Django `saleDelete`).
+    async fn sale_delete(&self, ctx: &Context<'_>, id: ID) -> Result<GqlSaleDelete> {        let _ = crate::account::require_perm(ctx, "manage_discounts").await?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let pid = crate::common::parse_uuid_gid(&id.0).unwrap_or(uuid::Uuid::nil());
+        match saleor_rustify_db::promo_writes::delete_promotion(db, pid).await {
+            Ok(()) => Ok(GqlSaleDelete { errors: vec![], sale: None }),
+            Err(e) => Ok(GqlSaleDelete { errors: vec![discount_err(None, e.to_string())], sale: None }),
+        }
+    }
+
+    /// Bulk legacy-sale delete (survivors commit).
+    async fn sale_bulk_delete(&self, ctx: &Context<'_>, ids: Vec<ID>) -> Result<GqlSaleBulkDelete> {
+        let _ = crate::account::require_perm(ctx, "manage_discounts").await?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let uuids: Vec<uuid::Uuid> = ids.iter().filter_map(|i| crate::common::parse_uuid_gid(&i.0)).collect();
+        match saleor_rustify_db::promo_writes::bulk_delete_promotions(db, &uuids).await {
+            Ok(n) => Ok(GqlSaleBulkDelete { count: Some(n), errors: vec![] }),
+            Err(e) => Ok(GqlSaleBulkDelete { count: Some(0), errors: vec![discount_err(None, e.to_string())] }),
+        }
+    }
+
+    /// Update a plugin's active flag + configuration (Django `pluginUpdate`).
+    async fn plugin_update(&self, ctx: &Context<'_>, id: ID, input: gen::PluginUpdateInput, #[graphql(name = "channelId")] channel_id: Option<ID>) -> Result<gen::PluginUpdate> {
+        let _ = channel_id;
+        let _ = crate::account::require_perm(ctx, "manage_plugins").await?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let err = |m: String| gen::PluginUpdate {
+            plugin: None,
+            errors: vec![gen::PluginError { field: None, message: Some(m), code: None }],
+        };
+        use base64::Engine as _;
+        let text = base64::engine::general_purpose::STANDARD
+            .decode(&id.0)
+            .ok()
+            .and_then(|b| String::from_utf8(b).ok())
+            .unwrap_or_default();
+        let (kind, pk) = text.split_once(':').unwrap_or(("", ""));
+        if kind != "Plugin" || pk.is_empty() {
+            return Ok(err("bad plugin id".into()));
+        }
+        if let Err(e) = update_plugin_config(db, pk, input.active, input.configuration.as_ref()).await {
+            return Ok(err(e));
+        }
+        Ok(gen::PluginUpdate {
+            plugin: assemble_plugin_by_identifier(db, pk).await?,
+            errors: vec![],
+        })
+    }
+
+    /// Shop order settings (Django `orderSettingsUpdate`, 3.23 root): the
+    /// dashboard drives these through `shopSettingsUpdate`; this root
+    /// applies the same two flags to the default channel for schema callers.
+    async fn order_settings_update(&self, ctx: &Context<'_>, input: gen::OrderSettingsUpdateInput) -> Result<GqlOrderSettingsUpdate> {
+        let _ = crate::account::require_perm(ctx, "manage_orders").await?;
+        let g = ctx.data::<GqlContext>()?; let db = g.db()?;
+        let err = |m: String| GqlOrderSettingsUpdate { order_settings: None, errors: vec![orerr(m)] };
+        let mut patch = saleor_rustify_db::channels::ChannelSettingsPatch::default();
+        patch.auto_confirm = input.automatically_confirm_all_new_orders;
+        patch.auto_fulfill_gift = input.automatically_fulfill_non_shippable_gift_card;
+        if patch.auto_confirm.is_none() && patch.auto_fulfill_gift.is_none() {
+            return Ok(err("nothing to update".into()));
+        }
+        if let Err(e) = saleor_rustify_db::channels::update_channel_settings(db, "default-channel", patch).await {
+            return Ok(err(e.to_string()));
+        }
+        Ok(GqlOrderSettingsUpdate { order_settings: None, errors: vec![] })
+    }
+
     /// Create a menu (Django `menuCreate`).
-    async fn menu_create(&self, ctx: &Context<'_>, input: gen::MenuCreateInput) -> Result<gen::MenuCreate> {
-        let _ = crate::account::require_perm(ctx, "manage_menus").await?;
+    async fn menu_create(&self, ctx: &Context<'_>, input: gen::MenuCreateInput) -> Result<gen::MenuCreate> {        let _ = crate::account::require_perm(ctx, "manage_menus").await?;
         let g = ctx.data::<GqlContext>()?; let db = g.db()?;
         let err = |m: String| gen::MenuCreate { errors: vec![merr(None, m)], menu: None };
         let slug = input.slug.clone().filter(|s| !s.trim().is_empty());

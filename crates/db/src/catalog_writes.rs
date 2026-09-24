@@ -9,7 +9,11 @@
 
 use chrono::Utc;
 use rust_decimal::Decimal;
-use sea_orm::{ConnectionTrait, DatabaseConnection, Statement, TransactionTrait};
+use sea_orm::{
+    ActiveModelTrait, ColumnTrait, ConnectionTrait, DatabaseConnection, EntityTrait,
+    PaginatorTrait, QueryFilter, QueryOrder, QuerySelect, Set, Statement, TransactionTrait,
+};
+use serde_json::json;
 use uuid::Uuid;
 
 use crate::{DbError, Result};
@@ -863,5 +867,708 @@ pub async fn update_stock_qty(db: &DatabaseConnection, stock_id: i32, quantity: 
 pub async fn delete_variant_stock(db: &DatabaseConnection, variant_id: i32, warehouse_id: Uuid) -> Result<()> {
     exec(db, "DELETE FROM warehouse_stock WHERE product_variant_id = $1 AND warehouse_id = $2::uuid",
         vec![variant_id.into(), warehouse_id.to_string().into()]).await?;
+    Ok(())
+}
+
+// ------------------------------------------------------- product types --
+
+/// Create a product type with attribute links (Django `productTypeCreate`).
+#[allow(clippy::too_many_arguments)]
+pub async fn create_product_type(
+    db: &DatabaseConnection,
+    name: Option<String>,
+    slug: Option<String>,
+    kind: &str,
+    has_variants: bool,
+    is_shipping_required: bool,
+    is_digital: bool,
+    weight_kg: Option<f64>,
+    product_attributes: &[i32],
+    variant_attributes: &[i32],
+) -> Result<i32> {
+    use crate::entities::{
+        attribute_attributeproduct, attribute_attributevariant, product_producttype,
+    };
+    let name = name.map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).ok_or_else(|| DbError::Catalog("name is required".into()))?;
+    let slug = slug.map(|s| crate::attribute_writes::slugify(&s)).filter(|s| !s.is_empty()).unwrap_or_else(|| crate::attribute_writes::slugify(&name));
+    if kind != "normal" && kind != "gift_card" {
+        return Err(DbError::Catalog("kind must be normal or gift_card".into()));
+    }
+    let txn = db.begin().await?;
+    if product_producttype::Entity::find()
+        .filter(product_producttype::Column::Slug.eq(&slug))
+        .one(&txn)
+        .await?
+        .is_some()
+    {
+        return Err(DbError::Catalog("product type with this slug already exists".into()));
+    }
+    let row = product_producttype::ActiveModel {
+        name: Set(name),
+        has_variants: Set(has_variants),
+        is_shipping_required: Set(is_shipping_required),
+        weight: Set(weight_kg.unwrap_or(0.0)),
+        is_digital: Set(is_digital),
+        slug: Set(slug),
+        kind: Set(kind.to_string()),
+        metadata: Set(json!({})),
+        private_metadata: Set(json!({})),
+        ..Default::default()
+    }
+    .insert(&txn)
+    .await?;
+    for (i, aid) in product_attributes.iter().enumerate() {
+        attribute_attributeproduct::ActiveModel {
+            sort_order: Set(Some(i as i32)),
+            attribute_id: Set(*aid),
+            product_type_id: Set(row.id),
+            ..Default::default()
+        }
+        .insert(&txn)
+        .await?;
+    }
+    for (i, aid) in variant_attributes.iter().enumerate() {
+        attribute_attributevariant::ActiveModel {
+            sort_order: Set(Some(i as i32)),
+            attribute_id: Set(*aid),
+            product_type_id: Set(row.id),
+            variant_selection: Set(false),
+            ..Default::default()
+        }
+        .insert(&txn)
+        .await?;
+    }
+    txn.commit().await?;
+    Ok(row.id)
+}
+
+/// Update a product type incl. attribute links (Django `productTypeUpdate`).
+#[allow(clippy::too_many_arguments)]
+pub async fn update_product_type(
+    db: &DatabaseConnection,
+    id: i32,
+    name: Option<String>,
+    slug: Option<String>,
+    is_shipping_required: Option<bool>,
+    is_digital: Option<bool>,
+    weight_kg: Option<f64>,
+    product_attributes: Option<Vec<i32>>,
+    variant_attributes: Option<Vec<i32>>,
+) -> Result<()> {
+    use crate::entities::{
+        attribute_attributeproduct, attribute_attributevariant, product_producttype,
+    };
+    let txn = db.begin().await?;
+    let pt = product_producttype::Entity::find_by_id(id)
+        .one(&txn)
+        .await?
+        .ok_or_else(|| DbError::Catalog(format!("product type {id} not found").into()))?;
+    let mut am: product_producttype::ActiveModel = pt.into();
+    if let Some(n) = name {
+        if n.trim().is_empty() {
+            return Err(DbError::Catalog("name cannot be empty".into()));
+        }
+        am.name = Set(n.trim().to_string());
+    }
+    if let Some(s) = slug {
+        let s = crate::attribute_writes::slugify(&s);
+        if s.is_empty() {
+            return Err(DbError::Catalog("slug cannot be empty".into()));
+        }
+        am.slug = Set(s);
+    }
+    if let Some(x) = is_shipping_required {
+        am.is_shipping_required = Set(x);
+    }
+    if let Some(x) = is_digital {
+        am.is_digital = Set(x);
+    }
+    if let Some(w) = weight_kg {
+        am.weight = Set(w);
+    }
+    am.update(&txn).await?;
+    if let Some(attrs) = product_attributes {
+        attribute_attributeproduct::Entity::delete_many()
+            .filter(attribute_attributeproduct::Column::ProductTypeId.eq(id))
+            .exec(&txn)
+            .await?;
+        for (i, aid) in attrs.iter().enumerate() {
+            attribute_attributeproduct::ActiveModel {
+                sort_order: Set(Some(i as i32)),
+                attribute_id: Set(*aid),
+                product_type_id: Set(id),
+                ..Default::default()
+            }
+            .insert(&txn)
+            .await?;
+        }
+    }
+    if let Some(attrs) = variant_attributes {
+        attribute_attributevariant::Entity::delete_many()
+            .filter(attribute_attributevariant::Column::ProductTypeId.eq(id))
+            .exec(&txn)
+            .await?;
+        for (i, aid) in attrs.iter().enumerate() {
+            attribute_attributevariant::ActiveModel {
+                sort_order: Set(Some(i as i32)),
+                attribute_id: Set(*aid),
+                product_type_id: Set(id),
+                variant_selection: Set(false),
+                ..Default::default()
+            }
+            .insert(&txn)
+            .await?;
+        }
+    }
+    txn.commit().await?;
+    Ok(())
+}
+
+/// Delete a product type (Django `productTypeDelete`): products block.
+pub async fn delete_product_type(db: &DatabaseConnection, id: i32) -> Result<()> {
+    use crate::entities::{
+        attribute_attributeproduct, attribute_attributevariant, product_product,
+        product_producttype,
+    };
+    let txn = db.begin().await?;
+    if product_producttype::Entity::find_by_id(id).one(&txn).await?.is_none() {
+        return Err(DbError::Catalog(format!("product type {id} not found").into()));
+    }
+    let n = product_product::Entity::find()
+        .filter(product_product::Column::ProductTypeId.eq(id))
+        .count(&txn)
+        .await?;
+    if n > 0 {
+        return Err(DbError::Catalog("product type with products cannot be deleted".into()));
+    }
+    attribute_attributeproduct::Entity::delete_many()
+        .filter(attribute_attributeproduct::Column::ProductTypeId.eq(id))
+        .exec(&txn)
+        .await?;
+    attribute_attributevariant::Entity::delete_many()
+        .filter(attribute_attributevariant::Column::ProductTypeId.eq(id))
+        .exec(&txn)
+        .await?;
+    if let Some(pt) = product_producttype::Entity::find_by_id(id).one(&txn).await? {
+        let am: product_producttype::ActiveModel = pt.into();
+        am.delete(&txn).await?;
+    }
+    txn.commit().await?;
+    Ok(())
+}
+
+/// Reorder a type's attributes (Django `productTypeReorderAttributes`).
+pub async fn reorder_type_attributes(
+    db: &DatabaseConnection,
+    product_type_id: i32,
+    variant_scope: bool,
+    moves: &[(i32, i32)],
+) -> Result<()> {
+    use crate::entities::{attribute_attributeproduct, attribute_attributevariant};
+    let txn = db.begin().await?;
+    for (attr_id, sort) in moves {
+        if variant_scope {
+            if let Some(link) = attribute_attributevariant::Entity::find()
+                .filter(attribute_attributevariant::Column::ProductTypeId.eq(product_type_id))
+                .filter(attribute_attributevariant::Column::AttributeId.eq(*attr_id))
+                .one(&txn)
+                .await?
+            {
+                let mut am: attribute_attributevariant::ActiveModel = link.into();
+                am.sort_order = Set(Some(*sort));
+                am.update(&txn).await?;
+            }
+        } else if let Some(link) = attribute_attributeproduct::Entity::find()
+            .filter(attribute_attributeproduct::Column::ProductTypeId.eq(product_type_id))
+            .filter(attribute_attributeproduct::Column::AttributeId.eq(*attr_id))
+            .one(&txn)
+            .await?
+        {
+            let mut am: attribute_attributeproduct::ActiveModel = link.into();
+            am.sort_order = Set(Some(*sort));
+            am.update(&txn).await?;
+        }
+    }
+    txn.commit().await?;
+    Ok(())
+}
+
+// ------------------------------------------------------------- variants --
+
+/// Reorder a product's variants (Django `productVariantReorder`).
+pub async fn reorder_variants(db: &DatabaseConnection, product_id: i32, moves: &[(i32, i32)]) -> Result<()> {
+    use crate::entities::product_productvariant;
+    let txn = db.begin().await?;
+    for (vid, sort) in moves {
+        if let Some(v) = product_productvariant::Entity::find_by_id(*vid).one(&txn).await? {
+            if v.product_id != product_id {
+                continue;
+            }
+            let mut am: product_productvariant::ActiveModel = v.into();
+            am.sort_order = Set(Some(*sort));
+            am.update(&txn).await?;
+        }
+    }
+    txn.commit().await?;
+    Ok(())
+}
+
+/// Set the default variant (Django `productVariantSetDefault`).
+pub async fn set_default_variant(db: &DatabaseConnection, product_id: i32, variant_id: i32) -> Result<()> {
+    use crate::entities::{product_product, product_productvariant};
+    let txn = db.begin().await?;
+    let v = product_productvariant::Entity::find_by_id(variant_id)
+        .one(&txn)
+        .await?
+        .ok_or_else(|| DbError::Catalog(format!("variant {variant_id} not found").into()))?;
+    if v.product_id != product_id {
+        return Err(DbError::Catalog("variant does not belong to this product".into()));
+    }
+    let p = product_product::Entity::find_by_id(product_id)
+        .one(&txn)
+        .await?
+        .ok_or_else(|| DbError::Catalog(format!("product {product_id} not found").into()))?;
+    let mut am: product_product::ActiveModel = p.into();
+    am.default_variant_id = Set(Some(variant_id));
+    am.update(&txn).await?;
+    txn.commit().await?;
+    Ok(())
+}
+
+// ---------------------------------------------------------------- media --
+
+/// Create media from a URL (Django `productMediaCreate`; multipart Upload
+/// lands via fileUpload — URL/external media is the dashboard's common path).
+pub async fn create_media(
+    db: &DatabaseConnection,
+    product_id: i32,
+    alt: &str,
+    image_url: Option<String>,
+    external_url: Option<String>,
+) -> Result<i32> {
+    use crate::entities::{product_product, product_productmedia};
+    if product_product::Entity::find_by_id(product_id).one(db).await?.is_none() {
+        return Err(DbError::Catalog(format!("product {product_id} not found").into()));
+    }
+    if image_url.as_ref().map(|s| s.trim().is_empty()).unwrap_or(true)
+        && external_url.as_ref().map(|s| s.trim().is_empty()).unwrap_or(true)
+    {
+        return Err(DbError::Catalog("image or media_url is required".into()));
+    }
+    let max: Option<i32> = product_productmedia::Entity::find()
+        .select_only()
+        .column(product_productmedia::Column::SortOrder)
+        .filter(product_productmedia::Column::ProductId.eq(product_id))
+        .order_by_desc(product_productmedia::Column::SortOrder)
+        .into_tuple()
+        .one(db)
+        .await?
+        .flatten();
+    let row = product_productmedia::ActiveModel {
+        sort_order: Set(Some(max.unwrap_or(-1) + 1)),
+        image: Set(image_url),
+        alt: Set(alt.to_string()),
+        r#type: Set(if external_url.is_some() { "video".to_string() } else { "image".to_string() }),
+        external_url: Set(external_url),
+        product_id: Set(Some(product_id)),
+        oembed_data: Set(json!({})),
+        metadata: Set(json!({})),
+        private_metadata: Set(json!({})),
+        ..Default::default()
+    }
+    .insert(db)
+    .await?;
+    Ok(row.id)
+}
+
+/// Update media alt (Django `productMediaUpdate`).
+pub async fn update_media(db: &DatabaseConnection, id: i32, alt: Option<String>) -> Result<i32> {
+    use crate::entities::product_productmedia;
+    let m = product_productmedia::Entity::find_by_id(id)
+        .one(db)
+        .await?
+        .ok_or_else(|| DbError::Catalog(format!("media {id} not found").into()))?;
+    let pid = m.product_id.ok_or_else(|| DbError::Catalog("media is not attached to a product".into()))?;
+    let mut am: product_productmedia::ActiveModel = m.into();
+    if let Some(a) = alt {
+        am.alt = Set(a);
+    }
+    am.update(db).await?;
+    Ok(pid)
+}
+
+/// Delete media + variant links (Django `productMediaDelete`).
+pub async fn delete_media(db: &DatabaseConnection, id: i32) -> Result<i32> {
+    use crate::entities::{product_productmedia, product_variantmedia};
+    let txn = db.begin().await?;
+    let m = product_productmedia::Entity::find_by_id(id)
+        .one(&txn)
+        .await?
+        .ok_or_else(|| DbError::Catalog(format!("media {id} not found").into()))?;
+    let pid = m.product_id.ok_or_else(|| DbError::Catalog("media is not attached to a product".into()))?;
+    product_variantmedia::Entity::delete_many()
+        .filter(product_variantmedia::Column::MediaId.eq(id))
+        .exec(&txn)
+        .await?;
+    let am: product_productmedia::ActiveModel = m.into();
+    am.delete(&txn).await?;
+    txn.commit().await?;
+    Ok(pid)
+}
+
+/// Reorder media by id list (Django `productMediaReorder`).
+pub async fn reorder_media(db: &DatabaseConnection, ordered_ids: &[i32]) -> Result<i32> {
+    use crate::entities::product_productmedia;
+    let txn = db.begin().await?;
+    let mut pid = 0;
+    for (i, mid) in ordered_ids.iter().enumerate() {
+        if let Some(m) = product_productmedia::Entity::find_by_id(*mid).one(&txn).await? {
+            pid = m.product_id.unwrap_or(pid);
+            let mut am: product_productmedia::ActiveModel = m.into();
+            am.sort_order = Set(Some(i as i32));
+            am.update(&txn).await?;
+        }
+    }
+    txn.commit().await?;
+    Ok(pid)
+}
+
+/// Assign/unassign media to a variant (Django `variantMediaAssign/Unassign`).
+pub async fn set_variant_media(db: &DatabaseConnection, variant_id: i32, media_id: i32, assign: bool) -> Result<()> {
+    use crate::entities::{product_productmedia, product_productvariant, product_variantmedia};
+    let v = product_productvariant::Entity::find_by_id(variant_id)
+        .one(db)
+        .await?
+        .ok_or_else(|| DbError::Catalog(format!("variant {variant_id} not found").into()))?;
+    let m = product_productmedia::Entity::find_by_id(media_id)
+        .one(db)
+        .await?
+        .ok_or_else(|| DbError::Catalog(format!("media {media_id} not found").into()))?;
+    if m.product_id != Some(v.product_id) {
+        return Err(DbError::Catalog("media belongs to a different product".into()));
+    }
+    if assign {
+        let exists = product_variantmedia::Entity::find()
+            .filter(product_variantmedia::Column::VariantId.eq(variant_id))
+            .filter(product_variantmedia::Column::MediaId.eq(media_id))
+            .one(db)
+            .await?
+            .is_some();
+        if !exists {
+            product_variantmedia::ActiveModel {
+                media_id: Set(media_id),
+                variant_id: Set(variant_id),
+                ..Default::default()
+            }
+            .insert(db)
+            .await?;
+        }
+    } else {
+        product_variantmedia::Entity::delete_many()
+            .filter(product_variantmedia::Column::VariantId.eq(variant_id))
+            .filter(product_variantmedia::Column::MediaId.eq(media_id))
+            .exec(db)
+            .await?;
+    }
+    Ok(())
+}
+
+// ----------------------------------------------------------------- bulk --
+
+/// Bulk delete helpers (Django `*BulkDelete`): survivors always commit.
+pub async fn bulk_delete_products(db: &DatabaseConnection, ids: &[i32]) -> Result<i32> {
+    let mut n = 0;
+    for id in ids {
+        if delete_product(db, *id).await.is_ok() {
+            n += 1;
+        }
+    }
+    Ok(n)
+}
+
+pub async fn bulk_delete_categories(db: &DatabaseConnection, ids: &[i32]) -> Result<i32> {
+    let mut n = 0;
+    for id in ids {
+        if delete_category(db, *id).await.is_ok() {
+            n += 1;
+        }
+    }
+    Ok(n)
+}
+
+pub async fn bulk_delete_collections(db: &DatabaseConnection, ids: &[i32]) -> Result<i32> {
+    let mut n = 0;
+    for id in ids {
+        if delete_collection(db, *id).await.is_ok() {
+            n += 1;
+        }
+    }
+    Ok(n)
+}
+
+pub async fn bulk_delete_product_types(db: &DatabaseConnection, ids: &[i32]) -> Result<i32> {
+    let mut n = 0;
+    for id in ids {
+        if delete_product_type(db, *id).await.is_ok() {
+            n += 1;
+        }
+    }
+    Ok(n)
+}
+
+pub async fn bulk_delete_media(db: &DatabaseConnection, ids: &[i32]) -> Result<i32> {
+    let mut n = 0;
+    for id in ids {
+        if delete_media(db, *id).await.is_ok() {
+            n += 1;
+        }
+    }
+    Ok(n)
+}
+
+/// Collection channel listings (Django `collectionChannelListingUpdate`).
+pub async fn update_collection_listings(
+    db: &DatabaseConnection,
+    collection_id: i32,
+    publish: &[(i32, bool)],
+    unpublish: &[i32],
+) -> Result<()> {
+    use crate::entities::product_collectionchannellisting;
+    let txn = db.begin().await?;
+    for (ch, pub_) in publish {
+        let existing = product_collectionchannellisting::Entity::find()
+            .filter(product_collectionchannellisting::Column::CollectionId.eq(collection_id))
+            .filter(product_collectionchannellisting::Column::ChannelId.eq(*ch))
+            .one(&txn)
+            .await?;
+        match existing {
+            Some(row) => {
+                let mut am: product_collectionchannellisting::ActiveModel = row.into();
+                am.is_published = Set(*pub_);
+                am.update(&txn).await?;
+            }
+            None => {
+                product_collectionchannellisting::ActiveModel {
+                    is_published: Set(*pub_),
+                    channel_id: Set(*ch),
+                    collection_id: Set(collection_id),
+                    ..Default::default()
+                }
+                .insert(&txn)
+                .await?;
+            }
+        }
+    }
+    for ch in unpublish {
+        product_collectionchannellisting::Entity::delete_many()
+            .filter(product_collectionchannellisting::Column::CollectionId.eq(collection_id))
+            .filter(product_collectionchannellisting::Column::ChannelId.eq(*ch))
+            .exec(&txn)
+            .await?;
+    }
+    txn.commit().await?;
+    Ok(())
+}
+
+// --------------------------------------------------------- bulk create --
+
+/// Bulk product input (Django `ProductBulkCreateInput` subset: media and
+/// preorder accepted-ignored with an honest per-row note).
+pub struct NewBulkProduct {
+    pub name: String,
+    pub slug: String,
+    pub product_type_id: i32,
+    pub category_id: Option<i32>,
+    pub description: Option<serde_json::Value>,
+    pub seo_title: Option<String>,
+    pub seo_description: Option<String>,
+    pub rating: Option<f64>,
+    pub weight_kg: Option<f64>,
+    pub tax_class_id: Option<i32>,
+    pub metadata: serde_json::Value,
+    pub private_metadata: serde_json::Value,
+    pub collection_ids: Vec<i32>,
+    pub attributes: Vec<(i32, Vec<String>)>,
+    pub channel_listings: Vec<(i32, bool)>,
+    pub variants: Vec<NewBulkVariant>,
+}
+
+pub struct NewBulkVariant {
+    pub sku: Option<String>,
+    pub name: Option<String>,
+    pub track_inventory: bool,
+    pub quantity_limit: Option<i32>,
+    pub external_reference: Option<String>,
+    pub metadata: serde_json::Value,
+    pub private_metadata: serde_json::Value,
+    pub stocks: Vec<(uuid::Uuid, i32)>,
+    pub listings: Vec<(i32, rust_decimal::Decimal, Option<rust_decimal::Decimal>, Option<rust_decimal::Decimal>)>,
+}
+
+/// Assign plain-text attribute values to a product (resolve-or-create by
+/// slug, replace per attribute — same contract as pages).
+pub async fn set_product_attributes(
+    txn: &impl ConnectionTrait,
+    product_id: i32,
+    attrs: &[(i32, Vec<String>)],
+) -> Result<()> {
+    use crate::entities::{attribute_assignedproductattributevalue, attribute_attribute, attribute_attributevalue};
+    for (aid, values) in attrs {
+        if attribute_attribute::Entity::find_by_id(*aid).one(txn).await?.is_none() {
+            return Err(DbError::Catalog(format!("attribute {aid} not found")));
+        }
+        // Clear this attribute's rows first.
+        let old: Vec<i32> = attribute_assignedproductattributevalue::Entity::find()
+            .select_only()
+            .column(attribute_assignedproductattributevalue::Column::Id)
+            .filter(attribute_assignedproductattributevalue::Column::ProductId.eq(product_id))
+            .into_tuple()
+            .all(txn)
+            .await?;
+        for oid in old {
+            if let Some(row) = attribute_assignedproductattributevalue::Entity::find_by_id(oid).one(txn).await? {
+                if let Some(v) = attribute_attributevalue::Entity::find_by_id(row.value_id).one(txn).await? {
+                    if v.attribute_id == *aid {
+                        let dam: attribute_assignedproductattributevalue::ActiveModel = row.into();
+                        dam.delete(txn).await?;
+                    }
+                }
+            }
+        }
+        for (i, text) in values.iter().enumerate() {
+            let slug = crate::attribute_writes::slugify(text);
+            let vid = match attribute_attributevalue::Entity::find()
+                .filter(attribute_attributevalue::Column::AttributeId.eq(*aid))
+                .filter(attribute_attributevalue::Column::Slug.eq(&slug))
+                .one(txn)
+                .await?
+            {
+                Some(v) => v.id,
+                None => attribute_attributevalue::ActiveModel {
+                    name: Set(text.clone()),
+                    attribute_id: Set(*aid),
+                    slug: Set(slug),
+                    value: Set(text.clone()),
+                    ..Default::default()
+                }
+                .insert(txn)
+                .await?
+                .id,
+            };
+            attribute_assignedproductattributevalue::ActiveModel {
+                sort_order: Set(Some(i as i32)),
+                value_id: Set(vid),
+                product_id: Set(product_id),
+                ..Default::default()
+            }
+            .insert(txn)
+            .await?;
+        }
+    }
+    Ok(())
+}
+
+/// Create one bulk product with listings, attributes, collections and
+/// variants (stocks + channel prices). Steps autocommit; on failure the
+/// partial row is collected via `delete_product` (Django collector style).
+/// Callers pre-validate for REJECT_EVERYTHING all-or-nothing.
+pub async fn create_bulk_product(db: &DatabaseConnection, p: &NewBulkProduct) -> Result<i32> {
+    use crate::entities::{product_collectionproduct, product_product};
+    let t = now();
+    let row = product_product::ActiveModel {
+        name: Set(p.name.clone()),
+        slug: Set(p.slug.clone()),
+        product_type_id: Set(p.product_type_id),
+        category_id: Set(p.category_id),
+        description: Set(p.description.clone()),
+        updated_at: Set(t),
+        created_at: Set(t),
+        seo_description: Set(p.seo_description.clone()),
+        seo_title: Set(p.seo_title.clone()),
+        weight: Set(p.weight_kg),
+        metadata: Set(p.metadata.clone()),
+        private_metadata: Set(p.private_metadata.clone()),
+        description_plaintext: Set(String::new()),
+        rating: Set(p.rating),
+        tax_class_id: Set(p.tax_class_id),
+        search_document: Set(String::new()),
+        search_index_dirty: Set(true),
+        ..Default::default()
+    }
+    .insert(db)
+    .await
+    .map_err(DbError::SeaOrm)?;
+    let pid = row.id;
+    let run = async {
+        set_product_attributes(db, pid, &p.attributes).await?;
+        for cid in &p.collection_ids {
+            product_collectionproduct::ActiveModel {
+                product_id: Set(pid),
+                collection_id: Set(*cid),
+                ..Default::default()
+            }
+            .insert(db)
+            .await
+            .map_err(DbError::SeaOrm)?;
+        }
+        for (ch, published) in &p.channel_listings {
+            upsert_product_listing(db, pid, *ch, Some(*published), None, None, None).await?;
+        }
+        for v in &p.variants {
+            let vid = create_variant(
+                db,
+                pid,
+                v.sku.clone(),
+                v.name.clone(),
+                v.track_inventory,
+                v.quantity_limit,
+                v.external_reference.clone(),
+            )
+            .await?;
+            update_variant(
+                db,
+                vid,
+                &VariantPatch {
+                    sku: None,
+                    name: None,
+                    track_inventory: None,
+                    quantity_limit_per_customer: None,
+                    external_reference: None,
+                    metadata: Some(v.metadata.clone()),
+                    private_metadata: Some(v.private_metadata.clone()),
+                },
+            )
+            .await?;
+            for (wid, qty) in &v.stocks {
+                set_variant_stock(db, vid, *wid, *qty).await?;
+            }
+            for (ch, price, cost, prior) in &v.listings {
+                upsert_variant_listing(db, vid, *ch, *price, *cost, *prior).await?;
+            }
+        }
+        Ok::<(), DbError>(())
+    }
+    .await;
+    if let Err(e) = run {
+        let _ = delete_product(db, pid).await;
+        return Err(e);
+    }
+    Ok(pid)
+}
+
+/// End preordering on a variant (Django `productVariantPreorderDeactivate`).
+pub async fn deactivate_preorder(db: &DatabaseConnection, variant_id: i32) -> Result<()> {
+    use crate::entities::product_productvariant;
+    let txn = db.begin().await.map_err(DbError::SeaOrm)?;
+    let v = product_productvariant::Entity::find_by_id(variant_id)
+        .one(&txn)
+        .await?
+        .ok_or_else(|| DbError::Catalog(format!("variant {variant_id} not found")))?;
+    let mut am: product_productvariant::ActiveModel = v.into();
+    am.is_preorder = Set(false);
+    am.preorder_end_date = Set(None);
+    am.preorder_global_threshold = Set(None);
+    am.update(&txn).await?;
+    txn.commit().await.map_err(DbError::SeaOrm)?;
     Ok(())
 }
