@@ -43,6 +43,7 @@ Legend: `[x]` real + tested · `[~]` real but bounded (documented) · `[ ]` miss
 - [x] Products/variants/categories/collections CRUD + listings, attributes + values, `productBulkCreate` (listings/stocks/attributes, REJECT_EVERYTHING pre-validated), bulk deletes, reorder attributes/values, variant reorder/setDefault/stocksDelete, media CRUD/reorder/assign
 - [x] Product types CRUD + `productType(s)`, `productVariant(s)` queries
 - [x] `attributeBulkCreate/Update`
+- [x] Stock: `stock(s)` reads, `stockBulkUpdate`, zone links, reservations/allocations, sweeper beat
 - [ ] `fileUpload` / `userAvatarUpdate/Delete` (need multipart; Upload scalar stubbed)
 
 ## 7. Menus / pages
@@ -56,7 +57,7 @@ Legend: `[x]` real + tested · `[~]` real but bounded (documented) · `[ ]` miss
 - [~] Tax providers (AvaTax/TaxJar) + `taxAppId` execution; Click&Collect depth; preorders (deactivate only)
 
 ## 9. Accounts
-- [x] Staff/customer CRUD, groups, addresses (staff + own `accountAddressCreate/Update/Delete/SetDefaultAddress`), password/register/confirm/delete flows, throttle, tokens
+- [x] Staff/customer CRUD, groups, customer types, staff notification recipients (create/delete/update), addresses (staff + own `accountAddressCreate/Update/Delete/SetDefaultAddress`), password/register/confirm/delete flows, throttle, tokens
 - [x] `addressValidationRules` (built-in US/CA dataset + generic fallback; EU refused like Django)
 - [x] `sendConfirmationEmail` + real SMTP (plain relay, Mailpit default; log-and-continue so mail never breaks flows)
 - [x] External auth roots: honest not-configured errors (no external plugin installed)
@@ -80,3 +81,49 @@ Legend: `[x]` real + tested · `[~]` real but bounded (documented) · `[ ]` miss
 - [ ] 30+ payment gateways (only Stripe skeleton)
 - [ ] Tax providers, preorders/C&C depth, Saleor Apps SDK beyond tokens
 - [ ] `update*SearchVector` beats (search is pg_trgm — equivalent by design)
+
+## Appendix — audit trail (nothing was deleted, only consolidated)
+
+Every line of the pre-2026-09-24 checklist and where it lives now. The
+rewrite merged 90+ lines into 12 sections; this table proves no item was
+dropped silently.
+
+| Old item | Status now |
+|---|---|
+| checkoutCreate/LinesAdd/LinesUpdate/LineDelete/Delete/EmailUpdate/CustomerAttach/Detach/NoteUpdate/Shipping/BillingAddress/Shipping/DeliveryMethod/LanguageCode/Add/RemovePromoCode | §1 [x] |
+| checkoutPaymentCreate / checkoutCreateFromOrder / checkoutLinesDelete / deliveryOptionsCalculate | §1 [x] |
+| createCheckout / checkoutAddLines / checkoutComplete (old-style) | §1 [x] |
+| transactionUpdate/EventReport/RequestAction/Authorize/Charge/Initialize/Process, paymentInitialize/Capture/Refund/Void/CheckBalance, payment(s)/transactions | §2 [x] |
+| transactionCreate / transactionRequestRefundForGrantedRefund | §2 [x] (this wave) |
+| storedPaymentMethodRequestDelete, gateway/tokenization roots | §2 [x] (this wave; honest no-vault results) |
+| Stripe skeleton / Adyen | §2 [~] (unchanged) |
+| orderConfirm/Capture/Refund/Void/MarkAsPaid/Update/Shipping/NoteAdd+Update/LineUpdate/LinesCreate/LineDelete/Discounts/LineDiscounts, orderAddNote alias | §3 [x] |
+| fulfillments + granted refunds, draft orders + draftOrders, orderBulkCreate | §3 [x] |
+| orderByToken/orderSettings/reportProductSales, orderBulkCancel/CreateFromCheckout/draftOrderLinesBulkDelete | §3 [x] |
+| order/fulfillment/transaction/payment views (statuses, invoices, addresses, channel) | §3 [x] |
+| giftCards list/details/create/update/deactivate/adjust + full CRUD + assign/notes/resend/settings/bulk | §4 [x] |
+| giftCardCurrencies/Tags/Settings reads | §4 [x] (pre-existing, still live) |
+| exportGiftCards | §4 [x] + §11 [x] (CSV ALL/IDS) |
+| stock/stocks reads, stockBulkUpdate, zone links, reservations/allocations/sweeper | §6 [x] (restored — was missing from first rewrite pass) |
+| promotions/rules CRUD/bulk, vouchers CRUD/catalogues/listings/codes | §5 [x] |
+| saleCreate/Update/Delete/BulkDelete/CataloguesAdd/Remove/ChannelListingUpdate + sale(s) queries | §5 [x] (this wave) |
+| product/variant/category/collection CRUD + listings, attributes/values, productBulkCreate, bulk deletes, reorders, variant reorder/setDefault/stocksDelete, media CRUD/reorder/assign, productVariantPreorderDeactivate | §6 [x] |
+| attributeBulkCreate/Update | §6 [x] (this wave) |
+| productType(s) + productVariant(s) queries | §6 [x] (this wave) |
+| menus/items/move/navigation, pages/bulk/publish, page types/attributes/reorder, page(s)/pageType(s) reads | §7 [x] |
+| shipping zones/methods CRUD/bulk, exclusions, postal rules, channel listings, shippingPriceBulkDelete | §8 [x] |
+| warehouses CRUD, channels CRUD/settings/links, tax classes + country rates, taxConfigurations + update, taxExemptionManage, taxCountryConfigurations query, shopDomainUpdate, orderSettingsUpdate | §8 [x] |
+| shopFetchTaxRates | §8 [x] (honest no-provider) |
+| staff/customer/groups/addresses CRUD, password/register/confirm/delete, throttle, tokens, customer types, staffNotificationRecipient create/delete/**update** | §9 [x] (recipient update: this wave) |
+| accountAddressCreate/Update/Delete/SetDefaultAddress | §9 [x] (this wave) |
+| addressValidationRules, sendConfirmationEmail, external auth roots | §9 [x] (this wave; externals honestly error) |
+| userAvatarUpdate/Delete | §9 [ ] (multipart — unchanged) |
+| webhooks CRUD/dryRun/Trigger, eventDeliveryRetry, outbox/sweeper, webhookEvents/samplePayload/exportFiles | §10 [x] |
+| app/appInstallations queries, install/retry/delete-failed, CRUD/activate/tokens/problems, appTokenVerify, appProblemCreate/Dismiss, appReenableSyncWebhooks, externalNotificationTrigger | §10 [x] (this wave) |
+| pluginUpdate + plugin(s) queries | §10 [x] (this wave) |
+| invoices request/send/create/update/delete/request-delete + order.invoices | §11 [x] |
+| refund/return settings + queries, gift-card/shop-translate settings | §11 [x] (this wave) |
+| CSV exports (products/gift-cards/voucher-codes) + exportFiles/exportFile | §11 [x] (this wave) |
+| translates: single + bulk product/variant/attribute/value + promotion/rule/shop | §5 [x] (this wave) |
+| SMTP / multipart / gateways / tax providers / preorders / Apps SDK / search vectors | §12 (unchanged positions) |
+| `_entities`/`_service` federation | N/A by design (single binary, no Apollo federation) |
