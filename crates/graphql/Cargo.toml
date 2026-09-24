@@ -2,6 +2,7 @@
 name = "saleor-rustify-graphql"
 version = "0.1.0"
 edition = "2021"
+license = "AGPL-3.0-only"
 
 [dependencies]
 async-graphql = { version = "7", features = ["chrono", "uuid", "decimal", "tracing"] }
